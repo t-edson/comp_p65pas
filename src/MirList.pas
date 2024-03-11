@@ -11,7 +11,7 @@ type  //MIR base class
   //MIR Element type
   TMirType = (
     //Declarations
-    mtyDeclars     //Folder for Variable and Constant declaration
+     mtyDeclars     //Folder for Variable and Constant declaration
     ,mtyVarDec      //Variable declaration
     ,mtyConDec      //Constant declaration
     ,mtyFunDec      //Function declaration
@@ -180,18 +180,18 @@ type  //MIR Operand for expressions
   TMirOperand = object
     Text    : string;        //Label for the operand.
     opType  : TopType;       //Operand type (otVariab, otConst, otFunct) like AST elements.
-    Sto     : TStorage;     //Storage of the value (memory, register, value)
-    Typ     : TEleTypeDec;  //Data type for the operand.
+    Sto     : TStorage;      //Storage of the value (memory, register, value)
+    Typ     : TEleTypeDec;   //Data type for the operand.
     conDec  : TMirConDec;    //Ref. to constant declaration.
     astOperand: TEleExpress; //Ref. to AST element. Should be used only for error location.
     function StoAsStr: string;  //Storage as string
   public //Fields used when "opType" is otFunc.
     funDec  : TMirFunDec;    //Reference to function declaration, when it's accesible.
-    elements    : array of TMirOperand; //Parameter list.  ***Mejor Cambiar al nombre "pars"
+    elements: array of TMirOperand; //Parameter list.  ***Mejor Cambiar al nombre "pars"
     function FunCallText: string;
     procedure SetParAsVar(i: Integer; vardec0: TMirVarDec);
   public  //Fields used when "opType" is otConst
-    value    : TMirConsValue;  //Constant value
+    value   : TMirConsValue;  //Constant value
     //Functions to read values.
     function val: dword;
     function valL: word;
@@ -244,7 +244,9 @@ type  //MIR instructions
   { TMirAssign }
   TMirAssign = Class(TMirElement)
   public
-    isSimple: Boolean;       //Activated when instruction is: var_a := <simple operamd>; *** Es necesario?
+    isSimple: Boolean;       {When is TRUE, instruction is: var_a := <simple operamd>;
+                              When is FALSE, instruction is: var_a := <function_call>;
+                               *** Es necesario?}
     dest    : TMirOperand;   //Target variable.
     opSrc   : TMirOperand;   //Source operand, when "isSimple = TRUE".
     procedure SetDestFromVarDec(vardec: TMirVarDec);

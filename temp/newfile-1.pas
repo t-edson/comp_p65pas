@@ -23,7 +23,8 @@ const //Constant with types
   CT4 : boolean = false;
 const //Structured types
   CARRAY1 = [$00,$7e,$00,$03];
-  CARRAY2 = [CONS1,@var1,CONS6+2,$03];
+  CARRAY2 = [CONS1,CONS6+2,$03];
+//  CARRAY3 = [CONS1,@var1,CONS6+2,$03];
   
 var 
 //  SCREEN    : [1000]byte absolute $0400; 
@@ -43,4 +44,5 @@ begin
   x := CONS5;
   w := CONS6;
   w := CONS7;
+  w := @x;
 end.

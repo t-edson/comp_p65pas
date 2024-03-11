@@ -1833,8 +1833,8 @@ begin
 
   /////////////////////////////////////////////////////////
   //Explora primero a las funciones terminales
-  for i:=1 to mirCont.root.items.Count-2 do begin
-    mirFun := TMirFunDec(mirCont.root.items[i]);
+  for i:=1 to mirRep.root.items.Count-2 do begin
+    mirFun := TMirFunDec(mirRep.root.items[i]);
     if not mirFun.IsTerminal2 then continue;
     //DebugLn('función terminal: %s con %d var.loc.', [mirFun.name, mirFun.nLocalVars]);
     //Los parámetros y variables locales aparecen como elementos de la función
@@ -1850,8 +1850,8 @@ begin
   end;
   if OptReuProVar then SetSharedUsed;  //Ahora marca como usados, porque ya se creó la zona de bytes compartidos
   //Explora solo a las funciones que no son terminales
-  for i:=1 to mirCont.root.items.Count-2 do begin
-    mirFun := TMirFunDec(mirCont.root.items[i]);
+  for i:=1 to mirRep.root.items.Count-2 do begin
+    mirFun := TMirFunDec(mirRep.root.items[i]);
     if mirFun.IsTerminal2 then continue;
     //Los parámetros y variables locales aparecen como elementos de la función
     for mirEle in mirFun.declars do if mirEle.mirType = mtyVarDec then begin  //Para todas sus variables.
@@ -1865,7 +1865,7 @@ begin
     end;
   end;
   //Reserva espacio para las variables (Que no son de funciones).
-  for mirEle in mirCont.root.declars do if mirEle.mirType = mtyVarDec then begin
+  for mirEle in mirRep.root.declars do if mirEle.mirType = mtyVarDec then begin
     vardec := TMirVarDec(mirEle);
 //    if vardec.required then begin
       //Asigna una dirección válida para esta variable
@@ -2476,6 +2476,7 @@ var
   idCtx, rowCtx, tmp: Integer;
   srcLin: String;
   blk: TEleBlock;
+  misAsg: TMirAssign;
 begin
 //  ShowContexts;
 //  ShowCurContInformat;
@@ -2495,9 +2496,8 @@ begin
     //Identifica a la sentencia
     case eleSen.mirType  of
     mtyAssign: begin  //Assignment
-//      for ele in sen.elements do begin
-//        expSet := TEleExpress(ele);  //Takes assigment function.
-//        GenCodeExpr(expSet);
+      misAsg := TMirAssign(eleSen);
+//      if misAsg.dest.opType = otFunct;
 //        if HayError then exit;
 //      end;
     end;

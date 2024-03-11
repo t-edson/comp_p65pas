@@ -756,6 +756,7 @@ begin
   curInst.iType := itDefWord;  //Represents DB
   cpx.TreeElems.AddElementAndOpen(curInst);
 end;
+//Inicialización
 procedure TParserAsm_6502.ProcessASMblock(cpx0: TCompilerBase);
 var
   blkEnd: boolean;

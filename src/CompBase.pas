@@ -135,7 +135,7 @@ protected  //Containers
   procedure SeparateUsedFunctions;
 public     //Containers
   TreeElems     : TAstTree;    //Abstract syntax tree.
-  mirCont       : TMirList;    //Conteiner for MIR representation
+  mirRep        : TMirList;     //Container for MIR representation
   usedFuncs     : TEleFunDecs; //Store only used functions
   unusedFuncs   : TEleFunDecs; //Store only unused functions
   interruptFunct: TEleFunDec;  //Store ths only Interrupt function
@@ -2264,7 +2264,7 @@ begin
   ClearError;   //inicia motor de errores
   //Crea arbol de elementos y listas
   TreeElems  := TAstTree.Create;
-  mirCont    := TMirList.Create;
+  mirRep    := TMirList.Create;
   ejecProg := false;
   //Containers for functions
   usedFuncs := TEleFunDecs.Create(false);     //Only references
@@ -2274,7 +2274,7 @@ destructor TCompilerBase.Destroy;
 begin
   unusedFuncs.Destroy;
   usedFuncs.Destroy;
-  mirCont.Destroy;
+  mirRep.Destroy;
   TreeElems.Destroy;
   inherited Destroy;
 end;

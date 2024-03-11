@@ -675,24 +675,24 @@ begin
 //    if astVardec.Parent.idClass = eleFuncImp then continue;  //Las variables de funciones ya se crearon
 ////debugln('Verificando: ' + astVardec.name);
 //    if (astVardec.nCalled>0) or astVardec.required then begin
-//      mirVarDec := AddMirVarDec(mirCont.root, astVardec); //Agrega declaración en el MIR
+//      mirVarDec := AddMirVarDec(mirRep.root, astVardec); //Agrega declaración en el MIR
 //      astVardec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.;
 //    end;
 //  end;
   for elem in TreeElems.main.elements do begin
     if (elem.idClass = eleConsDec) and (elem.nCalled>0) then begin
       astConDec := TEleConsDec(elem);
-      mirConDec := AddMirConDec(mirCont.root, astConDec);
+      mirConDec := AddMirConDec(mirRep.root, astConDec);
     end else if (elem.idClass = eleVarDec) and (elem.nCalled>0) then begin
       astVardec := TEleVarDec(elem);
-      mirVarDec := AddMirVarDec(mirCont.root, astVardec); //Agrega declaración en el MIR
+      mirVarDec := AddMirVarDec(mirRep.root, astVardec); //Agrega declaración en el MIR
       astVardec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.;
     end;
   end;
   for astFunDec in usedFuncs do begin
     if astFunDec.callType = ctUsrNormal then begin
       //Agrega al MIR y guarda referencia.
-      mirFunDec := AddMirFunDecUNF(mirCont.root, astFunDec);
+      mirFunDec := AddMirFunDecUNF(mirRep.root, astFunDec);
       astFunDec.mirFunDec := mirFunDec;  //Guarda referencia al MIR.
       //Explora sus elementos internos.
       for elem In astFunDec.elemImplem do begin
@@ -702,7 +702,7 @@ begin
             mirVarDec := AddMirVarDec(mirFunDec, astVarDec);
             astVarDec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.
           end else if elem.idClass = eleBody then begin
-            mirCont.ConvertBody(mirFunDec, TEleBody(elem));
+            mirRep.ConvertBody(mirFunDec, TEleBody(elem));
             //if HayError then exit;   //Puede haber error
           end;
       end;
@@ -710,13 +710,13 @@ begin
       //internas AST (que incluye a los parámetros).
       mirFunDec.ReadParamsFromAST(astFunDec);
     end else if astFunDec.callType = ctSysNormal then begin
-      mirFunDec := AddMirFunDecSNF(mirCont.root, astFunDec);
+      mirFunDec := AddMirFunDecSNF(mirRep.root, astFunDec);
       //System function doesn't have body.
     end;
   end;
   //Split body
   bod := TreeElems.BodyNode;  //lee Nodo del cuerpo principal
-  mirCont.ConvertBody(mirCont.root, bod);
+  mirRep.ConvertBody(mirRep.root, bod);
 end;
 procedure TCompiler_PIC16.DoOptimize;
 {Usa la información del árbol de sintaxis, para optimizar su estructura con
@@ -1016,7 +1016,7 @@ begin
     end;
     {-------------------------------------------------}
     TreeElems.Clear;
-    mirCont.Clear;
+    mirRep.Clear;
     //Asigna nombre y archivo a elemento
     TreeElems.main.name := ExtractFileName(mainFile);
     p := pos('.',TreeElems.main.name);
