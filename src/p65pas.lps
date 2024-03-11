@@ -9,24 +9,23 @@
         <Filename Value="p65pas.lpr"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="96"/>
-        <CursorPos X="39" Y="109"/>
-        <FoldState Value=" T4201 T3T2H01331p"/>
+        <CursorPos X="33" Y="5"/>
+        <FoldState Value=" T4201 T3U2H01331 PCjR02"/>
         <UsageCount Value="61"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="XpresElemP65.pas"/>
         <IsPartOfProject Value="True"/>
-        <EditorIndex Value="1"/>
+        <EditorIndex Value="-1"/>
         <TopLine Value="716"/>
         <CursorPos Y="722"/>
         <UsageCount Value="26"/>
-        <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="Compiler_PIC16.pas"/>
-        <EditorIndex Value="2"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="5"/>
         <TopLine Value="17"/>
         <CursorPos Y="35"/>
         <UsageCount Value="30"/>
@@ -34,7 +33,8 @@
       </Unit>
       <Unit>
         <Filename Value="CompContexts.pas"/>
-        <EditorIndex Value="3"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="6"/>
         <TopLine Value="433"/>
         <CursorPos Y="451"/>
         <UsageCount Value="27"/>
@@ -54,10 +54,11 @@
       </Unit>
       <Unit>
         <Filename Value="LexPas.pas"/>
+        <IsPartOfProject Value="True"/>
         <EditorIndex Value="-1"/>
         <TopLine Value="226"/>
         <CursorPos X="13" Y="244"/>
-        <UsageCount Value="10"/>
+        <UsageCount Value="20"/>
       </Unit>
       <Unit>
         <Filename Value="XpresAST.pas"/>
@@ -68,19 +69,22 @@
       </Unit>
       <Unit>
         <Filename Value="CompBase.pas"/>
-        <EditorIndex Value="4"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="7"/>
         <UsageCount Value="30"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="ParserDirec.pas"/>
-        <EditorIndex Value="5"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="8"/>
         <CursorPos X="33" Y="7"/>
         <UsageCount Value="30"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="CompGlobals.pas"/>
+        <IsPartOfProject Value="True"/>
         <EditorIndex Value="-1"/>
         <CursorPos X="13" Y="23"/>
         <UsageCount Value="30"/>
@@ -94,115 +98,173 @@
       </Unit>
       <Unit>
         <Filename Value="GenCod_PIC16.pas"/>
+        <IsPartOfProject Value="True"/>
         <EditorIndex Value="-1"/>
         <TopLine Value="4526"/>
         <CursorPos X="33" Y="4518"/>
-        <UsageCount Value="13"/>
+        <UsageCount Value="20"/>
+      </Unit>
+      <Unit>
+        <Filename Value="MirList.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="1"/>
+        <TopLine Value="470"/>
+        <CursorPos X="5" Y="488"/>
+        <UsageCount Value="20"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="Analyzer.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="2"/>
+        <TopLine Value="2600"/>
+        <CursorPos X="3" Y="2619"/>
+        <UsageCount Value="20"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="AstElemP65.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="3"/>
+        <TopLine Value="1830"/>
+        <CursorPos X="5" Y="1849"/>
+        <UsageCount Value="20"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="AstTree.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="4"/>
+        <CursorPos X="24" Y="8"/>
+        <UsageCount Value="20"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="GenCodBas_PIC16.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="-1"/>
+        <WindowIndex Value="-1"/>
+        <TopLine Value="-1"/>
+        <CursorPos X="-1" Y="-1"/>
+        <UsageCount Value="20"/>
+      </Unit>
+      <Unit>
+        <Filename Value="ParserASM_6502.pas"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="-1"/>
+        <WindowIndex Value="-1"/>
+        <TopLine Value="-1"/>
+        <CursorPos X="-1" Y="-1"/>
+        <UsageCount Value="20"/>
+      </Unit>
+      <Unit>
+        <Filename Value="C:\lazarus\components\lazutils\LazLoggerImpl.inc"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="46"/>
+        <CursorPos X="3" Y="48"/>
+        <UsageCount Value="10"/>
       </Unit>
     </Units>
     <JumpHistory HistoryIndex="24">
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="273" Column="17" TopLine="215"/>
+        <Filename Value="p65pas.lpr"/>
+        <Caret Line="109" Column="15" TopLine="95"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="271" Column="17" TopLine="213"/>
+        <Filename Value="MirList.pas"/>
+        <Caret Line="9" Column="39"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
+        <Filename Value="MirList.pas"/>
+        <Caret Line="488" Column="12" TopLine="459"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="213" Column="17" TopLine="199"/>
+        <Filename Value="MirList.pas"/>
+        <Caret Line="978" Column="12" TopLine="949"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="272" Column="6" TopLine="202"/>
+        <Filename Value="MirList.pas"/>
+        <Caret Line="485" Column="22" TopLine="471"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="273" Column="17" TopLine="214"/>
+        <Filename Value="Analyzer.pas"/>
+        <Caret Line="1251" Column="7" TopLine="1233"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="283" Column="37" TopLine="214"/>
+        <Filename Value="Analyzer.pas"/>
+        <Caret Line="1503" Column="9" TopLine="1486"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="327" Column="37" TopLine="280"/>
+        <Filename Value="Analyzer.pas"/>
+        <Caret Line="1651" Column="9" TopLine="1632"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="400" Column="36" TopLine="280"/>
+        <Filename Value="Analyzer.pas"/>
+        <Caret Line="1661" Column="7" TopLine="1632"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="327" Column="23" TopLine="280"/>
+        <Filename Value="Analyzer.pas"/>
+        <Caret Line="2619" Column="3" TopLine="2601"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="399" Column="29" TopLine="324"/>
+        <Filename Value="Analyzer.pas"/>
+        <Caret Line="1661" Column="7" TopLine="1644"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="400" Column="36" TopLine="324"/>
+        <Filename Value="Analyzer.pas"/>
+        <Caret Line="2619" Column="3" TopLine="2600"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="518" Column="30" TopLine="433"/>
+        <Filename Value="AstElemP65.pas"/>
+        <Caret Line="1006" Column="5" TopLine="988"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="529" Column="23" TopLine="454"/>
+        <Filename Value="AstElemP65.pas"/>
+        <Caret Line="1008" Column="5" TopLine="988"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="537" Column="35" TopLine="454"/>
+        <Filename Value="AstElemP65.pas"/>
+        <Caret Line="1075" Column="9" TopLine="1058"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="529" Column="35" TopLine="512"/>
+        <Filename Value="AstElemP65.pas"/>
+        <Caret Line="1125" Column="3" TopLine="1107"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="537" Column="36" TopLine="512"/>
+        <Filename Value="AstElemP65.pas"/>
+        <Caret Line="1849" Column="5" TopLine="1830"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="529" Column="14" TopLine="512"/>
+        <Filename Value="AstTree.pas"/>
+        <Caret Line="141" Column="3" TopLine="123"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="400" Column="16" TopLine="326"/>
+        <Filename Value="AstTree.pas"/>
+        <Caret Line="342" Column="5" TopLine="324"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="327" Column="17" TopLine="302"/>
+        <Filename Value="AstTree.pas"/>
+        <Caret Line="543" Column="3" TopLine="525"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="283" Column="17" TopLine="209"/>
+        <Filename Value="AstTree.pas"/>
+        <Caret Line="652" Column="14" TopLine="634"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="327" Column="38" TopLine="209"/>
+        <Filename Value="Compiler_PIC16.pas"/>
+        <Caret Line="35" TopLine="17"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="400" Column="37" TopLine="280"/>
+        <Filename Value="AstTree.pas"/>
+        <Caret Line="652" Column="34" TopLine="634"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="529" Column="35" TopLine="434"/>
+        <Filename Value="AstTree.pas"/>
+        <Caret Line="8" Column="24"/>
       </Position>
       <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="665" TopLine="216"/>
-      </Position>
-      <Position>
-        <Filename Value="XpresElemP65.pas"/>
-        <Caret Line="734" Column="10" TopLine="716"/>
+        <Filename Value="MirList.pas"/>
+        <Caret Line="488" Column="5" TopLine="470"/>
       </Position>
     </JumpHistory>
     <RunParams>

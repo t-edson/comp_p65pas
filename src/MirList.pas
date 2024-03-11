@@ -6,7 +6,7 @@ representación intermedia es lineal.
 {$Define DEBUGMODE}   //Enable MIR visualization
 interface
 uses
-  Classes, SysUtils, fgl, AstElemP65, LCLProc, LexPas;
+  Classes, SysUtils, fgl, AstElemP65, LexPas, LazLogger;
 type  //MIR base class
   //MIR Element type
   TMirType = (
