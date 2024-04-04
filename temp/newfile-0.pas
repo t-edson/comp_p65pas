@@ -6,7 +6,9 @@
 //  BORDERCOL : byte       absolute $d020;
 //  VIC_MEMORY: byte       absolute $d018;
 //
-//const 
+const 
+  CONS2 = 2+3;    
+  CARRAY2 = [1,1+2,$03];
 //  VIC_BMM =  %00100000;
 //  VIC_DEN =  %00010000;
 //  VIC_RSEL = %00001000; 

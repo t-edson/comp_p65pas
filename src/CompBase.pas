@@ -170,7 +170,7 @@ protected //Expressions
   function MethodGetItem(const OpType: TEleTypeDec; IdxType: TEleTypeDec
     ): TEleFunDec;
   function AddConstDeclarByte(decName: string; consVal: integer): TEleConsDec;
-  function GetConstantArray(arrDelimt: char): TEleExpress;
+  function GetConstantArray(arrDelimt: char; itmType: TEleTypeDec): TEleExpress;
   function GetConstantArrayStr(out arrtyp: TEleTypeDec; allowChar: boolean = true
     ): TEleExpress;
   function GetOperand: TEleExpress;
@@ -1344,55 +1344,16 @@ begin
   TreeElems.CloseElement;  //Close constant.
   exit(consDec);
 end;
-function TCompilerBase.GetConstantArray(arrDelimt: char): TEleExpress;
+function TCompilerBase.GetConstantArray(arrDelimt: char; itmType: TEleTypeDec): TEleExpress;
 {Get an array literal, like [1,2,3] or ('a','b').
-Paraemters
-* "arrDelimt"     -> Is the ending delimiter of the array. The frrst delimiter is not
-                     checked here.
+Parameters:
+  "arrDelimt"  -> Is the ending delimiter of the array. The first delimiter is not
+                  checked here.
+  "itmType"    -> The data type that has to be verified for each item. When it's NIL
+                  item type is inferred from items.
 }
-var
-  srcpos: TSrcPos;
-  ReadType, endWithComma: Boolean;
-  Op, Op1, itemExp: TEleExpress;
-  itType, xtyp: TEleTypeDec;
-  nElem: Integer;
-  typName: String;
-  ele: TAstElement;
-begin
-  srcpos := GetSrcPos;
-  Next;  //Get '['
-  ProcComments;
-  //Start reading the items
-  ReadType := true;  //Set flag to read the item type
-  Op := AddExpressAndOpen(token, typNull, otConst, srcPos);
-  Op.value.InitItems;
-  while not atEof and (token <> arrDelimt) do begin
-    //Must be an item
-    Op1 := GetExpression(0);  //read item
-    if HayError then begin
-      Op.value.CloseItems;  //Resize
-      exit(Op);
-    end;
-    if Op1.Sto <> stConst then begin
-      GenError('Expected constant item');
-      exit;
-    end;
-    if ReadType then begin
-       //First item
-       itType := Op1.Typ;  //Now We have the type of the item
-       ReadType := false;  //Already read
-    end;
-    //Asure all items have the same type
-    if Op1.Typ <> itType then begin
-      GenError('Expected item of type: %s', [itType.name]);
-      Op.value.CloseItems;  //Resize
-      exit(Op);
-      //endWithComma := false;
-      //break;  //To finish cleaning the house.
-    end;
-    //Add the item to the operand
-    Op.value.AddConsItem(Op1.Value);
-    //Verify delimiter
+  procedure getComma(var endWithComma: boolean);
+  begin
     endWithComma := false;
     if token = ',' then begin
       Next;
@@ -1400,6 +1361,80 @@ begin
       endWithComma := true;
     end;
   end;
+var
+  srcpos     : TSrcPos;
+  ReadType, endWithComma: Boolean;
+  Op, Op1, itemExp: TEleExpress;
+  itmTypeRead: TEleTypeDec;     //Type read from items
+  xtyp       : TEleTypeDec;
+  nElem      : Integer;
+  typName    : String;
+  ele        : TAstElement;
+begin
+  srcpos := GetSrcPos;
+  Next;  //Get '['
+  ProcComments;
+  //Start reading the items
+  Op := AddExpressAndOpen(token, typNull, otConst, srcPos);
+  Op.value.InitItems;
+  if itmType = nil then begin  //We must deduce the item type.
+    ReadType := true;  //Set flag to read the item type
+    while not atEof and (token <> arrDelimt) do begin
+      //Must be an item
+      Op1 := GetExpression(0);  //read item
+      if HayError then begin
+        Op.value.CloseItems;  //Resize
+        exit(Op);
+      end;
+      if ReadType then begin
+         //First item
+         itmTypeRead := Op1.Typ;  //Now We have the type of the item
+         ReadType := false;  //Already read
+      end;
+      //Ensure all items have the same type
+      if Op1.Typ <> itmTypeRead then begin
+        if (itmTypeRead = typByte) and (Op1.Typ = typWord) then begin
+          //Special case that can be easily solved.
+          //We promote the type to Word
+          itmTypeRead := typWord;
+          //Formally, we should change the type for all the previous items
+        end else if (itmTypeRead = typWord) and (Op1.Typ = typByte) then begin
+          //Special case that can be easily solved
+          Op1.Typ := typWord;
+        end else begin
+          GenError('Expected item of type: %s', [itmTypeRead.name]);
+          Op.value.CloseItems;  //Resize
+          exit(Op);
+        end;
+      end;
+      Op.value.AddConsItem(Op1.Value);  //Add item to the operand
+      getComma(endWithComma);           //Verify delimiter
+    end;
+  end else begin                   //We have to check the item type
+    itmTypeRead :=  itmType;   //Get the expected type
+    while not atEof and (token <> arrDelimt) do begin
+      //Must be an item
+      Op1 := GetExpression(0);  //read item
+      if HayError then begin
+        Op.value.CloseItems;  //Resize
+        exit(Op);
+      end;
+      if Op1.Typ <> itmType then begin
+        if (itmType = typWord) and (Op1.Typ = typByte) then begin
+          //Special case that can be easily solved
+          Op1.Typ := typWord;
+        end else begin
+          GenError('Expected item of type: %s', [itmType.name]);
+          Op.value.CloseItems;  //Resize
+          exit(Op);
+        end;
+      end;
+      Op.value.AddConsItem(Op1.Value);  //Add item to the operand
+      getComma(endWithComma);           //Verify delimiter
+    end;
+  end;
+  {Note that there is not not validation for ensure item is constant. It will be done
+  later in MIR.}
   if endWithComma then begin
     GenError('Expected item.');
     exit(Op);
@@ -1410,11 +1445,11 @@ begin
     //Now we can know the type of the item and of the array
     Next;  //Take ']' or ')'.
     nElem := Op.Value.nItems;
-    if nElem = 0 then itType := typNull;  //Something like []
-    if not TreeElems.ExistsArrayType(itType, nElem, xtyp) then begin
+    if nElem = 0 then itmTypeRead := typNull;  //Something like []
+    if not TreeElems.ExistsArrayType(itmTypeRead, nElem, xtyp) then begin
       //The type doesn't exist. We need to create.
-      typName := GenArrayTypeName(itType.name, nElem); //Op.nItems won't work
-      xtyp := AddArrayTypeDecCC(typName, nElem, itType, srcpos);
+      typName := GenArrayTypeName(itmTypeRead.name, nElem); //Op.nItems won't work
+      xtyp := AddArrayTypeDecCC(typName, nElem, itmTypeRead, srcpos);
     end;
     //Finally we set the operand type.
     Op.Typ := xtyp;
@@ -1886,7 +1921,7 @@ begin
     Next;
   end else if token = '[' then begin  //Constant array
     //Here we only know the operand is an array
-    Op1 := GetConstantArray(']');
+    Op1 := GetConstantArray(']', nil);
   end else begin
     //Operand expected
     Op1 := nil;

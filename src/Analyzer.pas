@@ -18,7 +18,7 @@ type
     procedure AnalyzeFORFirstAsign(out idx, valIni: TEleExpress);
     procedure GetAdicVarDeclar2(varTyp: TEleTypeDec; out aditVar: TAdicVarDec;
       out mainTypCreated: TEleTypeDec);
-    function GetConstValue(typExpec: TEleTypeDec; out mainTypCreated: TEleTypeDec
+    function GetConstValue(constTyp: TEleTypeDec; out mainTypCreated: TEleTypeDec
       ): TEleExpress;
     procedure AnalyzeEXIT(exitSent: TEleSentence);
     procedure AnalyzeIF;
@@ -137,7 +137,7 @@ begin
 end;
 
 //Elements processing
-function TAnalyzer.GetConstValue(typExpec: TEleTypeDec;
+function TAnalyzer.GetConstValue(constTyp: TEleTypeDec;
                                  out mainTypCreated: TEleTypeDec): TEleExpress;
 {Add a constant expression, to the current node of the AST. Returns the declaration
 created.
@@ -160,19 +160,20 @@ begin
   //Debe seguir una expresión constante, que no genere código
   typesCreated := 0;  //Default value
   ntyp := nTypesCreated;   //Set for count
-  if typExpec=nil then begin
+  if constTyp=nil then begin
+    //Not type was specified for the constant.
     init := GetExpression(0);
     if HayError then exit(nil);
   end else begin  //With type verification
-    if typExpec.catType = tctArray then begin
+    if constTyp.catType = tctArray then begin
       //Literal array. We read in the format (<item>,<item>,... )
       ProcComments;
       if token = '(' then begin   //Common Pascal syntax ( ... )
-        init := GetConstantArray(')');
+        init := GetConstantArray(')', constTyp.itmType);
         TreeElems.OpenElement(init.Parent);  //Returns to parent because GetConstantArray() has created an opened a node.
         if HayError then exit(nil);
       end else if token = '[' then begin  //Alternate syntax [ ... ]
-        init := GetConstantArray(']');
+        init := GetConstantArray(']', constTyp.itmType);
         TreeElems.OpenElement(init.Parent);  //Returns to parent because GetConstantArray() has created an opened a node.
         if HayError then exit(nil);
       end else if tokType = tkString then begin  //Alternate syntax "abc" only for char.
@@ -191,11 +192,11 @@ begin
       init := GetExpression(0);
       if HayError then exit(nil);
     end;
-    if typExpec.isDynam then begin
+    if constTyp.isDynam then begin
       //Dynamic arrays cannot be validated directly.
     end else begin
-      if typExpec<>init.Typ then begin
-        GenError('Expected a constant of type %s, got %s', [typExpec.name, init.Typ.name]);
+      if constTyp<>init.Typ then begin
+        GenError('Expected a constant of type %s, got %s', [constTyp.name, init.Typ.name]);
       end;
     end;
   end;
@@ -1089,7 +1090,7 @@ end;
 procedure TAnalyzer.AnalyzeConstDeclar;
   procedure GetIntialization(consTyp: TEleTypeDec; out consIni: TEleExpress;
                              out mainTypCreated: TEleTypeDec);
-  {Get the constant intiialization for the declaration.}
+  {Get the constant initialization for the declaration.}
   begin
     if token = '=' then begin
       Next;  //Pass to the next.

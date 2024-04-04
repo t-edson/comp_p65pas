@@ -2,7 +2,7 @@
 var
   var1: byte;
 const //Atomic types
-  //Simple constant
+//  //Simple constant
   CONS1 = 2;      
   //Constant with expression
   CONS2 = 2+3;    
@@ -16,15 +16,19 @@ const //Atomic types
   CONS6 = @var1;
   //Constant from variable address and expression
   CONS7 = 5+@var1+3;
-const //Constant with types
-  CT1 : byte = 123;
-  CT2 : word = word(123);
-  CT3 = true;  //Implicit type
-  CT4 : boolean = false;
+//const //Constant with types
+//  CT1 : byte = 123;
+//  CT2 : word = word(123);
+//  CT3 = true;  //Implicit type
+//  CT4 : boolean = false;
 const //Structured types
-  CARRAY1 = [$00,$7e,$00,$03];
-  CARRAY2 = [CONS1,CONS6+2,$03];
-//  CARRAY3 = [CONS1,@var1,CONS6+2,$03];
+  //Alternative use of "[" and "]" for arrays. 
+  CARRAY1 = [$00,$7e,$00,$03];  //No need to define de type
+  CARRAY2: array of word = [5,1003];  //With type
+  //Common Pascal initialization
+  CARRAY3: array of word = (CONS1,CONS6+2,$03);
+  //Expression in items
+  CARRAY4: array of word = (CONS1,@var1,CONS6+2,$03);
   
 var 
 //  SCREEN    : [1000]byte absolute $0400; 

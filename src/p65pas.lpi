@@ -98,10 +98,6 @@
         <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
-        <Filename Value="XpresElemP65.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
         <Filename Value="Compiler_PIC16.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit>

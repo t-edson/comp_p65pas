@@ -9,18 +9,10 @@
         <Filename Value="p65pas.lpr"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <CursorPos X="33" Y="5"/>
-        <FoldState Value=" T4201 T3U2H01331 PCjR02"/>
-        <UsageCount Value="61"/>
+        <CursorPos X="15" Y="16"/>
+        <FoldState Value=" T3U2H01331 PCjR0r"/>
+        <UsageCount Value="91"/>
         <Loaded Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="XpresElemP65.pas"/>
-        <IsPartOfProject Value="True"/>
-        <EditorIndex Value="-1"/>
-        <TopLine Value="716"/>
-        <CursorPos Y="722"/>
-        <UsageCount Value="26"/>
       </Unit>
       <Unit>
         <Filename Value="Compiler_PIC16.pas"/>
@@ -28,7 +20,7 @@
         <EditorIndex Value="5"/>
         <TopLine Value="17"/>
         <CursorPos Y="35"/>
-        <UsageCount Value="30"/>
+        <UsageCount Value="60"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -37,20 +29,8 @@
         <EditorIndex Value="6"/>
         <TopLine Value="433"/>
         <CursorPos Y="451"/>
-        <UsageCount Value="27"/>
+        <UsageCount Value="57"/>
         <Loaded Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="_libraries\P65Utils-0.5\P6502utils.pas"/>
-        <EditorIndex Value="-1"/>
-        <CursorPos X="22" Y="19"/>
-        <UsageCount Value="10"/>
-      </Unit>
-      <Unit>
-        <Filename Value="_libraries\P65Utils-0.5\CPUCore.pas"/>
-        <EditorIndex Value="-1"/>
-        <CursorPos X="20" Y="10"/>
-        <UsageCount Value="10"/>
       </Unit>
       <Unit>
         <Filename Value="LexPas.pas"/>
@@ -58,20 +38,13 @@
         <EditorIndex Value="-1"/>
         <TopLine Value="226"/>
         <CursorPos X="13" Y="244"/>
-        <UsageCount Value="20"/>
-      </Unit>
-      <Unit>
-        <Filename Value="XpresAST.pas"/>
-        <EditorIndex Value="-1"/>
-        <TopLine Value="14"/>
-        <CursorPos X="36" Y="14"/>
-        <UsageCount Value="6"/>
+        <UsageCount Value="50"/>
       </Unit>
       <Unit>
         <Filename Value="CompBase.pas"/>
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="7"/>
-        <UsageCount Value="30"/>
+        <UsageCount Value="60"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -79,7 +52,7 @@
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="8"/>
         <CursorPos X="33" Y="7"/>
-        <UsageCount Value="30"/>
+        <UsageCount Value="60"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -87,14 +60,7 @@
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="-1"/>
         <CursorPos X="13" Y="23"/>
-        <UsageCount Value="30"/>
-      </Unit>
-      <Unit>
-        <Filename Value="..\version.txt"/>
-        <EditorIndex Value="-1"/>
-        <CursorPos X="20"/>
-        <UsageCount Value="7"/>
-        <DefaultSyntaxHighlighter Value="None"/>
+        <UsageCount Value="60"/>
       </Unit>
       <Unit>
         <Filename Value="GenCod_PIC16.pas"/>
@@ -102,7 +68,7 @@
         <EditorIndex Value="-1"/>
         <TopLine Value="4526"/>
         <CursorPos X="33" Y="4518"/>
-        <UsageCount Value="20"/>
+        <UsageCount Value="50"/>
       </Unit>
       <Unit>
         <Filename Value="MirList.pas"/>
@@ -110,7 +76,7 @@
         <EditorIndex Value="1"/>
         <TopLine Value="470"/>
         <CursorPos X="5" Y="488"/>
-        <UsageCount Value="20"/>
+        <UsageCount Value="50"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -119,7 +85,7 @@
         <EditorIndex Value="2"/>
         <TopLine Value="2600"/>
         <CursorPos X="3" Y="2619"/>
-        <UsageCount Value="20"/>
+        <UsageCount Value="50"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -128,7 +94,7 @@
         <EditorIndex Value="3"/>
         <TopLine Value="1830"/>
         <CursorPos X="5" Y="1849"/>
-        <UsageCount Value="20"/>
+        <UsageCount Value="50"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -136,7 +102,7 @@
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="4"/>
         <CursorPos X="24" Y="8"/>
-        <UsageCount Value="20"/>
+        <UsageCount Value="50"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -146,7 +112,7 @@
         <WindowIndex Value="-1"/>
         <TopLine Value="-1"/>
         <CursorPos X="-1" Y="-1"/>
-        <UsageCount Value="20"/>
+        <UsageCount Value="50"/>
       </Unit>
       <Unit>
         <Filename Value="ParserASM_6502.pas"/>
@@ -155,21 +121,50 @@
         <WindowIndex Value="-1"/>
         <TopLine Value="-1"/>
         <CursorPos X="-1" Y="-1"/>
-        <UsageCount Value="20"/>
+        <UsageCount Value="50"/>
+      </Unit>
+      <Unit>
+        <Filename Value="XpresElemP65.pas"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="716"/>
+        <CursorPos Y="722"/>
+        <UsageCount Value="23"/>
+      </Unit>
+      <Unit>
+        <Filename Value="_libraries\P65Utils-0.5\P6502utils.pas"/>
+        <EditorIndex Value="-1"/>
+        <CursorPos X="22" Y="19"/>
+        <UsageCount Value="7"/>
+      </Unit>
+      <Unit>
+        <Filename Value="_libraries\P65Utils-0.5\CPUCore.pas"/>
+        <EditorIndex Value="-1"/>
+        <CursorPos X="20" Y="10"/>
+        <UsageCount Value="7"/>
+      </Unit>
+      <Unit>
+        <Filename Value="XpresAST.pas"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="14"/>
+        <CursorPos X="36" Y="14"/>
+        <UsageCount Value="3"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\version.txt"/>
+        <EditorIndex Value="-1"/>
+        <CursorPos X="20"/>
+        <UsageCount Value="4"/>
+        <DefaultSyntaxHighlighter Value="None"/>
       </Unit>
       <Unit>
         <Filename Value="C:\lazarus\components\lazutils\LazLoggerImpl.inc"/>
         <EditorIndex Value="-1"/>
         <TopLine Value="46"/>
         <CursorPos X="3" Y="48"/>
-        <UsageCount Value="10"/>
+        <UsageCount Value="7"/>
       </Unit>
     </Units>
-    <JumpHistory HistoryIndex="24">
-      <Position>
-        <Filename Value="p65pas.lpr"/>
-        <Caret Line="109" Column="15" TopLine="95"/>
-      </Position>
+    <JumpHistory HistoryIndex="29">
       <Position>
         <Filename Value="MirList.pas"/>
         <Caret Line="9" Column="39"/>
@@ -265,6 +260,28 @@
       <Position>
         <Filename Value="MirList.pas"/>
         <Caret Line="488" Column="5" TopLine="470"/>
+      </Position>
+      <Position>
+        <Filename Value="p65pas.lpr"/>
+        <Caret Column="16"/>
+      </Position>
+      <Position>
+        <Filename Value="p65pas.lpr"/>
+        <Caret Line="157" TopLine="117"/>
+      </Position>
+      <Position>
+        <Filename Value="p65pas.lpr"/>
+      </Position>
+      <Position>
+        <Filename Value="p65pas.lpr"/>
+        <Caret Line="157" TopLine="117"/>
+      </Position>
+      <Position>
+        <Filename Value="p65pas.lpr"/>
+      </Position>
+      <Position>
+        <Filename Value="p65pas.lpr"/>
+        <Caret Line="157" TopLine="117"/>
       </Position>
     </JumpHistory>
     <RunParams>
