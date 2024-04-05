@@ -737,7 +737,7 @@ begin
   UpdateFunLstCalled;     //Actualiza lista "lstCalled" de las funciones usadas.
   if HayError then exit;
   SeparateUsedFunctions;  //Updates "usedFuncs".
-  GenerateMIR;            //Genera la representación MIR
+//  GenerateMIR;            //Genera la representación MIR
   //Evaluate declared constants
 //  EvaluateConstantDeclare;
 //  if HayError then exit;
@@ -1052,7 +1052,7 @@ begin
     if comp_level >= clComplete then begin  //Hay síntesis
       if not IsUnit then begin
         StartCountElapsed;
-        DoGenerateCode;
+//        DoGenerateCode;
         //EndCountElapsed('-- Synthetized in: ');
         //StartCountElapsed;
         //Genera archivo hexa, en la misma ruta del programa

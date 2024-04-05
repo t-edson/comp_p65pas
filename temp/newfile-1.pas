@@ -1,52 +1,52 @@
-//uses Commodore64;
+program test;
+{$MODE PASCAL}
+{$ORG $0801}
+type 
+  Tpos = object
+    x: byte;
+  end;
 var
-  var1: byte;
-const //Atomic types
-//  //Simple constant
-  CONS1 = 2;      
-  //Constant with expression
-  CONS2 = 2+3;    
-  //Constant from constant
-  CONS3 = CONS1;  
-  //Constant with expression including contant
-  CONS4 = CONS1+5;  
-  //Constant with expression including contant
-  CONS5 = CONS1+5+3; 
-  //Constant from variable address
-  CONS6 = @var1;
-  //Constant from variable address and expression
-  CONS7 = 5+@var1+3;
-//const //Constant with types
-//  CT1 : byte = 123;
-//  CT2 : word = word(123);
-//  CT3 = true;  //Implicit type
-//  CT4 : boolean = false;
-const //Structured types
-  //Alternative use of "[" and "]" for arrays. 
-  CARRAY1 = [$00,$7e,$00,$03];  //No need to define de type
-  CARRAY2: array of word = [5,1003];  //With type
-  //Common Pascal initialization
-  CARRAY3: array of word = (CONS1,CONS6+2,$03);
-  //Expression in items
-  CARRAY4: array of word = (CONS1,@var1,CONS6+2,$03);
-  
-var 
-//  SCREEN    : [1000]byte absolute $0400; 
-//  BITMAP    : [1]byte    absolute $2000;  //Size doesn't matter
-//  VIC_MEMORY: byte       absolute $d018;
-//  w: word;  
-  x: byte;
+  xx: Array[10] of Byte;
+  ww: Array[10] of word;
   w: word;
+var 
+  xbyte : byte;
+  location, ptr: ^byte;
+
+//procedure proc1;
+//var
+//   b: Byte;
+//begin
+//   for b:= 0 to 9 do begin
+//      xx[b]:= b;
+//   end;
+//end;
+
 begin
-//    VIC_MEMORY := byte( ((@SCREEN and $3fff)>>6) or ((@BITMAP and $3fff)>>10) );
-//    VIC_MEMORY := $10 or $08;
-//    w := ((@SCREEN and $3fff)>>6);
-  x := CONS1;
-  x := CONS2;
-  x := CONS3;
-  x := CONS4;
-  x := CONS5;
-  w := CONS6;
-  w := CONS7;
-  w := @x;
+xx[5] := 3;
+ww[5] := 3;
+//  proc1;
+//  xbyte := ord('A')-64;
+//  location := @xbyte;
+//  xbyte := 2;
+//  location^ := 5;
+//  w := xbyte;
+//  w := w + 5;
 end.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1995,28 +1995,16 @@ begin
     end else if token='^' then begin
       Next;    //Takes "^".
       //Validates if operand is pointer
-//      if Op1.Typ.catType <> tctPointer then begin
-//        GenError('Expression is not a pointer type.');
-//        exit(nil);
-//      end;
+      if Op1.Typ.catType <> tctPointer then begin
+        GenError('Expression is not a pointer type.');
+        exit(nil);
+      end;
       //Put element as parent of Op1
-      eleMeth := CreateExpression('', typNull, otFunct, GetSrcPos);
+      eleMeth := CreateExpression('ptr^', Op1.Typ.ptrType, otVariab, GetSrcPos);
       eleMeth.fcallOp := true;  //Come from an operator.
       TreeElems.InsertParentTo(eleMeth, Op1);
       TreeElems.OpenElement(eleMeth);  //Set parent.
-      //Lets find de getptr() method.
-      {This could be a _setptr(), if follows an operator ":=", but we don't know here,
-      so we always generates a _getptr(). If it's neccesary we will change it later.}
-      xfun := MethodGetPtr(Op1.Typ);
-      if xfun=nil then begin
-        //There are not fields for this type
-        GenError('Undefined method _getptr() for type %s', [Op1.Typ.name]);
-        exit(nil);
-      end;
-      //Complete node "eleMeth" now we have the "xfun" created.
-      eleMeth.name := xfun.name;     //Update name.
-      eleMeth.Typ  := xfun.retType;  //Update return type.
-      eleMeth.fundec := xfun;          //Set function
+      Op1 := eleMeth;   //Set new operand 1
     end else begin  //Must be '['.
       //We have: array[something].
       Next;    //Takes "[".
@@ -2056,7 +2044,6 @@ begin
       Next;   //Takes ']'.
     end;
     inc(level);
-//    Op1 := eleMeth;   //Set new operand 1
   end;
   Result := Op1;  //aquí debe haber quedado el resultado
 end;

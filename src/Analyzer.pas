@@ -2712,7 +2712,7 @@ begin
       end;
     end else if tokL = 'const' then begin
       Next;    //lo toma
-      while not StartOfSection and (tokL <>'end') do begin
+      while not StartOfSection and (lowercase(token) <>'end') do begin
         AnalyzeConstDeclar;
         if HayError then exit;;
       end;

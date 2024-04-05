@@ -8,4 +8,5 @@ var
   b: byte;
 const
   xxx = 'a';
+  
 end.
