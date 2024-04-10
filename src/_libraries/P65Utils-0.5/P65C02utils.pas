@@ -256,6 +256,7 @@ type
     function TotalMemRAM: integer; //devuelve el total de memoria RAM
     function UsedMemRAM: word;  //devuelve el total de memoria RAM usada
     procedure ExploreUsed(rutExplorRAM: TCPURutExplorRAM);    //devuelve un reporte del uso de la RAM
+    procedure ExploreUsed(rutExplorRAM: TCPURutExplorRAMn);    //devuelve un reporte del uso de la RAM
     function ValidRAMaddr(addr: word): boolean;  //indica si una posición de memoria es válida
   public  //Methods to code instructions according to syntax
     disableCodegen: boolean;   //Flag to disable the Code generation.
@@ -1497,6 +1498,18 @@ begin
     end;
   end;
 end;
+procedure TP6502.ExploreUsed(rutExplorRAM: TCPURutExplorRAMn);
+{Genera un reporte de uso de RAM}
+var
+  i: Integer;
+begin
+  for i := 0 to CPUMAXRAM - 1 do begin
+    if ram[i].Avail and (ram[i].used<>ruUnused) then begin
+      rutExplorRAM(i, @ram[i]);
+    end;
+  end;
+end;
+
 function TP6502.ValidRAMaddr(addr: word): boolean;
 {Indica si la dirección indicada es válida dentro del hardware del CPU}
 begin

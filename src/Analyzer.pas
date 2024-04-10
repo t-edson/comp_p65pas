@@ -9,7 +9,6 @@ type
   { TAnalyzer }
   TAnalyzer = class(TCompilerBase)
   public    //Access to CPU hardware.
-    picCore    : TCPUCore;   //Objeto PIC Core. This is an abstraction. Real CPU is not yet specified.
     function PICName: string; virtual; abstract;
     function RAMmax: integer; virtual; abstract;
   private

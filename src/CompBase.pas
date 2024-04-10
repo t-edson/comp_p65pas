@@ -14,7 +14,7 @@ uses
   Classes, SysUtils, Types, LazLogger, LexPas,
   AstElemP65, AstTree, CompContexts, MirList;
 type
-//Expression type, according the position it appears.
+//Expression type, according the position it appears.  ***¿Se usa?
 TPosExpres = (pexINDEP,  //Expresión independiente
               pexASIG,   //Expresión de asignación
               pexPROC,   //Expresión de procedimiento
@@ -28,20 +28,6 @@ TTypeLocat = (
              tlCurrNode,    //Type at the current node.
              tlCurrCodeCon  //At the current Code conatainer.
            );
-//Information about the las ASM code generated. Used for optimization.
-TLastASMcode = (
-             lacNone,    //No special code generated.
-             //Flags applied to boolean expression results.
-             lacCopyZtoA, {Last ASM code is for obtaining boolean expression in regA
-                           from Z.}
-             lacInvZtoA,  {Last ASM code is for obtaining boolean expression in regA
-                           from Z (inverted).}
-             lacCopyCtoA, {Las ASM code if for obtaining, boolean expression in regA,
-                          using the bit C and copied to A. }
-             lacInvCtoA,  {Last ASM code is for obtaining boolean expression in regA
-                           from C (inverted).}
-             lacInvAtoA   {Value of regA is inverted in all bits to regA}
-             );
 TCompileLevel = (
   clNull,        //Do nothing
   clAnalys,      //Only Analysis
@@ -76,13 +62,6 @@ protected  //Parser routines
   function CaptureTok(ctok: string): boolean;
   function CaptureStr(cstr: string): boolean;
   procedure CaptureParams(out funPars: TAstParamArray);
-protected  //Flags for boolean type.
-  {These variables are reset in the procedures: SetFun<XXX>. They contains the state of
-  the Register/Status-flags if the last UOR or BOR is executed. }
-  lastASMcode : TLastASMcode;  //ASM code generated for last the UOR or BOR.
-  lastASMaddr : integer;  //Memory address for the last code indicated by lastASMoper.
-  AcumStatInZ : boolean;  {Indicates the Z flag contains the status of the value in A
-                          register. For example if regA = 0, Z wil be 1.}
 protected  //Elements creation
   nTypesCreated: integer;
   function NameExistsIn(eName: string; list: TAstElements): boolean;
@@ -181,7 +160,7 @@ protected //Expressions
     ): TEleExpress;
   function AddExpressionConstBool(name: string; boolValue: Boolean; srcPos: TSrcPos
     ): TEleExpress;
-public    //Types to implement
+public     //Types to implement
   typByte : TEleTypeDec;
   typBool : TEleTypeDec;
   typChar : TEleTypeDec;
@@ -194,28 +173,16 @@ public     //Public attributes of compiler
   //Variables públicas del compilador
   ejecProg  : boolean;     //Indicates the compiler is working
   stopEjec  : boolean;     //To stop compilation
-  GeneralORG: integer;   //Dirección general de origen de código
 protected  //Command line options.
   mainFile    : string;    //Archivo inicial que se compila.
   hexFile     : string;    //Nombre de archivo de salida.
   comp_level  : TCompileLevel; //Compilation level.
   ForToRepeat : boolean;   //COnvert FOR loop to REPEAT loop.
-  //Optimization options
-  OptReuProVar: boolean;   //Optimiza reutilizando variables locales de procedimientos.
-  OptRetProc  : boolean;   //Optimiza el último exit de los procedimientos.
-  RemUnOpcod  : boolean;   //Removes unnecessary ASM instructions generated.
-  //Assembler options
-  asmOutType  : byte;      //Assembler ouput style: 0->Normal Assembler. 1->BASIC Poke's
-  asmIncComm  : boolean;   //Includes Comments in ASM text
-  IncVarDec   : boolean;   //Includes variables information section.
-  ExcUnused   : boolean;   //Excludes unused variables in variable section.
-  IncVarName  : boolean;   //Includes variables name in ASM operands.
-  IncAddress  : boolean;   //Includes address before ASM instructions.
+
   //  incDetComm  : boolean;   //Incluir Comentarios detallados.
   enabDirMsgs : boolean;   //Bandera para permitir generar mensajes desde las directivas.
-protected //Compiling Options. Set by directives.
+protected     //Compiling Options. Set by directives.
   syntaxMode  : (modPascal, modPicPas);
-  cpuMode     : (cpu6502, cpu65C02);
   bootloader  : TBootloader;  //Bootloader code for the compiled binary.
   loaderBytes : array of integer; //Custom Bootloader bytes.
   str_nullterm: boolean;   //Flag to activate the Null-terminated string for literals.
@@ -224,6 +191,7 @@ public    //Files
   function mainFilePath: string;
   function ExpandRelPathTo(BaseFile, FileName: string): string;
   function ExpandRelPathToMain(FileName: string): string;
+  procedure setHexFile(newHexFile: string);
 public    //Abstract methods
   function CompilerName: string; virtual; abstract;  //Name of the compiler
 //  procedure RAMusage(lins: TStrings; ExcUnused: boolean); virtual; abstract;
@@ -2140,6 +2108,14 @@ begin
   Result := Op1;  //aquí debe haber quedado el resultado
 end;
 //Files
+function TCompilerBase.hexFilePath: string;
+begin
+  Result := ExpandRelPathTo(mainFile, hexfile); //Convierte a ruta absoluta
+end;
+function TCompilerBase.mainFilePath: string;
+begin
+  Result := mainFile;
+end;
 function TCompilerBase.ExpandRelPathTo(BaseFile, FileName: string): string;
 {Convierte una ruta relativa (FileName), a una absoluta, usnado como base la ruta de
 otro archivo (BaseFile)}
@@ -2166,13 +2142,12 @@ function TCompilerBase.ExpandRelPathToMain(FileName: string): string;
 begin
   Result := ExpandRelPathTo(mainFile, FileName);
 end;
-function TCompilerBase.hexFilePath: string;
+procedure TCompilerBase.setHexFile(newHexFile: string);
+var
+  filPath: String;
 begin
-  Result := ExpandRelPathTo(mainFile, hexfile); //Convierte a ruta absoluta
-end;
-function TCompilerBase.mainFilePath: string;
-begin
-  Result := mainFile;
+  filPath := ExpandRelPathTo(mainFile, newHexFile);  //Completa ruta, si es relativa
+  hexfile := filPath;
 end;
 //Callers methods
 function TCompilerBase.AddCallerToFrom(toElem: TAstElement; callerElem: TAstElement): TAstEleCaller;

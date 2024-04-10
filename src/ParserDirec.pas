@@ -140,6 +140,21 @@ type
   public   //Public
     lexDir : TContext;  //lexer para analizar directivas
     OnMessageBox: procedure(txt: string; mode: integer) of object;
+    //Eventos para el generador de código
+    OnSetGeneralORG: procedure(value: integer);
+    OnSetCpuMode: procedure(value: string);
+    OnSetFrequency: procedure(f: Longint; value: string);
+    OnSetStatRAMCom: procedure(value: string);
+    OnSetDataAddr: procedure(value: string);
+    OnClearStateRam: procedure;
+    OnReadPicModel: function: String;
+    OnSetPicModel: procedure(value: string);
+    OnReadFrequen: function: Single;
+    OnSetFrequen: procedure(value: Single);
+    OnReadMaxFreq: function: Single;
+    OnSetMaxFreq: procedure(value: Single);
+    OnReadORG: function: Single;
+    OnSetORG: procedure(value: Single);
     procedure skipWhites;
     procedure GenErrorDir(msg: string);
     procedure GenErrorDir(msg: string; const Args: array of const);
@@ -1040,18 +1055,11 @@ begin
   end;
   lexDir.Next;  //pasa al siguiente
   skipWhites;
-  case UpperCase(lexDir.ReadToken) of
-  'KHZ': f := f * 1000;
-  'MHZ': f := f * 1000000;
-  else
-    GenErrorDir(ER_ERROR_DIREC);
-    exit;
+  if OnSetFrequency=nil then begin
+    GenError('Not implemented');
+  end else begin
+    OnSetFrequency(f, lexDir.ReadToken);  //Carga directamente en variable global
   end;
-  if f>picCore.MaxFreq then begin
-    GenErrorDir(ER_TOOHIGHFRE);
-    exit;
-  end;
-  picCore.frequen:=f; //asigna frecuencia
 end;
 procedure TParserDirecBase.ProcORG;
 var
@@ -1066,7 +1074,11 @@ begin
       exit;
     end;
     //Ya se tiene el valor numérico
-    GeneralORG := valOrg;  //Carga directamente en variable global
+    if OnSetGeneralORG=nil then begin
+      GenError('Not implemented');
+    end else begin
+      OnSetGeneralORG(valOrg);  //Carga directamente en variable global
+    end;
     lexDir.Next;
     skipWhites;
     //No debe seguir nada
@@ -1087,8 +1099,11 @@ begin
   lexDir.Next;  //pasa al siguiente
   txtMsg := GetDExpression(0).valStr;
   if HayError then exit;
-  picCore.SetStatRAMCom(txtMsg);
-  if picCore.MsjError<>'' then GenErrorDir(picCore.MsjError);
+  if OnSetStatRAMCom=nil then begin
+    GenError('Not implemented');
+  end else begin
+    OnSetStatRAMCom(txtMsg);  //Carga directamente en variable global
+  end;
 end;
 procedure TParserDirecBase.ProcSET_DATA_ADDR;
 var
@@ -1097,8 +1112,11 @@ begin
   lexDir.Next;  //Get SET_DATA_ADDR
   txtMsg := GetDExpression(0).valStr;
   if HayError then exit;
-  picCore.SetDataAddr(txtMsg);
-  if picCore.MsjError<>'' then GenErrorDir(picCore.MsjError);
+  if OnSetDataAddr=nil then begin
+    GenError('Not implemented');
+  end else begin
+    OnSetDataAddr(txtMsg);  //Carga directamente en variable global
+  end;
 end;
 procedure TParserDirecBase.ProcBOOTLOADER;
   function ReadValue: integer;
@@ -1221,7 +1239,11 @@ end;
 procedure TParserDirecBase.ProcCLEAR_STATE_RAM;
 {Limpia el estado de la memoria RAM}
 begin
-   picCore.DisableAllRAM;
+  if OnClearStateRam=nil then begin
+    GenError('Not implemented');
+  end else begin
+    OnClearStateRam;
+  end;
 end;
 procedure TParserDirecBase.ProcINFO;
 var
@@ -1354,50 +1376,84 @@ begin
   lexDir.Next;  //Go to next token
   skipWhites;
   txtMode := UpCase(lexDir.ReadToken);
-  if txtMode = 'CPU6502' then begin   //The Default
-    self.cpuMode := cpu6502;
-    picCore.Model := '6502';
-  end else if txtMode = 'CPU65C02' then begin
-    self.cpuMode := cpu65C02;
-    picCore.Model := '65C02';
+  if OnSetCpuMode=nil then begin
+    GenError('Not implemented');
   end else begin
-    GenErrorDir(ER_PROC_UNKNOWN, [txtMode]);
-    exit;
+    if txtMode = 'CPU6502' then begin   //The Default
+      OnSetCpuMode('6502');
+    end else if txtMode = 'CPU65C02' then begin
+      OnSetCpuMode('65C02');
+    end else begin
+      GenErrorDir(ER_PROC_UNKNOWN, [txtMode]);
+      exit;
+    end;
   end;
 end;
 
 //Access to system variables
 function TParserDirecBase.read_PIC_MODEL: string;
 begin
-  Result := picCore.Model;
+  if OnReadPicModel=nil then begin
+    GenError('Not implemented');
+  end else begin
+    Result := OnReadPicModel();  //Carga directamente en variable global
+  end;
 end;
 procedure TParserDirecBase.write_PIC_MODEL(AValue: string);
 begin
-  picCore.Model := AValue;
+  if OnSetPicModel=nil then begin
+    GenError('Not implemented');
+  end else begin
+    OnSetPicModel(AValue);  //Carga directamente en variable global
+  end;
 end;
 function TParserDirecBase.read_PIC_FREQUEN: Single;
 begin
-  Result := picCore.frequen;
+  if OnReadFrequen=nil then begin
+    GenError('Not implemented');
+  end else begin
+    Result := OnReadFrequen();  //Carga directamente en variable global
+  end;
 end;
 procedure TParserDirecBase.write_PIC_FREQUEN(AValue: Single);
 begin
-  picCore.frequen := round(AValue);
+  if OnSetFrequen=nil then begin
+    GenError('Not implemented');
+  end else begin
+    OnSetFrequen(AValue);  //Carga directamente en variable global
+  end;
 end;
 function TParserDirecBase.read_PIC_MAXFREQ: Single;
 begin
-  Result := PICCore.MaxFreq;
+  if OnReadMaxFreq=nil then begin
+    GenError('Not implemented');
+  end else begin
+    Result := OnReadMaxFreq();  //Carga directamente en variable global
+  end;
 end;
 procedure TParserDirecBase.write_PIC_MAXFREQ(AValue: Single);
 begin
-  PICCore.MaxFreq := round(AValue);
+  if OnSetMaxFreq=nil then begin
+    GenError('Not implemented');
+  end else begin
+    OnSetMaxFreq(AValue);  //Carga directamente en variable global
+  end;
 end;
 function TParserDirecBase.read_ORG: Single;
 begin
-  Result := picCore.iRam;
+  if OnReadORG=nil then begin
+    GenError('Not implemented');
+  end else begin
+    Result := OnReadORG();  //Carga directamente en variable global
+  end;
 end;
 procedure TParserDirecBase.write_ORG(AValue: Single);
 begin
-  picCore.iRam:= round(AValue);
+  if OnSetORG=nil then begin
+    GenError('Not implemented');
+  end else begin
+    OnSetORG(AValue);  //Carga directamente en variable global
+  end;
 end;
 function TParserDirecBase.read_SYN_MODE: String;
 begin
@@ -1775,7 +1831,6 @@ procedure TParserDirecBase.ClearMacros;
 begin
   macroList.Clear;
   WaitForEndIF := 0;
-  GeneralORG := 0;   //ORG por defecto en 0
   instList.Clear;
 
   //Create system variables

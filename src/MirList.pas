@@ -332,9 +332,6 @@ type  //Events for AST elements
   //This needs to be defined here because uses the TMirOperand type declared here.
   TCodSysInline = procedure(var fun: TMirOperand) of object;
 
-  //This type will be used to cast the field TEleTypeDec.OnLoadToWR.
-  //This needs to be defined here because uses the TMirOperand type declared here.
-  TProcLoadOperand = procedure(fun: TMirOperand) of object;
 
 implementation
 
