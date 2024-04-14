@@ -757,8 +757,6 @@ type  //Declaration elements (functions)
   public  //Parameters management
     pars       : TAstParamArray; //parámetros de entrada
     procedure ClearParams;
-    function SameParamsType(const funpars: TAstParamArray): boolean;
-    function SameParamsName(const funpars: TAstParamArray): boolean;
     function ParamTypesList: string;
   public
     {These properties allows to have always the reference to the function declaration and
@@ -818,8 +816,8 @@ public mirFunDec: TObject;  //Formalmente debe ser TMirFunDec, pero se pone TObj
     funget     : TEleFunDec;  //Reference to related getter when this function is setter.
   public  //References
     callType    : TCallType;    //How to call the function.
-    //Callback to SIF Routine when callType is ctSysInline.
-    codSysInline: TMethod;    //Must be used after casting to TCodSysInline
+//    //Callback to SIF Routine when callType is ctSysInline.
+//    codSysInline: TMethod;    //Must be used after casting to TCodSysInline
     //Callback to SNF Routine when callType is ctSysNormal.
     codSysNormal: TCodSysNormal;
   public  //References information
@@ -862,10 +860,6 @@ public mirFunDec: TObject;  //Formalmente debe ser TMirFunDec, pero se pone TObj
     destructor Destroy; override;
   end;
 //  TEleFunImps = specialize TFPGObjectList<TEleFunImp>;
-
-var
-  // Tipo nulo. Usado para elementos sin tipo.
-  typNull : TEleTypeDec;
 
   function GenArrayTypeName(itTypeName: string; nItems: integer): string; inline;
   function GenPointerTypeName(refTypeName: string): string; inline;
@@ -1891,41 +1885,6 @@ begin
   Parent := nil;  //la raiz no tiene padre
 end;
 { TEleFunBase }
-function TEleFunBase.SameParamsType(const funpars: TAstParamArray): boolean;
-{Compara los parámetros de la función con una lista de parámetros. Si tienen el mismo
-número de parámetros y el mismo tipo, devuelve TRUE.}
-var
-  i: Integer;
-begin
-  if High(pars) <> High(funpars) then
-    exit(false);   //Distinct parameters number
-  //They have the same numbers of parameters, verify:
-  for i := 0 to High(pars) do begin
-    //A Null type matches everything (wildcard). Used in INLINE functions.
-    if pars[i].typ = typNull then continue;
-    //Compare tipe
-    if pars[i].typ <> funpars[i].typ then begin
-      exit(false);
-    end;
-  end;
-  //Si llegó hasta aquí; hay coincidencia, sale con TRUE
-  exit(true);
-end;
-function TEleFunBase.SameParamsName(const funpars: TAstParamArray): boolean;
-{Compara los parámetros de la función con una lista de parámetros. Si tienen el mismo
-nombre, devuelve TRUE. No se hace verificación de tipo o cantidad de parámetros. Esa
-verifiación debe haberse hecho previamente con SameParamsType().}
-var
-  i: Integer;
-begin
-  for i := 0 to High(pars) do begin
-    if UpCase(pars[i].name) <> UpCase(funpars[i].name) then begin
-      exit(false);
-    end;
-  end;
-  //Si llegó hasta aquí; hay coincidencia, sale con TRUE
-  exit(true);
-end;
 procedure TEleFunBase.ClearParams;
 //Elimina los parámetros de una función
 begin

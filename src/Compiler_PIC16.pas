@@ -2,15 +2,15 @@
 
 }
 unit Compiler_PIC16;
-{$mode objfpc}{$H+}{$modeswitch functionreferences}{$modeswitch anonymousfunctions}
+{$mode objfpc}{$H+}
 interface
 uses
   Classes, SysUtils, LazLogger, P65C02utils, CPUCore, CompBase, ParserDirec,
-  GenCodBas_PIC16, GenCod_PIC16, CompGlobals, AstElemP65, ParserASM_6502,
+  CompGlobals, AstElemP65, AstTree, ParserASM_6502,
   MirList, LexPas, SIF_P65pas, StrUtils;
 type
   { TCompiler_PIC16 }
-  TCompiler_PIC16 = class(TGenCod)
+  TCompiler_PIC16 = class(TParserDirecBase)
   private  //Funciones básicas
     addBootldr: integer;  //Address where start Bootloader.
     addVariab : integer;  //Address where start Variables section.
@@ -19,53 +19,53 @@ type
     procedure AddParam(var pars: TAstParamArray; parName: string;
       const srcPos: TSrcPos; typ0: TEleTypeDec; adicDec: TAdicDeclar);
     function AddSIFtoUnit(name: string; retType: TEleTypeDec;
-      const srcPos: TSrcPos; const pars: TAstParamArray; codSys: TCodSysInline
-      ): TEleFunDec;
+      const srcPos: TSrcPos; const pars: TAstParamArray): TEleFunDec;
     function AddSNFtoUnit(name: string; retType: TEleTypeDec;
       const srcPos: TSrcPos; var pars: TAstParamArray; codSys: TCodSysNormal
       ): TEleFunDec;
-    procedure bool_LoadToRT(fun: TEleExpress);
-    procedure byte_DefineRegisters;
-    procedure byte_LoadToWR(fun: TMirOperand);
-    procedure byte_SaveToStk;
+    procedure cbClearStateRam;
+    function cbReadFrequen: Single;
+    function cbReadMaxFreq: Single;
+    function cbReadORG: Integer;
+    function cbReadPicModel: string;
+    procedure cbSetCpuMode(value: string);
+    procedure cbSetDataAddr(value: string);
+    procedure cbSetFrequen(value: single);
+    procedure cbSetFrequency(f: Longint; value: string);
+    procedure cbSetGeneralORG(value: integer);
+    procedure cbSetMaxFreq(value: single);
+    procedure cbSetORG(value: integer);
+    procedure cbSetPicModel(value: string);
+    procedure cbSetStatRAMCom(value: string);
+    procedure Cod_EndProgram;
+    procedure Cod_StartProgram;
     procedure CreateBooleanOperations;
     procedure CreateByteOperations;
     procedure CreateCharOperations;
+    procedure CreateDWordOperations;
     function CreateInBOMethod(clsType: TEleTypeDec; opr: string; name: string;
-      parType: TEleTypeDec; retType: TEleTypeDec; pCompile: TCodSysInline
-      ): TEleFunDec;
+      parType: TEleTypeDec; retType: TEleTypeDec): TEleFunDec;
     function CreateInTerMethod(clsType: TEleTypeDec; name: string; parType1,
-      parType2: TEleTypeDec; retType: TEleTypeDec; pCompile: TCodSysInline
-      ): TEleFunDec;
+      parType2: TEleTypeDec; retType: TEleTypeDec): TEleFunDec;
     function CreateInUOMethod(clsType: TEleTypeDec; opr: string; name: string;
-      retType: TEleTypeDec; pCompile: TCodSysInline; operTyp: TOperatorType =
-      opkUnaryPre): TEleFunDec;
-    procedure CreateSystemTypesAndVars;
+      retType: TEleTypeDec; operTyp: TOperatorType = opkUnaryPre): TEleFunDec;
     procedure CreateWordOperations;
     procedure DefineArray(etyp: TEleTypeDec);
+    procedure CreateSystemTypesAndVars;
     procedure DefineObject(etyp: TEleTypeDec);
     procedure DefinePointer(etyp: TEleTypeDec);
     procedure GenerateMIR;
     function PICName: string;
-    procedure word_DefineRegisters;
-    procedure word_High(var fun: TMirOperand);
-    procedure word_LoadToWR(fun: TMirOperand);
-    procedure word_Low(var fun: TMirOperand);
-    procedure word_RequireWR;
-    procedure word_SaveToStk;
 //    procedure PrepareBody(cntBody, sntBlock: TEleCodeCont);
 //    procedure PrepareSentences;
     procedure CreateVarsAndPars;
-    procedure GenCodeSentences(sentList: TAstElements);
-    procedure GenCodeSentences2(sentList: TMirElements);
-    procedure GenCodeBlock(block: TEleBlock);
 
   private  //Compilers steps
 //    procedure EvaluateConstantDeclare;
 //    procedure ConstantFolding;
 //    procedure ConstanPropagation;
     procedure DoOptimize;
-    procedure DoGenerateCode;
+//    procedure DoGenerateCode;
     procedure DoCompile;
   public      //Events
     OnAfterCompile: procedure of object;   //Al finalizar la compilación.
@@ -85,6 +85,16 @@ type
 procedure SetLanguage;
 
 implementation
+var
+  sifByteMulByte, sifByteDivByte, sifByteModByte: TEleFunDec;
+  sifWordDivWord, sifWordModWord, sifWordShlByte: TEleFunDec;
+var
+  //System variables used as registers
+  H      : TEleVarDec;  //To load the high byte of words.
+  E      : TEleVarDec;  //To load the high word of dwords.
+  U      : TEleVarDec;  //To load the high word of dwords.
+  IX     : TEleVarDec;  //To index operands
+
 var
   ER_DUPLIC_IDEN, ER_NOT_IMPLEM_, ER_IDEN_EXPECT, ER_INVAL_FLOAT: string;
   ER_ERR_IN_NUMB, ER_UNDEF_TYPE_, ER_EXP_VAR_IDE, ER_BIT_VAR_REF: String;
@@ -1392,242 +1402,20 @@ begin
   parsList.Destroy;
 end;
 //Inicialización
-procedure SetCodSysInline(fun: TEleFunDec; codSysInline: TCodSysInline);
+procedure SetCodSysInline(fun: TEleFunDec);
 {Procedimiento que, por seguridad, debería ser el único acceso a TEleFunDec.codSysInline.
 Así se garantiza que el "casting" se haga apropiadamente.}
 begin
   fun.callType := ctSysInline;
-  fun.codSysInline := TMethod(codSysInline);
 end;
 //////////////// Tipo Boolean /////////////
 function TCompiler_PIC16.PICName: string;
 begin
   Result := pic.Model;
 end;
-//////////////// Tipo Byte /////////////
-procedure TCompiler_PIC16.byte_LoadToWR(fun: TMirOperand);
-{Load operand to WR. It's, convert storage to stRegister }
-begin
-  case fun.Sto of  //el parámetro debe estar en "res"
-  stConst : begin
-    _LDAi(fun.value.valInt);
-  end;
-  stRamFix: begin
-    _LDA(fun.vardec.addr);
-  end;
-  stRamVarOf: begin
-    if fun.vardec.typ.IsByteSize then begin
-      //Indexado por Byte
-      _LDX(fun.vardec.addr);  //Load address
-      _LDAx(fun.offs);
-    end else if fun.vardec.typ.IsWordSize then begin
-      if fun.offs<256 then begin
-        AddCallerToFromCurr(IX);  //We declare using IX
-        //if not IX.allocated then begin
-        //  GenError(ER_NOT_IMPLEM_, [fun.StoAsStr]);
-        //  exit;
-        //end;
-        //Escribe dirección en puntero
-        _LDA(fun.vardec.addr);
-        _STA(IX.addr);
-        _LDA(fun.vardec.addr+1);
-        _STA(IX.addr+1);
-        //Carga desplazamiento
-        _LDYi(fun.offs);  //Load address
-        //Carga indexado
-        pic.codAsm(i_LDA, aIndirecY, IX.addr);
-      end else begin
-        GenError(ER_NOT_IMPLEM_, [fun.StoAsStr]);
-      end;
-    end else begin
-      GenError(ER_NOT_IMPLEM_, [fun.StoAsStr]);
-    end;
-  end;
-  stRegister, stRegistA: begin
-    //Already in WR
-  end;
-  else
-    //Almacenamiento no implementado
-    GenError(ER_NOT_IMPLEM_, [fun.StoAsStr]);
-  end;
-end;
-procedure TCompiler_PIC16.byte_DefineRegisters;
-begin
-  //No es encesario, definir registros adicionales a A
-end;
-procedure TCompiler_PIC16.byte_SaveToStk;
-begin
-  _PHA;
-end;
-//////////////// Tipo Word /////////////
-procedure TCompiler_PIC16.word_RequireWR;
-{Generate de callings to Work Register used when loading a Word in Work registers.}
-begin
-  AddCallerToFromCurr(H);
-end;
-procedure TCompiler_PIC16.word_LoadToWR(fun: TMirOperand);
-{Carga el valor de una expresión a los registros de trabajo.}
-var
-  idx: TEleVarDec;
-  addrNextOp1, addrNextOp2: Integer;
-begin
-  case fun.Sto of  //el parámetro debe estar en "Op^"
-  stConst : begin
-    //byte alto
-    _LDAi(fun.value.HByte);
-    _STA(H.addr);
-    //byte bajo
-    _LDAi(fun.value.LByte);
-  end;
-  stRamFix: begin
-    _LDA(fun.vardec.addr+1);
-    _STA(H.addr);
-    _LDA(fun.vardec.addr);
-  end;
-  stRegister: begin  //Already in (H,A)
-  end;
-//  stVarRef, stExpRef: begin
-//    if Op^.Sto = stExpRef then begin
-//      idx := IX;  //Index variable
-//    end else begin
-//      idx := Op^.vardec;  //Index variable
-//    end;
-//    if idx.typ.IsByteSize then begin
-//      //Indexed in zero page is simple
-//      _LDX(idx.addr);
-//      _INX;  //Fail in cross-page
-//      pic.codAsm(i_LDA, aZeroPagX, 0);  //MSB
-//      _STA(H.addr);
-//      _DEX;
-//      pic.codAsm(i_LDA, aZeroPagX, 0);  //LSB
-//    end else if idx.typ.IsWordSize then begin
-//      if idx.addr<256 then begin
-//        //Index in zero page. It's simple
-//        _LDYi(1);
-//        pic.codAsm(i_LDA, aIndirecY, idx.addr);  //MSB
-//        _STA(H.addr);
-//        _DEY;
-//        pic.codAsm(i_LDA, aIndirecY, idx.addr);  //LSB
-//      end else begin
-//        //Index is word and not in zero page
-//        //WARNING this is "Self-modifiying" code.
-//        //---------- MSB ------------
-//        _CLC;   //Prepare adding 1
-//        _LDA(idx.addr);  //Load LSB index
-//        _ADCi(1);
-//addrNextOp1 := pic.iRam + 1;  //Address next instruction
-//        pic.codAsm(i_STA, aAbsolute, 0); //Store forward
-//        _LDA(idx.addr+1);  //Load virtual MSB index
-//        _ADCi(0);   //Just to add the carry
-//addrNextOp2 := pic.iRam + 1;  //Address next instruction
-//        PIC.codAsm(i_STA, aAbsolute, 0);  //Store forward
-//        //Modified LDA instruction
-//        pic.codAsm(i_LDA, aAbsolute, 0); //Store forward
-//        //Complete address
-//        pic.ram[addrNextOp1].value := (pic.iRam - 2) and $FF;
-//        pic.ram[addrNextOp1+1].value := (pic.iRam - 2)>>8;
-//        pic.ram[addrNextOp2].value := (pic.iRam - 1) and $FF;
-//        pic.ram[addrNextOp2+1].value := (pic.iRam - 1)>>8;
-//        _STA(H.addr);  //Store MSB in H
-//        //---------- LSB ------------
-//        _LDA(idx.addr);  //Load LSB index
-//addrNextOp1 := pic.iRam + 1;  //Address next instruction
-//        pic.codAsm(i_STA, aAbsolute, 0); //Store forward
-//        _LDA(idx.addr+1);  //Load virtual MSB index
-//addrNextOp2 := pic.iRam + 1;  //Address next instruction
-//        PIC.codAsm(i_STA, aAbsolute, 0);  //Store forward
-//        //Modified LDA instruction
-//        pic.codAsm(i_LDA, aAbsolute, 0); //LSB
-//        //Complete address
-//        pic.ram[addrNextOp1].value := (pic.iRam - 2) and $FF;
-//        pic.ram[addrNextOp1+1].value := (pic.iRam - 2)>>8;
-//        pic.ram[addrNextOp2].value := (pic.iRam - 1) and $FF;
-//        pic.ram[addrNextOp2+1].value := (pic.iRam - 1)>>8;
-//      end;
-//    end else begin
-//      //refVar can only be byte or word size.
-//      GenError('Not supported this index.');
-//    end;
-//  end;
-  else
-    //Almacenamiento no implementado
-    GenError(MSG_NOT_IMPLEM);
-  end;
-end;
-procedure TCompiler_PIC16.word_DefineRegisters;
-begin
-  //Changed from versión 0.7.1
-  AddCallerToFromCurr(H);
-end;
-procedure TCompiler_PIC16.word_SaveToStk;
-begin
-  //guarda A
-  _PHA;
-  //guarda H
-  _LDA(H.addr);
-  _PHA;
-end;
-procedure TCompiler_PIC16.word_Low(var fun: TMirOperand);
-{Acceso al byte de menor peso de un word.}
-var
-  par: TMirOperand;
-begin
-  par := fun.elements[0];  //Only one parameter
-  requireA;
-  case par.Sto of
-  stRamFix: begin
-    if par.allocated then begin
-      SetFunVariab(fun, par.addL);
-    end else begin
-      //We cannot set a variable yet
-      SetFunExpres(fun);
-    end;
-  end;
-  stConst: begin
-    if par.evaluated then begin
-      //We can take the low part
-      SetFunConst_byte(fun, par.value.ValInt and $ff);
-    end else begin
-      //We cannot set a variable yet
-      SetFunExpres(fun);
-    end;
-  end;
-  else
-    GenError('Syntax error.');
-  end;
-end;
-procedure TCompiler_PIC16.word_High(var fun: TMirOperand);
-{Acceso al byte de mayor peso de un word.}
-var
-  par: TMirOperand;
-begin
-  par := fun.elements[0];  //Only one parameter
-  requireA;
-  case par.Sto of
-  stRamFix: begin
-    if par.allocated then begin
-      SetFunVariab(fun, par.addH);
-    end else begin
-      //We cannot set a variable yet
-      SetFunExpres(fun);
-    end;
-  end;
-  stConst: begin
-    if par.evaluated then begin
-      //We can take the high part
-      SetFunConst_byte(fun, par.value.ValInt and $ff00 >>8);
-    end else begin
-      //We cannot set a variable yet
-      SetFunExpres(fun);
-    end;
-  end;
-  else
-    GenError('Syntax error.');
-  end;
-end;
 
 function TCompiler_PIC16.AddSIFtoUnit(name: string; retType: TEleTypeDec; const srcPos: TSrcPos;
-               const pars: TAstParamArray; codSys: TCodSysInline): TEleFunDec;
+               const pars: TAstParamArray): TEleFunDec;
 {Create a new system function in the current element of the Syntax Tree.
  Returns the reference to the function created.
    pars   -> Array of parameters for the function to be created.
@@ -1651,7 +1439,7 @@ begin
   {Create a body, to be uniform with normal function and for have a space where
   compile code and access to posible variables or other elements.}
   TreeElems.AddBodyAndOpen(SrcPos);  //Create body
-  SetCodSysInline(Result, codSys);  //Set routine to generate code o SIF routine.
+  SetCodSysInline(Result);  //Set routine to generate code o SIF routine.
   TreeElems.CloseElement;  //Close body
   TreeElems.CloseElement;  //Close function implementation
   curLocation := tmpLoc;   //Restore current location
@@ -1748,7 +1536,6 @@ function TCompiler_PIC16.CreateInUOMethod(
                       opr     : string;      //Opertaor associated to the method
                       name    : string;      //Name of the method
                       retType : TEleTypeDec;  //Type returned by the method.
-                      pCompile: TCodSysInline;
                       operTyp: TOperatorType = opkUnaryPre): TEleFunDec;
 {Create a new system function (associated to a unary operator) in the current element of
  the AST.
@@ -1763,7 +1550,7 @@ begin
   //Here variables can be added
   {Create a body, to be uniform with normal function and for have a space where
   compile code and access to posible variables or other elements.}
-  SetCodSysInline(Result, pCompile); //Set routine to generate code
+  SetCodSysInline(Result); //Set routine to generate code
   Result.oper := UpCase(opr); //Set operator as UpperCase to speed searching.
   if opr = '' then Result.operTyp := opkNone
   else Result.operTyp := operTyp; //Must be pre or post
@@ -1774,8 +1561,8 @@ function TCompiler_PIC16.CreateInBOMethod(
                       opr     : string;      //Opertaor associated to the method
                       name    : string;      //Name of the method
                       parType : TEleTypeDec;  //Parameter type
-                      retType : TEleTypeDec;  //Type returned by the method.
-                      pCompile: TCodSysInline): TEleFunDec;
+                      retType : TEleTypeDec  //Type returned by the method.
+                      ): TEleFunDec;
 {Create a new system function (associated to a binary operator) in the current element of
  the AST. If "opr" is null, just create a method without operator.
  Returns the reference to the function created.}
@@ -1792,7 +1579,7 @@ begin
   //Here variables can be added
   {Create a body, to be uniform with normal function and for have a space where
   compile code and access to posible variables or other elements.}
-  SetCodSysInline(Result, pCompile); //Set routine to generate code
+  SetCodSysInline(Result); //Set routine to generate code
   Result.oper := UpCase(opr); //Set operator as UpperCase to speed search.
   if opr = '' then Result.operTyp := opkNone
   else Result.operTyp := opkBinary;
@@ -1800,8 +1587,8 @@ begin
   TreeElems.CloseElement;  //Close function implementation
 end;
 function TCompiler_PIC16.CreateInTerMethod(clsType: TEleTypeDec;
-  name: string; parType1, parType2: TEleTypeDec; retType: TEleTypeDec;
-  pCompile: TCodSysInline): TEleFunDec;
+  name: string; parType1, parType2: TEleTypeDec; retType: TEleTypeDec
+  ): TEleFunDec;
 {Create a new system ternary INLINE function in the current element of
  the AST.
  Returns the reference to the function created.}
@@ -1819,7 +1606,7 @@ begin
   //Here variables can be added
   {Create a body, to be uniform with normal function and for have a space where
   compile code and access to posible variables or other elements.}
-  SetCodSysInline(Result, pCompile); //Set routine to generate code
+  SetCodSysInline(Result); //Set routine to generate code
   Result.operTyp := opkNone;   //Could be a ternary operator
   TreeElems.CloseElement;  //Close body
   TreeElems.CloseElement;  //Close function implementation
@@ -1830,6 +1617,7 @@ var
   expr: TEleExpress;
   f, f1, f2: TEleFunDec;
 begin
+  {*** Revisar esto
   //Create assigement method
   f := CreateInBOMethod(etyp, ':=', '_set', etyp, typNull, @SIF_arr_asig_arr);
   f.asgMode := asgSimple;
@@ -1840,45 +1628,46 @@ begin
   CreateInUOMethod(etyp, '', 'high'  , typByte, @arrayHigh);
   CreateInUOMethod(etyp, '', 'clear' , typNull, @SIF_ArrayClear);
 //  CreateInBOMethod(etyp, '', 'fill' , typByte, typNull, @SIF_ArrayFill);
+  }
 end;
 procedure TCompiler_PIC16.DefinePointer(etyp: TEleTypeDec);
 {Set operations that defines pointers aritmethic.}
 var
   f, f1: TEleFunDec;
 begin
-  //Asignación desde word y Puntero
-  f := CreateInBOMethod(etyp, ':=', '_set', typWord, typNull, @SIF_word_asig_word);
-  f.asgMode := asgSimple;
-  f := CreateInBOMethod(etyp, ':=', '_set', etyp, typNull, @SIF_word_asig_word);
-  f.asgMode := asgSimple;
-  //Getter and setter
-  f1 := CreateInUOMethod(etyp, '', '_getptr', etyp.ptrType, @SIF_GetPointer);
-  f1.getset := gsGetInPtr;
-  f := CreateInBOMethod(etyp, '', '_setptr', etyp.ptrType, typNull, @SIF_SetPointer);
-  f.asgMode := asgSimple;
-  f.getset := gsSetInPtr;
-  f1.funset := f;
-
-  CreateInBOMethod(etyp, '=',  '_equ',  typWord, typBool, @SIF_word_equal_word);
-  CreateInBOMethod(etyp, '=',  '_equ',  etyp   , typBool, @SIF_word_equal_word);
-
-  CreateInBOMethod(etyp, '+',  '_add',  typWord, etyp   , @SIF_pointer_add_word);
-  CreateInBOMethod(etyp, '+',  '_add',  typByte, etyp   , @SIF_pointer_add_byte);
-
-  CreateInBOMethod(etyp, '-',  '_sub',  typWord, etyp   , @SIF_pointer_sub_word);
-  CreateInBOMethod(etyp, '-',  '_sub',  typByte, etyp   , @SIF_pointer_sub_byte);
-  CreateInBOMethod(etyp, '>' , '_gre',  etyp   , typBool, @SIF_word_great_word);
-  CreateInBOMethod(etyp, '<' , '_les',  etyp   , typBool, @SIF_word_less_word);
-  CreateInBOMethod(etyp, '>=', '_gequ', etyp   , typBool, @SIF_word_gequ_word);
-  CreateInBOMethod(etyp, '<=', '_lequ', etyp   , typBool, @SIF_word_lequ_word);
-
-  f := CreateInBOMethod(etyp, '+=', '_aadd', typWord, etyp, @SIF_word_aadd_word);
-  f.asgMode := asgOperat;
-  f.getset := gsSetInSimple;
-  f := CreateInBOMethod(etyp, '+=', '_aadd', typByte, etyp, @SIF_word_aadd_byte);
-  f.asgMode := asgOperat;
-  f.getset := gsSetInSimple;
-//  etyp.CreateUnaryPostOperator('^',6, 'deref', @SIF_derefPointer);  //dereferencia
+//  //Asignación desde word y Puntero
+//  f := CreateInBOMethod(etyp, ':=', '_set', typWord, typNull, @SIF_word_asig_word);
+//  f.asgMode := asgSimple;
+//  f := CreateInBOMethod(etyp, ':=', '_set', etyp, typNull, @SIF_word_asig_word);
+//  f.asgMode := asgSimple;
+//  //Getter and setter
+//  f1 := CreateInUOMethod(etyp, '', '_getptr', etyp.ptrType, @SIF_GetPointer);
+//  f1.getset := gsGetInPtr;
+//  f := CreateInBOMethod(etyp, '', '_setptr', etyp.ptrType, typNull, @SIF_SetPointer);
+//  f.asgMode := asgSimple;
+//  f.getset := gsSetInPtr;
+//  f1.funset := f;
+//
+//  CreateInBOMethod(etyp, '=',  '_equ',  typWord, typBool, @SIF_word_equal_word);
+//  CreateInBOMethod(etyp, '=',  '_equ',  etyp   , typBool, @SIF_word_equal_word);
+//
+//  CreateInBOMethod(etyp, '+',  '_add',  typWord, etyp   , @SIF_pointer_add_word);
+//  CreateInBOMethod(etyp, '+',  '_add',  typByte, etyp   , @SIF_pointer_add_byte);
+//
+//  CreateInBOMethod(etyp, '-',  '_sub',  typWord, etyp   , @SIF_pointer_sub_word);
+//  CreateInBOMethod(etyp, '-',  '_sub',  typByte, etyp   , @SIF_pointer_sub_byte);
+//  CreateInBOMethod(etyp, '>' , '_gre',  etyp   , typBool, @SIF_word_great_word);
+//  CreateInBOMethod(etyp, '<' , '_les',  etyp   , typBool, @SIF_word_less_word);
+//  CreateInBOMethod(etyp, '>=', '_gequ', etyp   , typBool, @SIF_word_gequ_word);
+//  CreateInBOMethod(etyp, '<=', '_lequ', etyp   , typBool, @SIF_word_lequ_word);
+//
+//  f := CreateInBOMethod(etyp, '+=', '_aadd', typWord, etyp, @SIF_word_aadd_word);
+//  f.asgMode := asgOperat;
+//  f.getset := gsSetInSimple;
+//  f := CreateInBOMethod(etyp, '+=', '_aadd', typByte, etyp, @SIF_word_aadd_byte);
+//  f.asgMode := asgOperat;
+//  f.getset := gsSetInSimple;
+////  etyp.CreateUnaryPostOperator('^',6, 'deref', @SIF_derefPointer);  //dereferencia
 end;
 procedure TCompiler_PIC16.DefineObject(etyp: TEleTypeDec);
 var
@@ -1886,41 +1675,34 @@ var
   expr: TEleExpress;
   f, f1, f2: TEleFunDec;
 begin
-  //Create assigement method
-  f := CreateInBOMethod(etyp, ':=', '_set', etyp, typNull, @SIF_obj_asig_obj);
-  f.asgMode := asgSimple;
-  f.getset := gsSetInSimple;
+//  //Create assigement method
+//  f := CreateInBOMethod(etyp, ':=', '_set', etyp, typNull, @SIF_obj_asig_obj);
+//  f.asgMode := asgSimple;
+//  f.getset := gsSetInSimple;
 end;
 procedure TCompiler_PIC16.CreateSystemTypesAndVars;
 begin
   /////////////// System types ////////////////////
   typBool := CreateEleTypeDec('boolean', srcPosNull, 1, tctAtomic, t_boolean);
-  SetOnLoadToWR(typBool, @byte_LoadToWR);
   typBool.location := locInterface;   //Location for type (Interface/Implementation/...)
   TreeElems.AddElementAndOpen(typBool);  //Open to create "elements" list.
   TreeElems.CloseElement;   //Close Type
   typByte := CreateEleTypeDec('byte', srcPosNull, 1, tctAtomic, t_uinteger);
-  SetOnLoadToWR(typByte, @byte_LoadToWR);
   typByte.location := locInterface;
   TreeElems.AddElementAndOpen(typByte);  //Open to create "elements" list.
   TreeElems.CloseElement;
 
   typChar := CreateEleTypeDec('char', srcPosNull, 1, tctAtomic, t_string);
-  SetOnLoadToWR(typChar, @byte_LoadToWR);
   typChar.location := locInterface;
   TreeElems.AddElementAndOpen(typChar);
   TreeElems.CloseElement;
 
   typWord := CreateEleTypeDec('word', srcPosNull, 2, tctAtomic, t_uinteger);
-  SetOnLoadToWR(typWord, @word_LoadToWR);
-  typWord.OnRequireWR := @word_RequireWR;
   typWord.location := locInterface;
   TreeElems.AddElementAndOpen(typWord);
   TreeElems.CloseElement;
 
   typWord := CreateEleTypeDec('word', srcPosNull, 2, tctAtomic, t_uinteger);
-  SetOnLoadToWR(typWord, @word_LoadToWR);
-  typWord.OnRequireWR := @word_RequireWR;
   typWord.location := locInterface;
   TreeElems.AddElementAndOpen(typWord);
   TreeElems.CloseElement;
@@ -1939,8 +1721,9 @@ begin
   TreeElems.AddElementAndOpen(typTriplet);
   TreeElems.CloseElement;
 
-  {Create variables for aditional Working register. Note that this variables are
-  accesible (and usable) from the code, because the name assigned is a common variable.}
+  // ****  This section is hardware dependent ****
+  {Create variables for aditional Working register. These variables are accesible
+  (and usable) from the code, because the name assigned is a common variable.}
   //Create register H as variable
   H := AddVarDecAndOpen('__H', typByte, srcPosNull);
   TreeElems.CloseElement;  { TODO : ¿No sería mejor evitar abrir el elemento para no tener que cerrarlo? }
@@ -1973,19 +1756,19 @@ begin
   /////////////// Boolean type ////////////////////
   //Methods-Operators
   TreeElems.OpenElement(typBool);
-  f:=CreateInBOMethod(typBool, ':=',  '_set', typBool, typNull, @SIF_bool_asig_bool);
+  f:=CreateInBOMethod(typBool, ':=',  '_set', typBool, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
-  f:=CreateInUOMethod(typBool  , 'NOT', '_not', typBool, @SIF_not_bool, opkUnaryPre);
-  f:=CreateInBOMethod(typBool, 'AND', '_and', typBool, typBool, @SIF_bool_and_bool);
+  f:=CreateInUOMethod(typBool, 'NOT', '_not', typBool, opkUnaryPre);
+  f:=CreateInBOMethod(typBool, 'AND', '_and', typBool, typBool);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typBool, 'OR' , '_or' , typBool, typBool, @SIF_bool_or_bool);
+  f:=CreateInBOMethod(typBool, 'OR' , '_or' , typBool, typBool);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typBool, 'XOR', '_xor', typBool, typBool, @SIF_bool_xor_bool);
+  f:=CreateInBOMethod(typBool, 'XOR', '_xor', typBool, typBool);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typBool, '=' ,  '_equ', typBool, typBool, @SIF_bool_equal_bool);
+  f:=CreateInBOMethod(typBool, '=' ,  '_equ', typBool, typBool);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typBool, '<>',  '_dif', typBool, typBool, @SIF_bool_xor_bool);
+  f:=CreateInBOMethod(typBool, '<>',  '_dif', typBool, typBool);
   f.fConmutat := true;
   TreeElems.CloseElement;   //Close Type
 end;
@@ -1996,65 +1779,63 @@ begin
   //Methods-Operators
   TreeElems.OpenElement(typByte);
   //Simple Assignment
-  f:=CreateInBOMethod(typByte, ':=', '_set', typByte, typNull, @SIF_byte_asig_byte);
+  f:=CreateInBOMethod(typByte, ':=', '_set', typByte, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
   //Array-pinter Assignment
-  f1 := CreateInBOMethod(typByte, '', '_getitem', typByte, typByte, @SIF_GetItemIdxByte);
-  f1.getset := gsGetInItem;
-  f2 := CreateInBOMethod(typByte, '', '_getitem', typWord, typByte, @SIF_GetItemIdxWord);
-  f2.getset := gsGetInItem;
-  //AddCallerToFrom(IX, f.bodyNode);  //Dependency
-  f := CreateInTerMethod(typByte, '_setitem', typByte, typByte, typNull, @SIF_SetItemIndexByte);
-  f.asgMode := asgSimple;
-  f.getset := gsSetInItem;
-  f1.funset := f;         //Connect to getter
-  f := CreateInTerMethod(typByte, '_setitem', typWord, typByte, typNull, @SIF_SetItemIndexWord);
-  f.asgMode := asgSimple;
-  f.getset := gsSetInItem;
-  f2.funset := f;         //Connect to getter
+//  f1 := CreateInBOMethod(typByte, '', '_getitem', typByte, typByte);
+//  f1.getset := gsGetInItem;
+//  f2 := CreateInBOMethod(typByte, '', '_getitem', typWord, typByte);
+//  f2.getset := gsGetInItem;
+//  //AddCallerToFrom(IX, f.bodyNode);  //Dependency
+//  f := CreateInTerMethod(typByte, '_setitem', typByte, typByte, AstTree.typNull);
+//  f.asgMode := asgSimple;
+//  f.getset := gsSetInItem;
+//  f1.funset := f;         //Connect to getter
+//  f := CreateInTerMethod(typByte, '_setitem', typWord, typByte, AstTree.typNull);
+//  f.asgMode := asgSimple;
+//  f.getset := gsSetInItem;
+//  f2.funset := f;         //Connect to getter
 
   //Assignment with operations
-  f:=CreateInBOMethod(typByte, '+=', '_aadd',typByte, typNull, @SIF_byte_aadd_byte);
+  f:=CreateInBOMethod(typByte, '+=', '_aadd',typByte, AstTree.typNull);
   f.asgMode := asgOperat;
   f.getset := gsSetInSimple;
-  f:=CreateInBOMethod(typByte, '-=', '_asub',typByte, typNull, @SIF_byte_asub_byte);
+  f:=CreateInBOMethod(typByte, '-=', '_asub',typByte, AstTree.typNull);
   f.asgMode := asgOperat;
   f.getset := gsSetInSimple;
-  f:=CreateInBOMethod(typByte, '+' , '_add', typByte, typByte, @SIF_byte_add_byte);
+  f:=CreateInBOMethod(typByte, '+' , '_add', typByte, typByte);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typByte, '+' , '_add', typWord, typWord, @SIF_byte_add_word);
+  f:=CreateInBOMethod(typByte, '+' , '_add', typWord, typWord);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typByte, '-' , '_sub', typByte, typByte, @SIF_byte_sub_byte);
-  AddCallerToFrom(H, f.bodyNode);  //Dependency
-  f:=CreateInBOMethod(typByte, '*' , '_mul', typByte, typWord, @SIF_byte_mul_byte);
+  f:=CreateInBOMethod(typByte, '-' , '_sub', typByte, typByte);
+  f:=CreateInBOMethod(typByte, '*' , '_mul', typByte, typWord);
   f.fConmutat := true;
-  AddCallerToFrom(H, f.bodyNode);  //Dependency
   sifByteMulByte := f;
-  f:=CreateInBOMethod(typByte, 'DIV' , '_div', typByte, typByte, @SIF_byte_div_byte);
+  f:=CreateInBOMethod(typByte, 'DIV' , '_div', typByte, typByte);
   AddCallerToFrom(H, f.bodyNode);  //Dependency
   sifByteDivByte := f;
-  f:=CreateInBOMethod(typByte, 'MOD' , '_mod', typByte, typByte, @SIF_byte_mod_byte);
+  f:=CreateInBOMethod(typByte, 'MOD' , '_mod', typByte, typByte);
   AddCallerToFrom(H, f.bodyNode);  //Dependency
   sifByteModByte := f;
 
-  f:=CreateInBOMethod(typByte, 'AND','_and', typByte, typByte, @SIF_byte_and_byte);
+  f:=CreateInBOMethod(typByte, 'AND','_and', typByte, typByte);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typByte, 'OR' ,'_or' , typByte, typByte, @SIF_byte_or_byte);
+  f:=CreateInBOMethod(typByte, 'OR' ,'_or' , typByte, typByte);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typByte, 'XOR','_xor', typByte, typByte, @SIF_byte_xor_byte);
+  f:=CreateInBOMethod(typByte, 'XOR','_xor', typByte, typByte);
   f.fConmutat := true;
-  f:=CreateInUOMethod(typByte, 'NOT','_not', typByte, @SIF_not_byte, opkUnaryPre);
-  f:=CreateInBOMethod(typByte, '=' , '_equ', typByte, typBool, @SIF_byte_equal_byte);
+  f:=CreateInUOMethod(typByte, 'NOT','_not', typByte, opkUnaryPre);
+  f:=CreateInBOMethod(typByte, '=' , '_equ', typByte, typBool);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typByte, '<>', '_dif', typByte, typBool, @SIF_byte_difer_byte);
+  f:=CreateInBOMethod(typByte, '<>', '_dif', typByte, typBool);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typByte, '>' , '_gre', typByte, typBool, @SIF_byte_great_byte);
-  f:=CreateInBOMethod(typByte, '<' , '_les', typByte, typBool, @SIF_byte_less_byte);
-  f:=CreateInBOMethod(typByte, '>=', '_gequ',typByte, typBool, @SIF_byte_gequ_byte);
-  f:=CreateInBOMethod(typByte, '<=', '_lequ',typByte, typBool, @SIF_byte_lequ_byte);
-  f:=CreateInBOMethod(typByte, '>>', '_shr', typByte, typByte, @SIF_byte_shr_byte);  { TODO : Definir bien la precedencia }
-  f:=CreateInBOMethod(typByte, '<<', '_shl', typByte, typByte, @SIF_byte_shl_byte);
+  f:=CreateInBOMethod(typByte, '>' , '_gre', typByte, typBool);
+  f:=CreateInBOMethod(typByte, '<' , '_les', typByte, typBool);
+  f:=CreateInBOMethod(typByte, '>=', '_gequ',typByte, typBool);
+  f:=CreateInBOMethod(typByte, '<=', '_lequ',typByte, typBool);
+  f:=CreateInBOMethod(typByte, '>>', '_shr', typByte, typByte);  { TODO : Definir bien la precedencia }
+  f:=CreateInBOMethod(typByte, '<<', '_shl', typByte, typByte);
   TreeElems.CloseElement;   //Close Type
 end;
 procedure TCompiler_PIC16.CreateCharOperations;
@@ -2063,13 +1844,13 @@ var
 begin
   /////////////// Char type ////////////////////
   TreeElems.OpenElement(typChar);
-  f:=CreateInBOMethod(typChar, ':=', '_set', typChar, typNull, @SIF_char_asig_char);
+  f:=CreateInBOMethod(typChar, ':=', '_set', typChar, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
   //opr.CreateOperation(typString, @SIF_char_asig_string);
-  f:=CreateInBOMethod(typChar, '=' , '_equ', typChar, typBool, @SIF_char_equal_char);
+  f:=CreateInBOMethod(typChar, '=' , '_equ', typChar, typBool);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typChar, '<>', '_dif', typChar, typBool, @SIF_char_difer_char);
+  f:=CreateInBOMethod(typChar, '<>', '_dif', typChar, typBool);
   f.fConmutat := true;
   TreeElems.CloseElement;   //Close Type
 end;
@@ -2079,111 +1860,83 @@ var
 begin
   /////////////// Word type ////////////////////
   TreeElems.OpenElement(typWord);
-  f:=CreateInBOMethod(typWord, ':=' ,'_set' , typWord, typNull, @SIF_word_asig_word);
+  f:=CreateInBOMethod(typWord, ':=' ,'_set' , typWord, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
   AddCallerToFrom(H, f.bodyNode);  //Dependency
-  f:=CreateInBOMethod(typWord, ':=' ,'_set' , typByte, typNull, @SIF_word_asig_byte);
+  f:=CreateInBOMethod(typWord, ':=' ,'_set' , typByte, AstTree.typNull);
   f.getset := gsSetInSimple;
-  f:=CreateInBOMethod(typWord, '+=' ,'_aadd', typByte, typNull, @SIF_word_aadd_byte);
+  f:=CreateInBOMethod(typWord, '+=' ,'_aadd', typByte, AstTree.typNull);
   f.asgMode := asgOperat;
   f.getset := gsSetInSimple;
-  f:=CreateInBOMethod(typWord, '+=' ,'_aadd', typWord, typNull, @SIF_word_aadd_word);
+  f:=CreateInBOMethod(typWord, '+=' ,'_aadd', typWord, AstTree.typNull);
   f.asgMode := asgOperat;
   f.getset := gsSetInSimple;
-  f:=CreateInBOMethod(typWord, '-=' ,'_asub', typByte, typNull, @SIF_word_asub_byte);
+  f:=CreateInBOMethod(typWord, '-=' ,'_asub', typByte, AstTree.typNull);
   f.asgMode := asgOperat;
   f.getset := gsSetInSimple;
-  f:=CreateInBOMethod(typWord, '-=' ,'_asub', typWord, typNull, @SIF_word_asub_word);
+  f:=CreateInBOMethod(typWord, '-=' ,'_asub', typWord, AstTree.typNull);
   AddCallerToFrom(E, f.bodyNode);  // Require _E
   f.asgMode := asgOperat;
   f.getset := gsSetInSimple;
-  f:=CreateInBOMethod(typWord, '+'  , '_add', typByte, typWord, @SIF_word_add_byte);
+  f:=CreateInBOMethod(typWord, '+'  , '_add', typByte, typWord);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typWord, '+'  , '_add', typWord, typWord, @SIF_word_add_word);
+  f:=CreateInBOMethod(typWord, '+'  , '_add', typWord, typWord);
   f.fConmutat := true;
   AddCallerToFrom(H, f.bodyNode);  //Dependency
-  f:=CreateInBOMethod(typWord, '-'  , '_sub', typByte, typWord, @SIF_word_sub_byte);
-  f:=CreateInBOMethod(typWord, '-'  , '_sub', typWord, typWord, @SIF_word_sub_word);
-  f:=CreateInBOMethod(typWord, '*' , '_mul', typByte, typWord, @SIF_word_mul_byte);
+  f:=CreateInBOMethod(typWord, '-'  , '_sub', typByte, typWord);
+  f:=CreateInBOMethod(typWord, '-'  , '_sub', typWord, typWord);
+  f:=CreateInBOMethod(typWord, '*' , '_mul', typByte, typWord);
   f.fConmutat := true;
 
-  f:=CreateInBOMethod(typWord, 'DIV' , '_div', typWord, typWord, @SIF_word_div_word);
+  f:=CreateInBOMethod(typWord, 'DIV' , '_div', typWord, typWord);
   AddCallerToFrom(H, f.bodyNode);  //Dependency
   sifWordDivWord := f;
-  f:=CreateInBOMethod(typWord, 'MOD' , '_mod', typWord, typWord, @SIF_word_mod_word);
+  f:=CreateInBOMethod(typWord, 'MOD' , '_mod', typWord, typWord);
   AddCallerToFrom(H, f.bodyNode);  //Dependency
   sifWordModWord := f;
 
-  f:=CreateInBOMethod(typWord, 'AND', '_and', typByte, typByte, @SIF_word_and_byte);
+  f:=CreateInBOMethod(typWord, 'AND', '_and', typByte, typByte);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typWord, 'AND', '_and', typWord, typWord, @SIF_word_and_word);
+  f:=CreateInBOMethod(typWord, 'AND', '_and', typWord, typWord);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typWord, 'OR' , '_or' , typWord, typWord, @SIF_word_or_word);
+  f:=CreateInBOMethod(typWord, 'OR' , '_or' , typWord, typWord);
   f.fConmutat := true;
-  f:=CreateInUOMethod(typWord, 'NOT', '_not', typWord, @SIF_not_word, opkUnaryPre);
-  f:=CreateInBOMethod(typWord, '>>' , '_shr', typByte, typWord, @SIF_word_shr_byte); { TODO : Definir bien la precedencia }
-  f:=CreateInBOMethod(typWord, '<<' , '_shl', typByte, typWord, @SIF_word_shl_byte);
+  f:=CreateInUOMethod(typWord, 'NOT', '_not', typWord, opkUnaryPre);
+  f:=CreateInBOMethod(typWord, '>>' , '_shr', typByte, typWord); { TODO : Definir bien la precedencia }
+  f:=CreateInBOMethod(typWord, '<<' , '_shl', typByte, typWord);
   sifWordShlByte := f;         //Guarda referencia
 
-  f:=CreateInBOMethod(typWord, '=' , '_equ' , typWord, typBool, @SIF_word_equal_word);
+  f:=CreateInBOMethod(typWord, '=' , '_equ' , typWord, typBool);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typWord, '=' , '_equ' , typByte, typBool, @SIF_word_equal_byte);
+  f:=CreateInBOMethod(typWord, '=' , '_equ' , typByte, typBool);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typWord, '<>', '_dif' , typWord, typBool, @SIF_word_difer_word);
+  f:=CreateInBOMethod(typWord, '<>', '_dif' , typWord, typBool);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typWord, '>=', '_gequ', typWord, typBool, @SIF_word_gequ_word);
+  f:=CreateInBOMethod(typWord, '>=', '_gequ', typWord, typBool);
   AddCallerToFrom(E, f.bodyNode);  //Dependency
-  f:=CreateInBOMethod(typWord, '<' , '_les' , typWord, typBool, @SIF_word_less_word);
-  f:=CreateInBOMethod(typWord, '>' , '_gre' , typWord, typBool, @SIF_word_great_word);
-  f:=CreateInBOMethod(typWord, '<=', '_lequ', typWord, typBool, @SIF_word_lequ_word);
+  f:=CreateInBOMethod(typWord, '<' , '_les' , typWord, typBool);
+  f:=CreateInBOMethod(typWord, '>' , '_gre' , typWord, typBool);
+  f:=CreateInBOMethod(typWord, '<=', '_lequ', typWord, typBool);
   //Methods
-  f:=CreateInUOMethod(typWord, '', 'low' , typByte, @word_Low);
-  f:=CreateInUOMethod(typWord, '', 'high', typByte, @word_High);
+  f:=CreateInUOMethod(typWord, '', 'low' , typByte);
+  f:=CreateInUOMethod(typWord, '', 'high', typByte);
 
   TreeElems.CloseElement;   //Close Type
 end;
-procedure TCompiler_PIC16.CreateSystemUnitInAST;
-{Initialize the system elements. Must be executed just one time when compiling.}
+procedure TCompiler_PIC16.CreateDWordOperations;
 var
-  uni: TEleUnit;
-  pars: TAstParamArray;  //Array of parameters
-  f, sifDelayMs, sifWord: TEleFunDec;
+  f: TEleFunDec;
 begin
-  //////// Funciones del sistema ////////////
-  //Implement calls to Code Generator
-  callDefineArray  := @DefineArray;
-  callDefineObject := @DefineObject;
-  callDefinePointer:= @DefinePointer;
-  callValidRAMaddr := @ValidRAMaddr;
-  callStartProgram := @Cod_StartProgram;
-  callEndProgram   := @Cod_EndProgram;
-  //////////////////////// Create "System" Unit. //////////////////////
-  {Must be done once in First Pass. Originally system functions were created in a special
-  list and has a special treatment but it implied a lot of work for manage the memory,
-  linking, use of variables, and optimization. Now we create a "system unit" like a real
-  unit (more less) and we create the system function here, so we use the same code for
-  linking, calling and optimization that we use in common functions. Moreover, we can
-  create private functions.}
-  uni := CreateEleUnit('System');  //System unit
-  TreeElems.AddElementAndOpen(uni);  //Open Unit
-  CreateSystemTypesAndVars;
-  curLocation := locInterface;   {Maybe not needed because element here are created directly.}
-  //Creates operations
-  CreateBooleanOperations;
-  CreateByteOperations;
-  CreateCharOperations;
-  CreateWordOperations;
-
   /////////////// DWord type ////////////////////
   TreeElems.OpenElement(typDWord);
-  f:=CreateInBOMethod(typDWord, ':=' ,'_set' , typDWord, typNull, @SIF_dword_asig_dword);
+  f:=CreateInBOMethod(typDWord, ':=' ,'_set' , typDWord, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
-  f:=CreateInBOMethod(typDWord, ':=' ,'_set' , typByte, typNull, @SIF_dword_asig_byte);
+  f:=CreateInBOMethod(typDWord, ':=' ,'_set' , typByte, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
-  f:=CreateInBOMethod(typDWord, ':=' ,'_set' , typWord, typNull, @SIF_dword_asig_word);
+  f:=CreateInBOMethod(typDWord, ':=' ,'_set' , typWord, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
   AddCallerToFrom(H, f.bodyNode);  //Dependency
@@ -2198,11 +1951,11 @@ begin
 //  f.getset := gsSetOther;
 //  f:=CreateInBOMethod(typDWord, '+'  , '_add', typByte, typDWord, @SIF_word_add_byte);
 //  f.fConmutat := true;
-  f:=CreateInBOMethod(typDWord, '+'  , '_add', typDWord, typDWord, @SIF_dword_add_dword);
+  f:=CreateInBOMethod(typDWord, '+'  , '_add', typDWord, typDWord);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typDWord, '+'  , '_add', typByte, typDWord, @SIF_dword_add_byte);
+  f:=CreateInBOMethod(typDWord, '+'  , '_add', typByte, typDWord);
   f.fConmutat := true;
-  f:=CreateInBOMethod(typDWord, '+'  , '_add', typWord, typDWord, @SIF_dword_add_word);
+  f:=CreateInBOMethod(typDWord, '+'  , '_add', typWord, typDWord);
   f.fConmutat := true;
 //  AddCallerToFrom(H, f.bodyNode);  //Dependency
 //  f:=CreateInBOMethod(typDWord, '-'  , '_sub', typByte, typDWord, @SIF_word_sub_byte);
@@ -2243,6 +1996,38 @@ begin
 //  f:=CreateInUOMethod(typDWord, '', 'high', typByte, @word_High);
 
   TreeElems.CloseElement;   //Close Type
+end;
+procedure TCompiler_PIC16.CreateSystemUnitInAST;
+{Initialize the system elements. Must be executed just one time when compiling.}
+var
+  uni: TEleUnit;
+  pars: TAstParamArray;  //Array of parameters
+  f, sifDelayMs, sifWord: TEleFunDec;
+begin
+  //////// Funciones del sistema ////////////
+  //Implement calls to Code Generator
+  callDefineArray  := @DefineArray;
+  callDefineObject := @DefineObject;
+  callDefinePointer:= @DefinePointer;
+  callStartProgram := @Cod_StartProgram;
+  callEndProgram   := @Cod_EndProgram;
+  //////////////////////// Create "System" Unit. //////////////////////
+  {Must be done once in First Pass. Originally system functions were created in a special
+  list and has a special treatment but it implied a lot of work for manage the memory,
+  linking, use of variables, and optimization. Now we create a "system unit" like a real
+  unit (more less) and we create the system function here, so we use the same code for
+  linking, calling and optimization that we use in common functions. Moreover, we can
+  create private functions.}
+  uni := CreateEleUnit('System');  //System unit
+  TreeElems.AddElementAndOpen(uni);  //Open Unit
+  CreateSystemTypesAndVars;
+  curLocation := locInterface;   {Maybe not needed because element here are created directly.}
+  //Creates operations
+  CreateBooleanOperations;
+  CreateByteOperations;
+  CreateCharOperations;
+  CreateWordOperations;
+  CreateDWordOperations;
 
   ///////////////// System INLINE functions (SIF) ///////////////
   //Create system function "delay_ms". Too complex as SIF. We better implement as SNF.
@@ -2253,43 +2038,45 @@ begin
 
   //Create system function "inc"
   setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, typNull, decNone);  //Parameter NULL, allows any type.
+  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);  //Parameter NULL, allows any type.
   sifFunInc :=
-  AddSIFtoUnit('inc', typNull, srcPosNull, pars, @SIF_Inc);
+  AddSIFtoUnit('inc', AstTree.typNull, srcPosNull, pars);
 
   //Create system function "dec"
   setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, typNull, decNone);  //Parameter NULL, allows any type.
-  AddSIFtoUnit('dec', typNull, srcPosNull, pars, @SIF_Dec);
+  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);  //Parameter NULL, allows any type.
+  AddSIFtoUnit('dec', AstTree.typNull, srcPosNull, pars);
 
   //Create system function "ord"
   setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, typNull, decNone);
-  AddSIFtoUnit('ord', typByte, srcPosNull, pars, @SIF_Ord);
+  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);
+  AddSIFtoUnit('ord', typByte, srcPosNull, pars);
 
   //Create system function "chr"
   setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, typNull, decNone);
-  AddSIFtoUnit('chr', typChar, srcPosNull, pars, @SIF_Chr);
+  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);
+  AddSIFtoUnit('chr', typChar, srcPosNull, pars);
 
   //Create system function "byte"
   setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, typNull, decNone);  //Parameter NULL, allows any type.
-  AddSIFtoUnit('byte', typByte, srcPosNull, pars, @SIF_Byte);
+  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);  //Parameter NULL, allows any type.
+  AddSIFtoUnit('byte', typByte, srcPosNull, pars);
 
   //Create system function "word"
   setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, typNull, decNone);  //Parameter NULL, allows any type.
+  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);  //Parameter NULL, allows any type.
   sifWord :=
-  AddSIFtoUnit('word', typWord, srcPosNull, pars, @SIF_Word);
+  AddSIFtoUnit('word', typWord, srcPosNull, pars);
   AddCallerToFrom(H, sifWord.BodyNode);  //Require H
 
   //Create system function "word"
   setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, typNull, decNone);  //Parameter NULL, allows any type.
+  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);  //Parameter NULL, allows any type.
   //sifWord :=
-  AddSIFtoUnit('dword', typDWord, srcPosNull, pars, @SIF_DWord);
+  AddSIFtoUnit('dword', typDWord, srcPosNull, pars);
   //AddCallerToFrom(H, sifWord.BodyNode);  //Require H
+
+  {*** Revisar esto luego
 
   ///////////////// System Normal functions (SNF) ///////////////
   //Multiply system function
@@ -2337,9 +2124,96 @@ begin
   AddCallerToFrom(snfWrdDivWrd16, sifWordModWord.BodyNode);
 
   AddCallerToFrom(snfWordShift_l, sifWordShlByte.bodyNode);
-
+}
   //Close Unit
   TreeElems.CloseElement;
+end;
+
+procedure TCompiler_PIC16.cbSetGeneralORG(value: integer);
+begin
+   GeneralORG := value
+end;
+procedure TCompiler_PIC16.cbSetCpuMode(value: string);
+begin
+  if value = '6502' then begin
+    cpuMode := cpu6502;
+    picCore.Model := '6502';
+  end;
+  if value = '65C02' then begin
+    cpuMode := cpu65C02;
+    picCore.Model := '65C02';
+  end;
+end;
+procedure TCompiler_PIC16.cbSetFrequency(f: Longint; value: string);
+begin
+  case UpperCase(value) of
+  'KHZ': f := f * 1000;
+  'MHZ': f := f * 1000000;
+  else
+    GenErrorDir('Error in directive.');
+    exit;
+  end;
+  if f>picCore.MaxFreq then begin
+    GenErrorDir('Frequency too high for this device.');
+    exit;
+  end;
+  picCore.frequen:=f; //asigna frecuencia
+end;
+procedure TCompiler_PIC16.cbSetStatRAMCom(value: string);
+begin
+  picCore.SetStatRAMCom(value);
+  if picCore.MsjError<>'' then GenErrorDir(picCore.MsjError);
+end;
+procedure TCompiler_PIC16.cbSetDataAddr(value: string);
+begin
+  picCore.SetDataAddr(value);
+  if picCore.MsjError<>'' then GenErrorDir(picCore.MsjError);
+end;
+procedure TCompiler_PIC16.cbClearStateRam;
+begin
+  picCore.DisableAllRAM;
+end;
+function TCompiler_PIC16.cbReadPicModel(): string;
+begin
+  Result := picCore.Model;
+end;
+procedure TCompiler_PIC16.cbSetPicModel(value: string);
+begin
+  picCore.Model := value;
+end;
+function TCompiler_PIC16.cbReadFrequen(): Single;
+begin
+  Result := picCore.frequen;
+end;
+procedure TCompiler_PIC16.cbSetFrequen(value: single);
+begin
+  picCore.frequen := round(Value);
+end;
+function TCompiler_PIC16.cbReadMaxFreq(): Single;
+begin
+  Result := PICCore.MaxFreq;
+end;
+procedure TCompiler_PIC16.cbSetMaxFreq(value: single);
+begin
+  PICCore.MaxFreq := round(Value);
+end;
+function TCompiler_PIC16.cbReadORG(): Integer;
+begin
+  Result := picCore.iRam;
+end;
+procedure TCompiler_PIC16.cbSetORG(value: integer);
+begin
+  picCore.iRam := value;
+end;
+procedure TCompiler_PIC16.Cod_StartProgram;
+//Codifica la parte inicial del programa
+begin
+  //Code('.CODE');   //inicia la sección de código
+end;
+procedure TCompiler_PIC16.Cod_EndProgram;
+//Codifica la parte final del programa
+begin
+  //Code('END');   //inicia la sección de código
 end;
 
 constructor TCompiler_PIC16.Create;
@@ -2348,92 +2222,22 @@ begin
   //OnNewLine:=@cInNewLine;
   syntaxMode := modPicPas;   //Por defecto en sintaxis nueva
 
-  OnError := procedure (msg: string);
-  begin
-    GenError(msg);
-  end;
-  OnWarning := procedure (msg: string);
-  begin
-    GenWarning(msg);
-  end;
+  ID := 16;  //Identifica al compilador PIC16
   //Conecta el parser de directivas al Generador de Cödigo
-  OnSetGeneralORG := procedure(value: integer);
-  begin
-     GeneralORG := value
-  end;
-  OnSetCpuMode := procedure(value: string);
-  begin
-    if value = '6502' then begin
-      cpuMode := cpu6502;
-      picCore.Model := '6502';
-    end;
-    if value = '65C02' then begin
-      cpuMode := cpu65C02;
-      picCore.Model := '65C02';
-    end;
-  end;
-  OnSetFrequency := procedure(f: Longint; value: string);
-  begin
-    case UpperCase(value) of
-    'KHZ': f := f * 1000;
-    'MHZ': f := f * 1000000;
-    else
-      GenErrorDir(ER_ERROR_DIREC);
-      exit;
-    end;
-    if f>picCore.MaxFreq then begin
-      GenErrorDir(ER_TOOHIGHFRE);
-      exit;
-    end;
-    picCore.frequen:=f; //asigna frecuencia
-  end;
-  OnSetStatRAMCom := procedure(value: string);
-  begin
-    picCore.SetStatRAMCom(txtMsg);
-    if picCore.MsjError<>'' then GenErrorDir(picCore.MsjError);
-  end;
-  OnSetDataAddr:= procedure(value: string);
-  begin
-    picCore.SetDataAddr(txtMsg);
-    if picCore.MsjError<>'' then GenErrorDir(picCore.MsjError);
-  end;
-  OnClearStateRam := procedure(value: string);
-  begin
-    picCore.DisableAllRAM;
-  end;
-  OnReadPicModel:= function(): string;
-  begin
-    Result := picCore.Model;
-  end;
-  OnSetPicModel := procedure(value: string);
-  begin
-    picCore.Model := value;
-  end;
-  OnReadFrequen := function(): Single;
-  begin
-    Result := picCore.frequen;
-  end;
-  OnSetFrequen := procedure(value: single);
-  begin
-    picCore.frequen := round(Value);
-  end;
-  OnReadMaxFreq := function(): Single;
-  begin
-    Result := PICCore.MaxFreq;
-  end;
-  OnSetMaxFreq := procedure(value: single);
-  begin
-    PICCore.MaxFreq := round(Value);
-  end;
-  OnReadORG:= function(): Single;
-  begin
-    Result := picCore.iRam;
-  end;
-  OnSetORG := procedure(value: single);
-  begin
-    picCore.iRam:= round(Value);
-  end;
-
+  OnSetGeneralORG:= @cbSetGeneralORG;
+  OnSetCpuMode   := @cbSetCpuMode;
+  OnSetFrequency := @cbSetFrequency;
+  OnSetStatRAMCom:= @cbSetStatRAMCom;
+  OnSetDataAddr  := @cbSetDataAddr;
+  OnClearStateRam:= @cbClearStateRam;
+  OnReadPicModel := @cbReadPicModel;
+  OnSetPicModel  := @cbSetPicModel;
+  OnReadFrequen  := @cbReadFrequen;
+  OnSetFrequen   := @cbSetFrequen;
+  OnReadMaxFreq  := @cbReadMaxFreq;
+  OnSetMaxFreq   := @cbSetMaxFreq;
+  OnReadORG      := @cbReadORG;
+  OnSetORG       := @cbSetORG;
 end;
 destructor TCompiler_PIC16.Destroy;
 begin

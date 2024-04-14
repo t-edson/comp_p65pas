@@ -9,9 +9,9 @@
         <Filename Value="p65pas.lpr"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="112"/>
-        <CursorPos X="32" Y="132"/>
-        <FoldState Value=" T3U2H01331 PCjS0="/>
+        <TopLine Value="49"/>
+        <CursorPos X="3" Y="63"/>
+        <FoldState Value=" T3U2H012417"/>
         <UsageCount Value="91"/>
         <Loaded Value="True"/>
       </Unit>
@@ -19,8 +19,8 @@
         <Filename Value="Compiler_PIC16.pas"/>
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="5"/>
-        <TopLine Value="17"/>
-        <CursorPos Y="35"/>
+        <TopLine Value="2216"/>
+        <CursorPos X="17" Y="2232"/>
         <UsageCount Value="60"/>
         <Loaded Value="True"/>
       </Unit>
@@ -167,22 +167,6 @@
     </Units>
     <JumpHistory HistoryIndex="29">
       <Position>
-        <Filename Value="MirList.pas"/>
-        <Caret Line="9" Column="39"/>
-      </Position>
-      <Position>
-        <Filename Value="MirList.pas"/>
-        <Caret Line="488" Column="12" TopLine="459"/>
-      </Position>
-      <Position>
-        <Filename Value="MirList.pas"/>
-        <Caret Line="978" Column="12" TopLine="949"/>
-      </Position>
-      <Position>
-        <Filename Value="MirList.pas"/>
-        <Caret Line="485" Column="22" TopLine="471"/>
-      </Position>
-      <Position>
         <Filename Value="Analyzer.pas"/>
         <Caret Line="1251" Column="7" TopLine="1233"/>
       </Position>
@@ -283,6 +267,22 @@
       <Position>
         <Filename Value="p65pas.lpr"/>
         <Caret Line="157" TopLine="117"/>
+      </Position>
+      <Position>
+        <Filename Value="p65pas.lpr"/>
+        <Caret Line="125" Column="30" TopLine="112"/>
+      </Position>
+      <Position>
+        <Filename Value="p65pas.lpr"/>
+        <Caret Line="16" Column="23"/>
+      </Position>
+      <Position>
+        <Filename Value="p65pas.lpr"/>
+        <Caret Line="140" Column="30" TopLine="109"/>
+      </Position>
+      <Position>
+        <Filename Value="p65pas.lpr"/>
+        <Caret Line="13" Column="15"/>
       </Position>
     </JumpHistory>
     <RunParams>

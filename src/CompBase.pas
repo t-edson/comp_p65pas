@@ -1755,7 +1755,7 @@ in this function.
     TreeElems.curFind := searchState;  //Restore previous Finding, to continue the searching.
     firstFunc := xfun;  //Save reference to original function.
     repeat
-      if xfun.SameParamsType(pars) then break;
+      if SameParamsType(xfun, pars) then break;
       //Usar FindNextFunc, es la forma es eficiente, porque retoma la búsqueda anterior.
       xfun := TreeElems.FindNextFuncName;
     until xfun = nil;

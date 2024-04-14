@@ -141,20 +141,20 @@ type
     lexDir : TContext;  //lexer para analizar directivas
     OnMessageBox: procedure(txt: string; mode: integer) of object;
     //Eventos para el generador de código
-    OnSetGeneralORG: procedure(value: integer);
-    OnSetCpuMode: procedure(value: string);
-    OnSetFrequency: procedure(f: Longint; value: string);
-    OnSetStatRAMCom: procedure(value: string);
-    OnSetDataAddr: procedure(value: string);
-    OnClearStateRam: procedure;
-    OnReadPicModel: function: String;
-    OnSetPicModel: procedure(value: string);
-    OnReadFrequen: function: Single;
-    OnSetFrequen: procedure(value: Single);
-    OnReadMaxFreq: function: Single;
-    OnSetMaxFreq: procedure(value: Single);
-    OnReadORG: function: Single;
-    OnSetORG: procedure(value: Single);
+    OnSetGeneralORG: procedure(value: integer) of object;
+    OnSetCpuMode: procedure(value: string) of object;
+    OnSetFrequency: procedure(f: Longint; value: string) of object;
+    OnSetStatRAMCom: procedure(value: string) of object;
+    OnSetDataAddr: procedure(value: string) of object;
+    OnClearStateRam: procedure of object;
+    OnReadPicModel: function: String of object;
+    OnSetPicModel: procedure(value: string) of object;
+    OnReadFrequen: function: Single of object;
+    OnSetFrequen: procedure(value: Single) of object;
+    OnReadMaxFreq: function: Single of object;
+    OnSetMaxFreq: procedure(value: Single) of object;
+    OnReadORG: function: integer of object;
+    OnSetORG: procedure(value: integer) of object;
     procedure skipWhites;
     procedure GenErrorDir(msg: string);
     procedure GenErrorDir(msg: string; const Args: array of const);
@@ -1452,7 +1452,7 @@ begin
   if OnSetORG=nil then begin
     GenError('Not implemented');
   end else begin
-    OnSetORG(AValue);  //Carga directamente en variable global
+    OnSetORG(round(AValue));  //Carga directamente en variable global
   end;
 end;
 function TParserDirecBase.read_SYN_MODE: String;

@@ -96,7 +96,48 @@ type  //Abstract Syntax Tree
     destructor Destroy; override;
   end;
 
+  function SameParamsType(f: TEleFunBase; const funpars: TAstParamArray): boolean;
+  function SameParamsName(f: TEleFunBase; const funpars: TAstParamArray): boolean;
+var
+  // Tipo nulo. Usado para elementos sin tipo.
+  typNull : TEleTypeDec;
+
 implementation
+function SameParamsType(f: TEleFunBase; const funpars: TAstParamArray): boolean;
+{Compara los parámetros de la función con una lista de parámetros. Si tienen el mismo
+número de parámetros y el mismo tipo, devuelve TRUE.}
+var
+  i: Integer;
+begin
+  if High(f.pars) <> High(funpars) then
+    exit(false);   //Distinct parameters number
+  //They have the same numbers of parameters, verify:
+  for i := 0 to High(f.pars) do begin
+    //A Null type matches everything (wildcard). Used in INLINE functions.
+    if f.pars[i].typ = typNull then continue;
+    //Compare tipe
+    if f.pars[i].typ <> funpars[i].typ then begin
+      exit(false);
+    end;
+  end;
+  //Si llegó hasta aquí; hay coincidencia, sale con TRUE
+  exit(true);
+end;
+function SameParamsName(f: TEleFunBase; const funpars: TAstParamArray): boolean;
+{Compara los parámetros de la función con una lista de parámetros. Si tienen el mismo
+nombre, devuelve TRUE. No se hace verificación de tipo o cantidad de parámetros. Esa
+verifiación debe haberse hecho previamente con SameParamsType().}
+var
+  i: Integer;
+begin
+  for i := 0 to High(f.pars) do begin
+    if UpCase(f.pars[i].name) <> UpCase(funpars[i].name) then begin
+      exit(false);
+    end;
+  end;
+  //Si llegó hasta aquí; hay coincidencia, sale con TRUE
+  exit(true);
+end;
 
 { TAstTree }
 procedure TAstTree.Clear;
@@ -627,7 +668,7 @@ begin
       if ele.idClass in [eleFuncImp, eleFuncDec] then begin
         funbas := TEleFunBase(ele);
         //para las funciones, se debe comparar los parámetros
-        if funbas.SameParamsType(pars) then begin
+        if SameParamsType(funbas, pars) then begin
           exit(true);
         end;
       end else begin

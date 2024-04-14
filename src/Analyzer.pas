@@ -3,7 +3,7 @@ unit Analyzer;
 interface
 uses
   Classes, SysUtils, Types, CompBase, AstElemP65,
-  LexPas, ParserASM_6502, CPUCore, CompGlobals;
+  LexPas, ParserASM_6502, CPUCore, CompGlobals, AstTree;
 type
 
   { TAnalyzer }
@@ -1261,7 +1261,7 @@ procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TEleTypeDec);
           if ele.idClass = eleFuncDec then begin
             //Para las declaraciones, se debe comparar los parámetros
             funInterface := TEleFunDec(ele);
-            if funInterface.SameParamsType(pars) then begin
+            if SameParamsType(funInterface, pars) then begin
               Result := funInterface;
               //Continue exploring to verify duplicity.
             end;
@@ -1274,7 +1274,7 @@ procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TEleTypeDec);
           //Is an IMPLEMENTATION element.
           //It shouldn't be a similar function (name and parameters).
           fun := TEleFunImp(ele);
-          if fun.SameParamsType(pars) then begin
+          if SameParamsType(fun, pars) then begin
             {Two similar functions in the same IMPLEMENTATION scope.}
             GenError(ER_DUPLIC_FUNC_,[procName], srcPos);
             exit(nil);
@@ -1307,11 +1307,11 @@ procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TEleTypeDec);
         if ele.idClass = eleFuncDec then begin
           //Function with the same name. Can be a FORWARD or Overload.
           fundec := TEleFunDec(ele);
-          if fundec.SameParamsType(pars) then begin
+          if SameParamsType(fundec, pars) then begin
             //Have the same name and parameters type
             if fundec.IsForward then begin
               //Definitely have to be a FORWARD.
-              if fundec.SameParamsName(pars) then begin
+              if SameParamsName(fundec, pars) then begin
                 //This is the expected.
                 Result := fundec;  //Return FORWARD function
               end else begin
@@ -2790,7 +2790,9 @@ begin
     exit;
   end;
   ProcComments;
+  {*** De momento, se comenta
   callStartProgram;  //Se pone antes de codificar procedimientos y funciones
+  }
   curLocation := locMain;
   if HayError then exit;
   //Empiezan las declaraciones
