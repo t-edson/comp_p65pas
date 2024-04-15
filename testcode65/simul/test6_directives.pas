@@ -10,7 +10,7 @@ begin
   {$SET valor=2+5}
   {$DEFINE value=x+1}  
   x := {$value};
-  {$MSGBOX 'valor=' + valor}
+//  {$MSGBOX 'valor=' + valor}
   
   //Prueba de funciones
   {$IF abs(-1) <> 1}

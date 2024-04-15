@@ -119,12 +119,12 @@ public     //Containers
   unusedFuncs   : TEleFunDecs; //Store only unused functions
   interruptFunct: TEleFunDec;  //Store ths only Interrupt function
 protected //Compiler events
-  {This is one way the Parser can communicate with the Code Generator, considering this
-  unit is independent of Code Generation.}
-  OnExprStart : procedure of object;  {Se genera al iniciar la
-                                       evaluación de una expresión.}
-  OnExprEnd   : procedure(posExpres: TPosExpres) of object;  {Se genera al terminar de
-                                                              evaluar una expresión.}
+//  {This is one way the Parser can communicate with the Code Generator, considering this
+//  unit is independent of Code Generation.}
+//  OnExprStart : procedure of object;  {Se genera al iniciar la
+//                                       evaluación de una expresión.}
+//  OnExprEnd   : procedure(posExpres: TPosExpres) of object;  {Se genera al terminar de
+//                                                              evaluar una expresión.}
 protected //Calls to Directive Module (ParserDirec.pas)
   callProcDIRline  : procedure(const AsmLin: string; out ctxChanged: boolean) of object;
 protected //Calls to Code Generator (GenCod)
@@ -134,7 +134,6 @@ protected //Calls to Code Generator (GenCod)
   callDefineObject : procedure(etyp: TEleTypeDec) of object;  //routines to implement Objects.
   callDefinePointer: procedure(etyp: TEleTypeDec) of object; //routines to implement Pointers.
   //Validate phisycal address
-  callValidRAMaddr : procedure(addr: integer) of object;
   callStartProgram : procedure of object;
   callEndProgram   : procedure of object;
   sifFunInc: TEleFunDec;   {Referencia a la función de incremento. Se guarda para evitar

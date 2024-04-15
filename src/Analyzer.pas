@@ -3,7 +3,7 @@ unit Analyzer;
 interface
 uses
   Classes, SysUtils, Types, CompBase, AstElemP65,
-  LexPas, ParserASM_6502, CPUCore, CompGlobals, AstTree;
+  LexPas, ParserASM_6502, CompGlobals, AstTree;
 type
 
   { TAnalyzer }
@@ -251,7 +251,6 @@ types created.
       GenError(ER_INV_MEMADDR);
       {%H-}exit;
     end;
-    callValidRAMaddr(n);  //Validate address
     if HayError then exit(0);
     Result := n;
   end;
@@ -1622,10 +1621,10 @@ begin
     AddExpressionConstBool('else', true, GetSrcPos);
   end else begin
     //Get the boolean expression
-    OnExprStart;
+//    OnExprStart;
     ex := GetExpression(0);
     if HayError then exit(false);
-    OnExprEnd(pexSTRUC);
+//    OnExprEnd(pexSTRUC);
     if ex.Typ <> typBool then begin
       GenError(ER_BOOL_EXPECT);
       exit(false);
