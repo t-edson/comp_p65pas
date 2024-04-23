@@ -17,20 +17,29 @@ begin
   //Aditional RTS to exit proc. and program.
   asm RTS end   
 end;
-var  //simple type declarations
+
+var  //Simple type declarations
   vbool: boolean;
   vchar: char;
 	vbyte: byte;
   vword: word;
   byteInit: byte = $10;
   wordInit: word = $1234;
-var  //absolute type declarations
+  
+var  //Absolute type declarations
   abool: boolean absolute vbool;
   achar: char absolute vchar;
 	abyte: byte absolute vbyte;
   aword: word absolute vword;
   byteL: byte absolute aword.low;
   byteH: byte absolute aword.high;
+
+var //Register declarations
+  vreg : byte register;
+  vregA: byte registerA;
+  vregX: byte registerX;
+  vregY: byte registerY;
+  
 const
   consWord = word($0A00); 
 begin

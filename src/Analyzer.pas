@@ -864,7 +864,6 @@ If some problems happens, Error is generated and the NIL value is returned.
             varDec.adicPar.hasAdic := decNone;
             varDec.adicPar.hasInit := false;
             varDec.location := curLocation;
-            varDec.storage := stRamFix;  //This is the only storage that GetAdicVarDeclar2() should allow.
             //Close variable
             TreeElems.CloseElement;
             offs += varTyp.size;
@@ -1153,14 +1152,14 @@ procedure TAnalyzer.AnalyzeVarDeclar;
     xvar.adicPar := adicVarDec;    //Actualiza propiedades adicionales
     xvar.location := curLocation;  //Actualiza bandera
     //Update storage
-    case adicVarDec.hasAdic of
-    decRegis : xvar.storage := stRegister;
-    decRegisA: xvar.storage := stRegistA;
-    decRegisX: xvar.storage := stRegistX;
-    decRegisY: xvar.storage := stRegistY;
-    decAbsol : xvar.storage := stRamFix;  //Will have a fixed memory address.
-    decNone  : xvar.storage := stRamFix;  //Will have a fixed memory address.
-    end;
+//    case adicVarDec.hasAdic of
+//    decRegis : xvar.storage := stRegister;
+//    decRegisA: xvar.storage := stRegistA;
+//    decRegisX: xvar.storage := stRegistX;
+//    decRegisY: xvar.storage := stRegistY;
+//    decAbsol : xvar.storage := stRamFix;  //Will have a fixed memory address.
+//    decNone  : xvar.storage := stRamFix;  //Will have a fixed memory address.
+//    end;
   end;
 
 var

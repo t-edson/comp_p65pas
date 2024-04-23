@@ -1031,6 +1031,7 @@ const
     v: TEleVarDec;
     subUsed: string;
   begin
+    { *** Completar luego
     for v in TreeElems.AllVars do begin   //Se supone que "AllVars" ya se actualizó.
         //debugln('AllVars['+IntToStr(i)+']='+v.name+','+v.Parent.name);
         if ExcUnused and (v.nCalled = 0) then continue;
@@ -1051,6 +1052,7 @@ const
                    '       ;' + v.typ.name);
         end;
     end;
+    }
   end;
 
 var

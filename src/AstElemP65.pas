@@ -432,13 +432,6 @@ type  //Declaration elements
     allocated: boolean;   //Activated when variable is allocated (RAM or register).
     storage  : TStorage;  //Depend on adicPar.hasAdic.
     addr     : word;      //Base address.
-    function addrL: word; inline;  //Devuelve la dirección absoluta de la variable (LOW)
-    function addrH: word; inline;  //Devuelve la dirección absoluta de la variable (HIGH)
-    function addrE: word; inline;  //Devuelve la dirección absoluta de la variable (EXTRA)
-    function addrU: word; inline;  //Devuelve la dirección absoluta de la variable (ULTRA)
-    function AddrString: string; //Devuelve la dirección física como cadena
-    procedure ResetAddress; //Limpia las direcciones físicas
-    function stoStr: string;
   public
     //Este campo debería usarse para acceder al elementeo en el MIR
     mirVarDec: TObject;  //Formalmente debe ser TMirVarDec, pero se pone TObject para no generar referencias circulares.
@@ -1726,47 +1719,6 @@ end;
 procedure TEleVarDec.Settyp(AValue: TEleTypeDec);
 begin
   ftyp := AValue;
-end;
-
-function TEleVarDec.addrL: word;
-{Dirección absoluta de la variable de menor pero, cuando es de tipo WORD.}
-begin
-  Result := addr;
-end;
-function TEleVarDec.addrH: word;
-{Dirección absoluta de la variable de mayor pero, cuando es de tipo WORD.}
-begin
-  Result := addr + 1;
-end;
-function TEleVarDec.addrE: word;
-begin
-  Result := addr + 2;
-end;
-function TEleVarDec.addrU: word;
-begin
-  Result := addr + 3;
-end;
-function TEleVarDec.AddrString: string;
-{Devuelve una cadena, que representa a la dirección física.}
-begin
-  if typ.IsByteSize then begin
-    Result := '$' + IntToHex(addr, 3);
-  end else if typ.IsWordSize then begin
-    Result := '$' + IntToHex(addr, 3);
-  end else if typ.IsDWordSize then begin
-    Result := '$' + IntToHex(addr, 3);
-  end else begin
-    Result := '';   //Error
-  end;
-end;
-procedure TEleVarDec.ResetAddress;
-begin
-  addr := 0;
-end;
-
-function TEleVarDec.stoStr: string;
-begin
-  WriteStr(Result, storage);
 end;
 
 constructor TEleVarDec.Create;

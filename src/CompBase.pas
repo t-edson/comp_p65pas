@@ -207,7 +207,6 @@ protected //Miscellaneous
   function getListOfIdent(out itemList: TStringDynArray; out
     srcPosArray: TSrcPosArray): boolean;
   procedure LogExpLevel(txt: string);
-  function IsTheSameVar(var1, var2: TEleVarDec): boolean; inline;
 public    //Initialization
   constructor Create; override;
   destructor Destroy; override;
@@ -598,7 +597,6 @@ begin
   //TreeElems.AddElement(xvar);
   //Result := xvar;
   Result := TreeElems.AddVarDecAndOpen(srcPos, varName, eleTyp);
-  Result.storage := stRamFix;
 end;
 function TCompilerBase.AddConsDecAndOpen(conName: string; eleTyp: TEleTypeDec;
   srcPos: TSrcPos): TEleConsDec;
@@ -706,7 +704,6 @@ begin
   xVar.typ    := eleTyp;
   xVar.adicPar.hasAdic := decNone;
 //  xVar.adicPar.hasInit := false;
-  xVar.storage := stRamFix;  //The most common storage for variables
 
   curNode := TreeElems.curNode;   //Save current location
   TreeElems.openElement(curCodCont.Parent);
@@ -743,7 +740,7 @@ begin
           exit;
         end;
         regAused := true;  //Activa bandera
-        xvar.storage := stRegister;
+//        xvar.storage := stRegister;
       end;
       decRegisA: begin
         //Parameter REGISTER A
@@ -752,7 +749,7 @@ begin
           exit;
         end;
         regAused := true;  //Activa bandera
-        xvar.storage := stRegistA;
+//        xvar.storage := stRegistA;
       end;
       decRegisX: begin
         //Parameter REGISTER X
@@ -761,7 +758,7 @@ begin
           exit;
         end;
         regXused := true;  //Activa bandera
-        xvar.storage := stRegistX;
+//        xvar.storage := stRegistX;
       end;
       decRegisY: begin
         //Parameter REGISTER Y
@@ -770,10 +767,10 @@ begin
           exit;
         end;
         regYused := true;  //Activa bandera
-        xvar.storage := stRegistY;
+//        xvar.storage := stRegistY;
       end;
       decNone: begin
-        xvar.storage := stRamFix;
+//        xvar.storage := stRamFix;
       end;
       end;
       //Actualiza referencia a la variable que almacena el parámetro.
@@ -857,7 +854,6 @@ var
   constOffset: TEleExpress;
 begin
   varExp.opType    := otVariab;
-  varExp.Sto       := offVardec.storage;  //Common is stRamFix  //*** Eliminar a futuro
   varExp.elements.Clear;             //Remove all children
   //Add the Constant offset
   constOffset := CreateExpression('@'+offVardec.name, typWord, otConst, GetSrcPos);
@@ -1927,7 +1923,7 @@ begin
         //Must be a variable field.
         xvar := TEleVarDec(field);
         //AddCallerTo(field);  { TODO : ¿Es necesario? }
-        if (Op1.opType=otVariab) and (Op1.vardec.storage=stRamFix) and (xvar.storage = stRamFix) then begin
+        if Op1.opType=otVariab then begin
           //Two commons variables:  var1.var2
 //          xvar.addr := Op1.vardec.addr + xvar.addr;    //Fix address
 //          Op1.Typ := xvar.typ;
@@ -2246,12 +2242,6 @@ procedure TCompilerBase.LogExpLevel(txt: string);
 {Genera una cadena de registro , considerando el valor de "ExprLevel"}
 begin
   debugln(space(3*ExprLevel)+ txt );
-end;
-function TCompilerBase.IsTheSameVar(var1, var2: TEleVarDec): boolean; inline;
-{Indica si dos variables bit son la misma, es decir que apuntan, a la misma dirección
-física}
-begin
-  Result := (var1.addr = var2.addr);
 end;
 //Initialization
 constructor TCompilerBase.Create;
