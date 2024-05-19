@@ -48,16 +48,16 @@ type  //MIR declarations
   TMirConsValue = object
   public  //Status
     consType : TConsType;   //Constant type for the atomic type.
-    function evaluated(typ: TEleTypeDec): Boolean;
-    procedure evaluate(typ: TEleTypeDec);
+    function evaluated(typ: TAstTypeDec): Boolean;
+    procedure evaluate(typ: TAstTypeDec);
   public  //Values the for atomic type.
     ValInt  : Int64;    //For values t_integer y t_uinteger
     ValFloat: extended; //For values t_float
     ValBool : boolean;  //For values t_boolean
     ValStr  : string;   //For values t_string
   public  //Aditional information
-    consRef  : TMirConDec;  //Ref. to TEleConsDec when consType=ctConsRef *** ¿Se necesita además de "conDec"?
-    addrVar  : TMirVarDec;   //Ref. to TEleVarDec  when consType=ctVarAddr
+    consRef  : TMirConDec;  //Ref. to TAstConsDec when consType=ctConsRef *** ¿Se necesita además de "conDec"?
+    addrVar  : TMirVarDec;   //Ref. to TAstVarDec  when consType=ctVarAddr
     addrFun  : TMirFunDec;   //Ref. to TEleFun when consType=ctFunAddr
   public //Support for Arrays and Objects
     items   : array of TMirConsValue;  //Ítems list
@@ -77,8 +77,8 @@ type  //MIR declarations
 
   { TMirVarDec }
   TMirVarDec = Class(TMirElement)
-    typ      : TEleTypeDec; //Variable type.
-    vardec   : TEleVarDec;  //AST Declared variable, when it's associated to AST. If not it's NIL.
+    typ      : TAstTypeDec; //Variable type.
+    vardec   : TAstVarDec;  //AST Declared variable, when it's associated to AST. If not it's NIL.
     IsParameter: Boolean;   //Flag for variables that are parameters.
     required : boolean;     {Indicates the variable is required to be allocated. Work
                             for variables used as registers. *** ¿Es necesario?}
@@ -103,8 +103,8 @@ type  //MIR declarations
   { TMirConDec }
   TMirConDec = Class(TMirElement)
   public
-    typ      : TEleTypeDec; //Constant type.
-    condec   : TEleConsDec;  //AST Declared variable.
+    typ      : TAstTypeDec; //Constant type.
+    condec   : TAstConsDec;  //AST Declared variable.
     value    : TConsValue;   //Constant value.
     evaluated: boolean;
   public
@@ -113,7 +113,7 @@ type  //MIR declarations
 
   TMirParam = object
 //    name    : string;      //Parameter name
-//    typ     : TEleTypeDec; //Reference to type
+//    typ     : TAstTypeDec; //Reference to type
     vardec  : TMirVarDec;  //Reference to variable used for this parameter
 //    srcPos  : TSrcPos;     //Parameter location.
 //    adicVar : TAdicVarDec; //Aditional option for "vardec".
@@ -181,7 +181,7 @@ type  //MIR Operand for expressions
     Text    : string;        //Label for the operand.
     opType  : TopType;       //Operand type (otVariab, otConst, otFunct) like AST elements.
     Sto     : TStorage;      //Storage of the value (memory, register, value)
-    Typ     : TEleTypeDec;   //Data type for the operand.
+    Typ     : TAstTypeDec;   //Data type for the operand.
     conDec  : TMirConDec;    //Ref. to constant declaration.
     astOperand: TEleExpress; //Ref. to AST element. Should be used only for error location.
     function StoAsStr: string;  //Storage as string
@@ -292,8 +292,8 @@ type  //Main Container
     root    : TMirProgFrame; //Root node.
     ngotos  : Integer;      //Number of gotos
 //  public  //Adding declarations
-//    function AddVarDec(mcont: TMirFunDec; varDec0: TEleVarDec): TMirVarDec;
-//    function AddVarDec(mcont: TMirFunDec; varName: string; eleTyp: TEleTypeDec
+//    function AddVarDec(mcont: TMirFunDec; varDec0: TAstVarDec): TMirVarDec;
+//    function AddVarDec(mcont: TMirFunDec; varName: string; eleTyp: TAstTypeDec
 //      ): TMirVarDec;
 //    function AddFunDecSNF(funcName0: TEleFunDec): TMirFunDec;
 //    function AddFunDecUNF(funcName0: TEleFunDec): TMirFunDec;
@@ -320,10 +320,10 @@ type  //Main Container
   end;
 
   //Adding declarations
-  function AddMirConDec(mcont: TMirProgFrame; conDec0: TEleConsDec): TMirConDec;
-  function AddMirVarDec(mcont: TMirProgFrame; varDec0: TEleVarDec): TMirVarDec;
+  function AddMirConDec(mcont: TMirProgFrame; conDec0: TAstConsDec): TMirConDec;
+  function AddMirVarDec(mcont: TMirProgFrame; varDec0: TAstVarDec): TMirVarDec;
   function AddMirVarDec(mcont: TMirProgFrame;
-      varName: string; eleTyp: TEleTypeDec): TMirVarDec;
+      varName: string; eleTyp: TAstTypeDec): TMirVarDec;
   function AddMirFunDecSNF(mcont: TMirProgFrame; funcName0: TEleFunDec): TMirFunDec;
   function AddMirFunDecUNF(mcont: TMirProgFrame; funcName0: TEleFunDec): TMirFunDec;
 
@@ -438,7 +438,7 @@ begin
     setlength(items, curSize);  //make space
   end;
 end;
-function TMirConsValue.evaluated(typ: TEleTypeDec): Boolean;
+function TMirConsValue.evaluated(typ: TAstTypeDec): Boolean;
 var
   itemExp: TMirConsValue;
 begin
@@ -461,7 +461,7 @@ begin
     exit(false);
   end;
 end;
-procedure TMirConsValue.evaluate(typ: TEleTypeDec);
+procedure TMirConsValue.evaluate(typ: TAstTypeDec);
 var
   itemExp: TMirConsValue;
 begin
@@ -869,7 +869,7 @@ begin
   mirType := mtyIfJump;
 end;
 //Adding declarations
-function AddMirConDec(mcont: TMirProgFrame; conDec0: TEleConsDec): TMirConDec;
+function AddMirConDec(mcont: TMirProgFrame; conDec0: TAstConsDec): TMirConDec;
 var
   decs: TMirDeclars;
 begin
@@ -880,7 +880,7 @@ begin
   decs := TMirDeclars(mcont.items[0]);  //Declarations
   decs.items.Add(Result);
 end;
-function AddMirVarDec(mcont: TMirProgFrame; varDec0: TEleVarDec): TMirVarDec;
+function AddMirVarDec(mcont: TMirProgFrame; varDec0: TAstVarDec): TMirVarDec;
 {Add a Variable  declaration}
 var
   decs: TMirDeclars;
@@ -895,7 +895,7 @@ begin
   decs := TMirDeclars(mcont.items[0]);  //Declarations
   decs.items.Add(Result);
 end;
-function AddMirVarDec(mcont: TMirProgFrame; varName: string; eleTyp: TEleTypeDec
+function AddMirVarDec(mcont: TMirProgFrame; varName: string; eleTyp: TAstTypeDec
   ): TMirVarDec;
 {Add a variable declaration to the container "fdest". The declaration is created
 after the last declaration.}
@@ -937,7 +937,7 @@ procedure GetMIROperandFromASTExpress(out MirOper: TMirOperand;
                                       const AstOper: TEleExpress);
 {Read data from a TEleExpress and set a TMirOperand}
 var
-  AstVarDec: TEleVarDec;
+  AstVarDec: TAstVarDec;
 begin
   MirOper.opType := AstOper.opType;  //Must be set
   MirOper.Text := AstOper.name;
@@ -1157,7 +1157,7 @@ Parameters:
                same of "cntFunct" except when "block" is nested like in a condiitonal.
 }
 {  function MoveParamToAssign(curContainer: TAstElement; Op: TEleExpress;
-                             parvar: TEleVarDec): TEleExpress;
+                             parvar: TAstVarDec): TEleExpress;
   {Mueve el nodo especificado "Op", que representa a un parámetro de la función, a una
   nueva instruccion de asignación (que es creada al inicio del bloque "curContainer") y
   reemplaza el nodo faltante por una variable temporal que es la que se crea en la

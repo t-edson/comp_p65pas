@@ -1,5 +1,5 @@
 program test;
-{$MODE PASCAL}
+//{$MODE PASCAL}
 {$ORG $0801}
 type 
   Tpos = object
@@ -14,25 +14,28 @@ var
   xbyte : byte;
   location, ptr: ^byte;
 
-procedure proc1;
-var
-   b: Byte;
-begin
-   for b:= 0 to 9 do begin
-      xx[b]:= b;
-   end;
-end;
+//procedure proc1;
+//var
+//   b: Byte;
+//begin
+//   for b:= 0 to 9 do begin
+//      xx[b]:= b;
+//   end;
+//end;
 
 begin
-  xbyte := 2;
-  w := xbyte;
-  w := w + 5;
-  location^ := 5;
-xx[5] := 3;
-ww[5] := 3;
-  proc1;
-  xbyte := ord('A')-64;
-  w := @xbyte;
+//  xbyte := 2;
+//  w := xbyte;
+//  w := w + 5;
+//  location^ := 5;
+  if w = 12 then
+    xx[5] := 3;
+  else
+    ww[5] := 3;
+  end; 
+//  proc1;
+//  xbyte := ord('A')-64;
+//  w := @xbyte;
 end.
 
 

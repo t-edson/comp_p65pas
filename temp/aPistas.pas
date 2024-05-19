@@ -32,7 +32,7 @@ begin
   end;
   
   while true do
-    //spritePosition[0].x += 1;
+    spritePosition[0].x += 1;
     delay_ms(word(10));
     key := GETIN;
     if key<>0 then 

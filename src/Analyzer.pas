@@ -15,9 +15,9 @@ type
     procedure AnalyzeFORrepeat;
     procedure AnalyzeFORwhile;
     procedure AnalyzeFORFirstAsign(out idx, valIni: TEleExpress);
-    procedure GetAdicVarDeclar2(varTyp: TEleTypeDec; out aditVar: TAdicVarDec;
-      out mainTypCreated: TEleTypeDec);
-    function GetConstValue(constTyp: TEleTypeDec; out mainTypCreated: TEleTypeDec
+    procedure GetAdicVarDeclar2(varTyp: TAstTypeDec; out aditVar: TAdicVarDec;
+      out mainTypCreated: TAstTypeDec);
+    function GetConstValue(constTyp: TAstTypeDec; out mainTypCreated: TAstTypeDec
       ): TEleExpress;
     procedure AnalyzeEXIT(exitSent: TEleSentence);
     procedure AnalyzeIF;
@@ -26,24 +26,24 @@ type
     procedure MoveInternalTypes(node: TAstElement; declarSec: TAstElement;
       declarPos: Integer);
     procedure SetParameter(var funPar: TAstParam; const name: string;
-      const srcPos: TSrcPos; typ: TEleTypeDec; const adicVar: TAdicVarDec);
+      const srcPos: TSrcPos; typ: TAstTypeDec; const adicVar: TAdicVarDec);
   protected
     function GetUnitDeclaration: boolean;
     function StartOfSection: boolean;
     procedure CompileLastEnd;
   protected  //Elements processing
-    procedure GetAdicVarDeclar(var varTyp: TEleTypeDec; out aditVar: TAdicVarDec;
-      out mainTypCreated: TEleTypeDec);
-    procedure ReadProcHeader(out procName: String; out retType: TEleTypeDec; out
+    procedure GetAdicVarDeclar(var varTyp: TAstTypeDec; out aditVar: TAdicVarDec;
+      out mainTypCreated: TAstTypeDec);
+    procedure ReadProcHeader(out procName: String; out retType: TAstTypeDec; out
       srcPos: TSrcPos; var pars: TAstParamArray; out IsInterrupt,
   IsForward: Boolean);
     procedure AnalyzeVarDeclar;
     procedure AnalyzeConstDeclar;
     procedure AnalyzeTypeDeclar(elemLocat: TElemLocation);
     function GetTypeDeclar(out decStyle: TTypDeclarStyle; out TypeCreated: boolean;
-      location: TTypeLocat = tlCurrNode): TEleTypeDec;
-    function GetTypeDeclarSimple(): TEleTypeDec;
-    function GetTypeDeclarColon(out decTyp: TEleTypeDec; out
+      location: TTypeLocat = tlCurrNode): TAstTypeDec;
+    function GetTypeDeclarSimple(): TAstTypeDec;
+    function GetTypeDeclarColon(out decTyp: TAstTypeDec; out
       decStyle: TTypDeclarStyle; out TypeCreated: boolean): boolean;
     function VerifyEND: boolean;
     function GetCondition(out ex: TEleExpress; ConstBool: boolean = false): boolean;
@@ -53,7 +53,7 @@ type
                               Op: TEleExpress): TEleExpress;
     procedure AnalyzeSentence;
     procedure AnalyzeCurBlock;
-    procedure AnalyzeProcDeclar(objContainer: TEleTypeDec);
+    procedure AnalyzeProcDeclar(objContainer: TAstTypeDec);
     procedure AnalyzeInlineDeclar(elemLocat: TElemLocation);
     procedure AnalyzeUsesDeclaration;
     procedure DoAnalyzeUnit(uni: TAstElement);
@@ -136,8 +136,8 @@ begin
 end;
 
 //Elements processing
-function TAnalyzer.GetConstValue(constTyp: TEleTypeDec;
-                                 out mainTypCreated: TEleTypeDec): TEleExpress;
+function TAnalyzer.GetConstValue(constTyp: TAstTypeDec;
+                                 out mainTypCreated: TAstTypeDec): TEleExpress;
 {Add a constant expression, to the current node of the AST. Returns the declaration
 created.
 "typExpec" is the expected type of the constant. If it's NIL it's ignored.
@@ -153,7 +153,7 @@ var
   init: TEleExpress;
   ntyp, typesCreated, indexNode: Integer;
   parentNod, typDecElem: TAstElement;
-  arrtyp: TEleTypeDec;
+  arrtyp: TAstTypeDec;
 begin
 
   //Debe seguir una expresión constante, que no genere código
@@ -194,8 +194,15 @@ begin
     if constTyp.isDynam then begin
       //Dynamic arrays cannot be validated directly.
     end else begin
+      //Check type compatibility
       if constTyp<>init.Typ then begin
-        GenError('Expected a constant of type %s, got %s', [constTyp.name, init.Typ.name]);
+        //Initial value got a different type
+        if constTyp.IsEquivalent(init.Typ) then begin
+          //It's equivalent
+          init.Typ := constTyp;
+        end else begin
+          GenError('Expected a constant of type %s, got %s', [constTyp.name, init.Typ.name]);
+        end;
       end;
     end;
   end;
@@ -215,7 +222,7 @@ begin
     indexNode :=  TreeElems.curNode.Index;
     typDecElem := parentNod.elements[indexNode-1];
     if typDecElem.idClass = eleTypeDec then begin
-      mainTypCreated := TEleTypeDec(typDecElem);
+      mainTypCreated := TAstTypeDec(typDecElem);
     end else begin  //Wouldn't happens.
       mainTypCreated := nil;
       GenError('Design error');
@@ -226,8 +233,8 @@ begin
   end;
   exit(init);
 end;
-procedure TAnalyzer.GetAdicVarDeclar(var varTyp: TEleTypeDec; out aditVar: TAdicVarDec;
-          out mainTypCreated: TEleTypeDec);
+procedure TAnalyzer.GetAdicVarDeclar(var varTyp: TAstTypeDec; out aditVar: TAdicVarDec;
+          out mainTypCreated: TAstTypeDec);
 {Verify aditional settings for var declarations, after the type definition. These settings
 can be:
  ABSOLUTE <literal address or variable/constant identifier>
@@ -255,12 +262,12 @@ types created.
     Result := n;
   end;
 var
-  xvar: TEleVarDec;
+  xvar: TAstVarDec;
   n: integer;
   tokL: String;
   ele: TAstElement;
-  xcon: TEleConsDec;
-  consTyp: TEleTypeDec;
+  xcon: TAstConsDec;
+  consTyp: TAstTypeDec;
   nItems: Int64;
   consIni: TEleExpress;
 begin
@@ -299,12 +306,12 @@ begin
         exit;
       end;
       if ele.idClass = eleConsDec then begin  //Is constant
-        xcon := TEleConsDec(ele);
+        xcon := TAstConsDec(ele);
         AddCallerToFromCurr(ele);
         aditVar.absAddr := xcon.value^.ValInt; { TODO : Faltaría verificar que "xcon" sea de tipo numérico }
         Next;    //Pasa al siguiente
       end else if ele.idClass = eleVarDec then begin  //Is mapped to a variable
-        xvar := TEleVarDec(ele);
+        xvar := TAstVarDec(ele);
         aditVar.absVar := xvar;  //Guarda referencia
         aditVar.absOff := 0;
         //La dirección final se asignará al asignar RAM.
@@ -467,8 +474,8 @@ begin
     end;
   end;
 end;
-procedure TAnalyzer.GetAdicVarDeclar2(varTyp: TEleTypeDec; out aditVar: TAdicVarDec;
-          out mainTypCreated: TEleTypeDec);
+procedure TAnalyzer.GetAdicVarDeclar2(varTyp: TAstTypeDec; out aditVar: TAdicVarDec;
+          out mainTypCreated: TAstTypeDec);
 {Versión de GetAdicVarDeclar() que no permite declaraciones adicionales.}
 begin
   GetAdicVarDeclar(varTyp, aditVar, mainTypCreated);  //Could create new types
@@ -489,14 +496,14 @@ begin
   end;
 end;
 procedure TAnalyzer.SetParameter(var funPar: TAstParam;
-    const name: string; const srcPos: TSrcPos; typ: TEleTypeDec; const adicVar: TAdicVarDec);
+    const name: string; const srcPos: TSrcPos; typ: TAstTypeDec; const adicVar: TAdicVarDec);
 begin
   funPar.name  := name;
   funPar.srcPos:= srcPos;
   funPar.typ   := typ;
   funPar.adicVar := adicVar;
 end;
-procedure TAnalyzer.ReadProcHeader(out procName: String; out retType: TEleTypeDec;
+procedure TAnalyzer.ReadProcHeader(out procName: String; out retType: TAstTypeDec;
   out srcPos: TSrcPos; var pars: TAstParamArray; out IsInterrupt, IsForward: Boolean);
 {Hace el procesamiento del encabezado de la declaración de una función/procedimiento.
 Devuelve la referencia al objeto TxpEleFun creado, en "fun".
@@ -507,7 +514,7 @@ en el procesamiento de unidades.}
   const
     BLOCK_SIZE = 5;  //Tamaño de bloque.
   var
-    typ, typeCreated: TEleTypeDec;
+    typ, typeCreated: TAstTypeDec;
     itemList: TStringDynArray;
     srcPosArray: TSrcPosArray;
     i, curSize, n: Integer;
@@ -632,7 +639,7 @@ begin
 end;
 function TAnalyzer.GetTypeDeclar(out decStyle: TTypDeclarStyle;
                                  out TypeCreated: boolean;
-                                 location: TTypeLocat = tlCurrNode): TEleTypeDec;
+                                 location: TTypeLocat = tlCurrNode): TAstTypeDec;
 {Extrae la sección de declaración de tipo (De una variable, parámetro o de una definición
 de tipo). Se debe llamar justo cuando empieza esta declaración de tipo. Se puede usar en
 los siguientes casos;
@@ -670,14 +677,14 @@ VAR a: object x:array[3] of byte; end;
 However, there are always a main type (like the object in the example).
 If some problems happens, Error is generated and the NIL value is returned.
 }
-  procedure ReadSizeInBrackets(arrTyp: TEleTypeDec; dynam: boolean = false);
+  procedure ReadSizeInBrackets(arrTyp: TAstTypeDec; dynam: boolean = false);
   {Lee el tamaño de un arreglo especificado entre corchetes: [], y crea el campo
   constante "length" en el tipo "arrTyp".
   También actualiza el valor de "arrTyp.consNitm" y "arrTyp.isDynam".
   Si se pone "dynam" a TRUE, se asume que el tamño es dinámico}
   var
     sizExp: TEleExpress;
-    consDec: TEleConsDec;
+    consDec: TAstConsDec;
   begin
     if dynam then begin  //Special case
       //Creates constant element "length" to returns array size
@@ -733,16 +740,16 @@ If some problems happens, Error is generated and the NIL value is returned.
       arrTyp.consNitm := consDec;  //Update reference to the size.
     end;
   end;
-  procedure ArrayDeclaration(const srcpos: Tsrcpos; out itemTyp: TEleTypeDec);
+  procedure ArrayDeclaration(const srcpos: Tsrcpos; out itemTyp: TAstTypeDec);
   {Procesa la declaración de un tipo arreglo. No agrega el tipo al árbol de sintaxis.
   Se asume que ya se ha identificado el inicio de la declaración de un arreglo,
   sea en su forma larga: "ARRAY[] OF BYTE" o en su forma corta: []BYTE }
   var
     itemDecStyle: TTypDeclarStyle;
     itemTypeCreated: boolean;
-    arrTyp: TEleTypeDec;
+    arrTyp: TAstTypeDec;
   begin
-    arrTyp := TEleTypeDec(TreeElems.curNode);  //Get Reference to the array.
+    arrTyp := TAstTypeDec(TreeElems.curNode);  //Get Reference to the array.
     if token = '[' then begin
       //Declaración corta
       ReadSizeInBrackets(arrTyp);  //Lee tamaño
@@ -774,7 +781,7 @@ If some problems happens, Error is generated and the NIL value is returned.
       exit;
     end;
   end;
-  procedure PointerDeclaration(const srcpos: TSrcPos; out refTyp: TEleTypeDec);
+  procedure PointerDeclaration(const srcpos: TSrcPos; out refTyp: TAstTypeDec);
   {Procesa la declaración de un tipo puntero y devuelve el tipo, ya creado para su
   validación.
   Se asume que ya se ha identificado el inicio de la declaración de un puntero,
@@ -800,16 +807,16 @@ If some problems happens, Error is generated and the NIL value is returned.
       exit;
     end;
   end;
-  procedure ObjectDeclaration(xtyp: TEleTypeDec; const srcpos: Tsrcpos);
+  procedure ObjectDeclaration(xtyp: TAstTypeDec; const srcpos: Tsrcpos);
   {Procesa la declaración de un tipo objeto y devuelve el tipo, ya creado para su
   validación. No agrega el tipo al árbol de sintaxis.
   Se asume que ya se ha identificado el inicio de la declaración de un objeto.}
   var
-    varTyp, mainTypCreated: TEleTypeDec;
+    varTyp, mainTypCreated: TAstTypeDec;
     i, offs: Integer;
     srcPosArray: TSrcPosArray;
     varNames: TStringDynArray;
-    varDec: TEleVarDec;
+    varDec: TAstVarDec;
     varTypCreated: boolean;
     adicVarDec: TAdicVarDec;
   begin
@@ -884,7 +891,7 @@ If some problems happens, Error is generated and the NIL value is returned.
   end;
 var
   typName, tokL: String;
-  typ, itemTyp, refType: TEleTypeDec;
+  typ, itemTyp, refType: TAstTypeDec;
   ele: TAstElement;
   srcPos: TSrcPos;
 begin
@@ -948,7 +955,7 @@ begin
     if ele.idClass = eleTypeDec then begin
       //Es un tipo
       Next;   //toma identificador
-      typ := TEleTypeDec(ele);
+      typ := TAstTypeDec(ele);
       //AddCallerToFromCurr(typ);  Poner la llamada aquí, complica el manejo posteriormente.
       if typ.copyOf<>nil then typ := typ.copyOf;  {Apunta al tipo copia. Esto es útil para
                      lograr una mejor compatibilidad cuando se usan Tipos en parámetros de
@@ -968,7 +975,7 @@ begin
   //ProcComments;
   exit(typ);
 end;
-function TAnalyzer.GetTypeDeclarSimple(): TEleTypeDec;
+function TAnalyzer.GetTypeDeclarSimple(): TAstTypeDec;
 {Similar a GetTypeDeclar(), pero solo permite la referencia a tipos simples. No permite la
 declaración de nuevos tipos, como: ARRAY OF ...}
 var
@@ -988,7 +995,7 @@ begin
     Result := nil;
   end;
 end;
-function TAnalyzer.GetTypeDeclarColon(out decTyp: TEleTypeDec;
+function TAnalyzer.GetTypeDeclarColon(out decTyp: TAstTypeDec;
                                  out decStyle: TTypDeclarStyle;
                                  out TypeCreated: boolean): boolean;
 {Obtiene el tipo declarado después de dos puntos en "decTyp". Si no encuentra dos puntos,
@@ -1022,11 +1029,11 @@ begin
   exit(true);
 end;
 procedure TAnalyzer.AnalyzeTypeDeclar(elemLocat: TElemLocation);
-{Compila la sección de declaración de un tipo, y genera un elemento TEleTypeDec, en el
+{Compila la sección de declaración de un tipo, y genera un elemento TAstTypeDec, en el
 árbol de sintaxis:  TYPE sometype = <declaration>;
 }
 var
-  etyp, reftyp: TEleTypeDec;
+  etyp, reftyp: TAstTypeDec;
   srcpos: TSrcPos;
   decStyle: TTypDeclarStyle;
   typeCreated: boolean;
@@ -1085,8 +1092,8 @@ begin
   ProcComments;
 end;
 procedure TAnalyzer.AnalyzeConstDeclar;
-  procedure GetIntialization(consTyp: TEleTypeDec; out consIni: TEleExpress;
-                             out mainTypCreated: TEleTypeDec);
+  procedure GetIntialization(consTyp: TAstTypeDec; out consIni: TEleExpress;
+                             out mainTypCreated: TAstTypeDec);
   {Get the constant initialization for the declaration.}
   begin
     if token = '=' then begin
@@ -1100,9 +1107,9 @@ procedure TAnalyzer.AnalyzeConstDeclar;
 var
   consNames: array of string;  //nombre de variables
   srcPosArray: TSrcPosArray;
-  consDec: TEleConsDec;
+  consDec: TAstConsDec;
   consIni: TEleExpress;
-  consTyp, mainTypCreated: TEleTypeDec;
+  consTyp, mainTypCreated: TAstTypeDec;
   decStyle: TTypDeclarStyle;
   consTypCreated: boolean;
 begin
@@ -1144,7 +1151,7 @@ end;
 procedure TAnalyzer.AnalyzeVarDeclar;
 {Compila la declaración de variables en el nodo actual.
 "IsInterface", indica el valor que se pondrá al as variables, en la bandera "IsInterface" }
-  procedure UpdateVarDec(xvar: TEleVarDec; varTyp: TEleTypeDec;
+  procedure UpdateVarDec(xvar: TAstVarDec; varTyp: TAstTypeDec;
                       const adicVarDec: TAdicVarDec);
   begin
     xvar.typ := varTyp;   //Update type
@@ -1166,9 +1173,9 @@ var
   varNames: array of string;  //nombre de variables
   srcPosArray: TSrcPosArray;
   i: Integer;
-  varTyp, mainTypCreated: TEleTypeDec;
+  varTyp, mainTypCreated: TAstTypeDec;
   adicVarDec: TAdicVarDec;
-  varDec: TEleVarDec;
+  varDec: TAstVarDec;
   decStyle: TTypDeclarStyle;
   varTypCreated: boolean;
 begin
@@ -1229,7 +1236,7 @@ begin
   ProcComments;
   //Puede salir con error.
 end;
-procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TEleTypeDec);
+procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TAstTypeDec);
 {Compila la declaración de procedimientos. Tanto procedimientos como funciones
  se manejan internamente como funciones.}
   function FindProcInInterface(procName: string; const pars: TAstParamArray;
@@ -1347,7 +1354,7 @@ var
   bod: TEleBody;
   IsInterrupt, IsForward: Boolean;
   procName, tokL: String;
-  retType: TEleTypeDec;
+  retType: TAstTypeDec;
   srcPos: TSrcPos;
   pars: TAstParamArray;
   adicVar: TAdicVarDec;
@@ -1607,14 +1614,7 @@ function TAnalyzer.GetCondition(out ex: TEleExpress; ConstBool: boolean=false): 
 If parameter ConstBool is activated, a constant expression, evaluated to TRUE, is
 inserted.
 If there is some error, returns FALSE.}
-var
-  elem: TEleCondit;
 begin
-  //Create condition block
-  elem := TEleCondit.Create;
-  elem.name := 'cond';
-  elem.srcDec := GetSrcPos;
-  TreeElems.AddElementAndOpen(elem);
   if ConstBool then begin
     //Generates a boolean constant.
     AddExpressionConstBool('else', true, GetSrcPos);
@@ -1630,7 +1630,6 @@ begin
     end;
     ProcComments;
   end;
-  TreeElems.CloseElement;  //Close condition block
   exit(true);  //No hay error
 end;
 function TAnalyzer.OpenContextFrom(filePath: string): boolean;
@@ -1686,7 +1685,7 @@ Retorna la instrucción de asignación creada.
 Realiza un cambio en el nodo actual.
 }
 var
-  _varaux: TEleVarDec;
+  _varaux: TAstVarDec;
   _setaux: TEleExpress;
   Op1aux, Op2aux: TEleExpress;
   funSet: TEleFunDec;
@@ -2048,7 +2047,7 @@ procedure TAnalyzer.AnalyzeFORrepeat;
     TreeElems.CloseElement;      //Close _comp()
     Result := _comp;
   end;
-  function SetOperation(_comp: TEleExpress; opType: TEleTypeDec; opStr: string): boolean;
+  function SetOperation(_comp: TEleExpress; opType: TAstTypeDec; opStr: string): boolean;
   {Set the operation for a comparison expression. If generates error, returns FALSE.}
   var
     funSet: TEleFunDec;
@@ -2063,7 +2062,7 @@ procedure TAnalyzer.AnalyzeFORrepeat;
     _comp.name := opStr;
     exit(true);
   end;
-  procedure convertToPlusOne(opType: TEleTypeDec; _node: TAstElement);
+  procedure convertToPlusOne(opType: TAstTypeDec; _node: TAstElement);
   {Convert a node TEleExpress to an expression: "node+1" in the AST.
   Only work for the byte type.}
   var
@@ -2075,7 +2074,7 @@ procedure TAnalyzer.AnalyzeFORrepeat;
     TreeElems.curNode := _add;
     AddExpressionConstByte('1', 1, GetSrcPos);
   end;
-  procedure convertToMinusOne(opType: TEleTypeDec; _node: TAstElement);
+  procedure convertToMinusOne(opType: TAstTypeDec; _node: TAstElement);
   {Convert a node TEleExpress to an expression: "node+1" in the AST.
   Only work for the byte type.}
   var
@@ -2309,7 +2308,7 @@ begin
     end;
     //Lleva el registro de las llamadas a exit()
     prog.RegisterExitCall(exitSent);
-  end else if parentNod.idClass = eleFuncImp then begin
+  end else if parentNod.idClass in [eleFuncDec, eleFuncImp] then begin
     func := TEleFunImp(parentNod);
     if func.retType = typNull then begin
       //Is Procedure
@@ -2461,10 +2460,10 @@ begin
       //Validate expression
       if HayError then begin
         exit;
-      end else if TreeElems.curNode.idClass <> eleSenten then begin
-        //Something went wrong
-        GenError('Syntax error.');
-        exit;
+//      end else if TreeElems.curNode.idClass <> eleSenten then begin
+//        //Something went wrong
+//        GenError('Syntax error.');
+//        exit;
       end;
       //Check for possible types generated to move to the declaration section.
       declarSec := TreeElems.curCodCont.Parent;  //Declaration section.

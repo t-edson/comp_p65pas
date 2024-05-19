@@ -235,8 +235,8 @@ If not operand eas found error is generated and returns FALSE.}
 var
   ele: TAstElement;
   xfun: TEleFunImp;
-  xvar: TEleVarDec;
-  xcon: TEleConsDec;
+  xvar: TAstVarDec;
+  xcon: TAstConsDec;
   positOper: char;
   lblEle: TEleAsmInstr;
 begin
@@ -305,7 +305,7 @@ begin
         exit(true);
       end else if ele.idClass = eleVarDec then begin
         //It's variable identifier
-        xvar := TEleVarDec(ele);
+        xvar := TAstVarDec(ele);
         cpx.AddCallerToFromCurr(xvar);  //lleva la cuenta
         cpx.Next;  //Take variable name
         operand.Val := -1;        //Indicates to use "operRef"
@@ -317,7 +317,7 @@ begin
         exit(true);
       end else if ele.idClass = eleConsDec then begin
         //Es identificador de constante
-        xcon := TEleConsDec(ele);
+        xcon := TAstConsDec(ele);
         cpx.AddCallerToFromCurr(xcon);  //lleva la cuenta
         //Constants can be resolved as numbers
         if (xcon.typ = cpx.typByte) or (xcon.typ = cpx.typWord) then begin

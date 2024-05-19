@@ -1,20 +1,24 @@
 {Rutina de verificación para operaciones de comparación con datos 
-de tipo DWORD.
-Se debe simular el programa en el circuito "Test1.DSN". Se debe 
-escuchar, una serie de pitidos cortos. Si se escucha un pitido 
-largo, es que hubo algún error en el resultado de alguna operación.}
-{$PROCESSOR PIC16F877A}
-{$FREQUENCY 8Mhz}
-{$OUTPUTHEX 'output.hex'}
-uses UnitTest, PIC16F877A;
-var
-
-  a, b: Dword;
-
+de tipo DWORD.}
+uses Commodore64;
+procedure good;
 begin
-  SetAsOutput(pinLed);
-  pinLed := 0;
-
+  CHROUT('O');
+  CHROUT('K');
+  CHROUT(',');
+end;
+procedure bad;
+begin
+  CHROUT('E');
+  CHROUT('R');
+  CHROUT('R');
+  CHROUT('O');
+  CHROUT('R');
+  CHROUT(chr(13));
+end;
+var
+  a, b: Dword;
+begin
   //////////////////////////////////////////////////////////
 	//////////////  Operación Igualdad ///////////////////
   //////////////////////////////////////////////////////////

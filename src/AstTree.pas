@@ -39,11 +39,11 @@ type  //Abstract Syntax Tree
                                    }
     OnFindElement: procedure(elem: TAstElement) of object;  //Evento de búsqueda
   public  //Containers
-    AllCons  : TEleConsDecs;
-    AllVars  : TEleVarDecs;
+    AllCons  : TAstConsDecs;
+    AllVars  : TAstVarDecs;
     AllUnits : TEleUnits;
     AllFuncs : TEleFunDecs;
-    AllTypes : TEleTypeDecs;
+    AllTypes : TAstTypeDecs;
     procedure Clear;
     procedure RefreshAllUnits;
   public  //Filling the tree
@@ -52,17 +52,17 @@ type  //Abstract Syntax Tree
     procedure AddElementToParent(elem: TAstElement; AtBegin: boolean);
     procedure OpenElement(elem: TAstElement);
     procedure CloseElement;
-    procedure DeleteTypeNode(typNode: TEleTypeDec);
+    procedure DeleteTypeNode(typNode: TAstTypeDec);
     procedure ChangeParentTo(newparent, elem: TAstElement; position: integer = - 1);
     procedure InsertParentTo(newparent, elem: TAstElement);
     function AddBodyAndOpen(srcPos: TSrcPos): TEleBody;
     function AddConsDecAndOpen(srcPos: TSrcPos; cname: string;
-      ctype: TEleTypeDec): TEleConsDec;
+      ctype: TAstTypeDec): TAstConsDec;
     function AddVarDecAndOpen(srcPos: TSrcPos; vname: string;
-      vtype: TEleTypeDec): TEleVarDec;
+      vtype: TAstTypeDec): TAstVarDec;
     function AddTypeDecAndOpen(srcPos: TSrcPos; tname: string; tsize: word;
       catType: TCatType; group: TTypeGroup; position: integer = - 1
-  ): TEleTypeDec;
+  ): TAstTypeDec;
     function AddElementBlockAndOpen(srcPos: TSrcPos; position: integer = - 1
       ): TEleBlock;
     function AddElementSentAndOpen(srcPos: TSrcPos; sntType: TSentenceType): TEleSentence;
@@ -71,18 +71,18 @@ type  //Abstract Syntax Tree
     function FindFirst(const name: string): TAstElement;
     function FindNext: TAstElement;
     function FindNextFuncName: TEleFunDec;
-    function FindFirstType(const name: string): TEleTypeDec;
-    function FindNextType: TEleTypeDec;
-    function FindVar(varName: string): TEleVarDec;
-    function FindType(typName: string): TEleTypeDec;
+    function FindFirstType(const name: string): TAstTypeDec;
+    function FindNextType: TAstTypeDec;
+    function FindVar(varName: string): TAstVarDec;
+    function FindType(typName: string): TAstTypeDec;
   public  //Searching/Identify
     function LastNode: TAstElement;
     function BodyNode: TEleBody;
     function CurNodeName: string;
-    function ExistsArrayType(itemType: TEleTypeDec; nEle: integer;
-                             out typFound: TEleTypeDec): boolean;
-    function ExistsPointerType(ptrType: TEleTypeDec;
-                             out typFound: TEleTypeDec): boolean;
+    function ExistsArrayType(itemType: TAstTypeDec; nEle: integer;
+                             out typFound: TAstTypeDec): boolean;
+    function ExistsPointerType(ptrType: TAstTypeDec;
+                             out typFound: TAstTypeDec): boolean;
     function GetElementBodyAt(posXY: TPoint): TEleBody;
     function GetElementAt(posXY: TPoint): TAstElement;
     function GetElementCalledAt(const srcPos: TSrcPos): TAstElement;
@@ -100,15 +100,17 @@ type  //Abstract Syntax Tree
   function SameParamsName(f: TEleFunBase; const funpars: TAstParamArray): boolean;
 var
   // Tipo nulo. Usado para elementos sin tipo.
-  typNull : TEleTypeDec;
+  typNull : TAstTypeDec;
 
 implementation
 function SameParamsType(f: TEleFunBase; const funpars: TAstParamArray): boolean;
 {Compara los parámetros de la función con una lista de parámetros. Si tienen el mismo
 número de parámetros y el mismo tipo, devuelve TRUE.}
 var
-  i: Integer;
+  i, npars: Integer;
 begin
+  npars := length(f.pars);
+  if (npars=0) and (funpars=nil) then exit(true);  //No tienen parámetros
   if High(f.pars) <> High(funpars) then
     exit(false);   //Distinct parameters number
   //They have the same numbers of parameters, verify:
@@ -177,13 +179,13 @@ begin
 //  if OnAddElement<>nil then OnAddElement(elem);
   //Update Lists
   case elem.idClass of
-  eleConsDec : AllCons.Add(TEleConsDec(elem));
+  eleConsDec : AllCons.Add(TAstConsDec(elem));
   eleVarDec  : begin
 //debugln('<adding>' + elem.Parent.name + ',' + elem.name);
-    AllVars.Add(TEleVarDec(elem));
+    AllVars.Add(TAstVarDec(elem));
     end;
   eleFuncDec : AllFuncs.Add(TEleFunDec(elem)); //Declarations are now stored in AllFuncs.
-  eleTypeDec : AllTypes.Add(TEleTypeDec(elem));
+  eleTypeDec : AllTypes.Add(TAstTypeDec(elem));
   //No se incluye el código de RefreshAllUnits() porque solo trabaja en el "main".
   end;
 end;
@@ -226,8 +228,8 @@ begin
     curCodCont := curNode.codCont;  //Restore last value
   end;
 end;
-procedure TAstTree.DeleteTypeNode(typNode: TEleTypeDec);
-{Delete a node of type "TEleTypeDec"}
+procedure TAstTree.DeleteTypeNode(typNode: TAstTypeDec);
+{Delete a node of type "TAstTypeDec"}
 var
   parent: TAstElement;
 begin
@@ -289,9 +291,9 @@ begin
   curCodCont := Result;  //Update current Code container
 end;
 function TAstTree.AddConsDecAndOpen(srcPos: TSrcPos; cname: string;
-                         ctype: TEleTypeDec): TEleConsDec;
+                         ctype: TAstTypeDec): TAstConsDec;
 begin
-  Result := TEleConsDec.Create;
+  Result := TAstConsDec.Create;
   Result.name   := cname;
   Result.typ    := ctype;   //Set reference to type.
   Result.srcDec := srcPos;
@@ -300,9 +302,9 @@ begin
   curCodCont := Result;  //Update current Code container
 end;
 function TAstTree.AddVarDecAndOpen(srcPos: TSrcPos; vname: string;
-                         vtype: TEleTypeDec): TEleVarDec;
+                         vtype: TAstTypeDec): TAstVarDec;
 begin
-  Result := TEleVarDec.Create;
+  Result := TAstVarDec.Create;
   Result.name   :=vname;
   Result.typ    := vtype;   //fija  referencia a tipo
   Result.srcDec := srcPos;
@@ -312,9 +314,9 @@ begin
 end;
 function TAstTree.AddTypeDecAndOpen(srcPos: TSrcPos; tname: string;
   tsize: word; catType: TCatType; group: TTypeGroup;
-  position: integer = -1): TEleTypeDec;
+  position: integer = -1): TAstTypeDec;
 begin
-  Result := TEleTypeDec.Create;
+  Result := TAstTypeDec.Create;
   Result.name    := tname;
   Result.srcDec  := srcPos;
   Result.size    := tsize;
@@ -447,7 +449,7 @@ begin
     Result := TEleFunImp(ele).declar;   //devuelve como función
   end;
 end;
-function TAstTree.FindFirstType(const name: string): TEleTypeDec;
+function TAstTree.FindFirstType(const name: string): TAstTypeDec;
 {Starts the search for a element type in the syntax Tree.}
 var
   ele: TAstElement;
@@ -456,9 +458,9 @@ begin
   while (ele<>nil) and (ele.idClass <> eleTypeDec) do begin
     ele := FindNext;
   end;
-  if ele = nil then exit(nil) else exit( TEleTypeDec(ele) );
+  if ele = nil then exit(nil) else exit( TAstTypeDec(ele) );
 end;
-function TAstTree.FindNextType: TEleTypeDec;
+function TAstTree.FindNextType: TAstTypeDec;
 {Scan recursively toward root, in the syntax tree, until find a type element.
 Must be called after calling FindFirst(). If not found, returns NIL.}
 var
@@ -469,9 +471,9 @@ begin
   until (ele=nil) or (ele.idClass = eleTypeDec);
   //Puede que haya encontrado la función o no
   if ele = nil then exit(nil);  //No encontró
-  Result := TEleTypeDec(ele);   //devuelve como función
+  Result := TAstTypeDec(ele);   //devuelve como función
 end;
-function TAstTree.FindVar(varName: string): TEleVarDec;
+function TAstTree.FindVar(varName: string): TAstVarDec;
 {Busca una variable con el nombre indicado en el espacio de nombres actual}
 var
   ele : TAstElement;
@@ -480,13 +482,13 @@ begin
   uName := upcase(varName);
   for ele in curNode.elements do begin
     if (ele.idClass = eleVarDec) and (ele.uname = uName) then begin
-      Result := TEleVarDec(ele);
+      Result := TAstVarDec(ele);
       exit;
     end;
   end;
   exit(nil);
 end;
-function TAstTree.FindType(typName: string): TEleTypeDec;
+function TAstTree.FindType(typName: string): TAstTypeDec;
 {Find a type, by name, in the current element of the Synyax Tree.}
 var
   ele: TAstElement;
@@ -496,7 +498,7 @@ begin
 //    ele := FindNext;
 //  end;
   if ele = nil then exit(nil);
-  if ele.idClass = eleTypeDec then exit( TEleTypeDec(ele) ) else exit(nil);
+  if ele.idClass = eleTypeDec then exit( TAstTypeDec(ele) ) else exit(nil);
 end;
 //Searching/Identification
 function TAstTree.LastNode: TAstElement;
@@ -514,8 +516,8 @@ function TAstTree.CurNodeName: string;
 begin
   Result := curNode.name;
 end;
-function TAstTree.ExistsArrayType(itemType: TEleTypeDec; nEle: integer;
-  out typFound: TEleTypeDec): boolean;
+function TAstTree.ExistsArrayType(itemType: TAstTypeDec; nEle: integer;
+  out typFound: TAstTypeDec): boolean;
 {Finds an array type declaration, accesible from the current position in the syntax tree.
 If found, returns TRUE and the type reference in "typFound".}
 begin
@@ -526,8 +528,8 @@ begin
   //Verify result
   Result := typFound <> nil;
 end;
-function TAstTree.ExistsPointerType(ptrType: TEleTypeDec; out
-  typFound: TEleTypeDec): boolean;
+function TAstTree.ExistsPointerType(ptrType: TAstTypeDec; out
+  typFound: TAstTypeDec): boolean;
 {Finds a pointer type declaration, accesible from the current position in the syntax tree.
 If found, returns TRUE and the type reference in "typFound".}
 begin
@@ -712,11 +714,11 @@ constructor TAstTree.Create;
 begin
   main:= TEleProg.Create;  //No debería
   main.name := 'Main';
-  AllCons  := TEleConsDecs.Create(false);  //Create list
-  AllVars  := TEleVarDecs.Create(false);   //Create list
+  AllCons  := TAstConsDecs.Create(false);  //Create list
+  AllVars  := TAstVarDecs.Create(false);   //Create list
   AllFuncs := TEleFunDecs.Create(false);   //Create list
   AllUnits := TEleUnits.Create(false);     //Create list
-  AllTypes := TEleTypeDecs.Create(false);  //Create list
+  AllTypes := TAstTypeDecs.Create(false);  //Create list
   curNode := main;                         //Empieza con el nodo principal como espacio de nombres actual
 end;
 destructor TAstTree.Destroy;
@@ -731,7 +733,7 @@ begin
 end;
 initialization
   //crea el operador NULL
-  typNull := TEleTypeDec.Create;
+  typNull := TAstTypeDec.Create;
   typNull.name := 'null';
 
 finalization

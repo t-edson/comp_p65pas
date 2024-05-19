@@ -4,6 +4,7 @@ Written to be executed in a Commodore64 emulator.
                         By Tito Hinostroza 08/11/2020
 }
 uses Commodore64;
+{$MODE PASCAL}
 /////////////////  Types declaration ////////////////
 type
   tarr1 = array[3] of byte;
@@ -14,16 +15,34 @@ const
   ATYP_NAM: string3 = ('a','b','c');
   ATYP_DEC: array[3] of char = ('1','2','3'); 
   ARRAY_ARRAY: array[3] of char = ('1','2','3'); 
-//var   x,y: byte;
-// z: string3 = ('a','b','c');
-  //n: byte = 1; 
-//var  x: array[3] of byte = [1,2,3];   
-//var  myarray: ARRAY[] OF char = 'abc'; //Tipo creado en la inicialización.
+var   x,y: byte;
+ z: string3 = ('a','b','c');
+ n: byte = 1; 
+var  xx: array[3] of byte = [1,2,3];   
+var  myarray: ARRAY[] OF char = 'abc'; //Tipo creado en la inicialización.
 //var ar: ARRAY[1] OF char = 'a'; //Tipo creado en la inicialización.
-//VAR xx: array[] of byte = [1,2,3];   
+//VAR xx2: array[] of byte = [1,2,3];   
 //var  ca: char = 'A'; //Declaración con inicialización.
+  procedure bien;
+  begin
+    CHROUT('O');
+    CHROUT('K');
+    CHROUT(chr(13));
+  end;
+  procedure Mal;
+  begin
+    CHROUT('E');
+    CHROUT('R');
+    CHROUT('R');
+    CHROUT('O');
+    CHROUT('R');
+    CHROUT(chr(13));
+    //Aditional RTS to exit proc. and program.
+    asm RTS end   
+  end;
   
 var
+  a: byte;
   b,c: boolean;
   arr5: array[] of byte = [1,2,3];
 begin

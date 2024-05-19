@@ -192,16 +192,16 @@ type
 
   TEleExpress = class;
 
-  TEleVarDec = class;
+  TAstVarDec = class;
 
-  TEleConsDec = class;
+  TAstConsDec = class;
 
   {Description for aditional information in variables declaration: ABSOLUTE ,
   REGISTER,  or initialization. }
   TAdicVarDec = record
     //Absolute or register information.
     hasAdic  : TAdicDeclar; //Flag. Indicates when variable is register or absolute.
-    absVar   : TEleVarDec;    //Reference to variable, when is ABSOLUTE <variable>
+    absVar   : TAstVarDec;    //Reference to variable, when is ABSOLUTE <variable>
     absAddr  : integer;       //ABSOLUTE address
     absOff   : integer;       //Offset to variable when ABSOLUTE.
     //Initialization information.
@@ -273,17 +273,17 @@ type  //Declaration elements
   TEleFunImp = class;
 
 
-  TEleTypeDec= class;
-  TEleTypeDecs= specialize TFPGObjectList<TEleTypeDec>; //lista de variables
+  TAstTypeDec= class;
+  TAstTypeDecs= specialize TFPGObjectList<TAstTypeDec>; //lista de variables
 
-  { TEleTypeDec }
+  { TAstTypeDec }
   {Clase para modelar a los tipos definidos por el usuario y a los tipos del sistema.
   Es una clase relativamente extensa, debido a la flxibilidad que ofrecen los tipos en
   Pascal.}
-  TEleTypeDec = class(TEleCodeCont)
+  TAstTypeDec = class(TEleCodeCont)
   private
     fSize: word;
-    internalTypes: TEleTypeDecs;  //Container for types recursively defined.
+    internalTypes: TAstTypeDecs;  //Container for types recursively defined.
     function getSize: word;
     procedure setSize(AValue: word);
   public   //Events
@@ -301,19 +301,19 @@ type  //Declaration elements
                             haga el casting.}
     OnRequireWR : procedure of object; //Used to detect dependencies on Work registers.  *** ¿Se necesita?
   public   //Identification
-    copyOf  : TEleTypeDec;  //Indicates this type is copy of other
+    copyOf  : TAstTypeDec;  //Indicates this type is copy of other
     group   : TTypeGroup;   //Type group (numéric, string, etc)
     catType : TCatType;   //Categoría del tipo
     property size: word read getSize write setSize;   //Tamaño en bytes del tipo
     function groupStr: string;
     function catTypeStr: string;
   public   //Fields when type is Array or pointer
-    consNitm: TEleConsDec;  //Reference to constant defining the number of items.
-    itmType : TEleTypeDec;  {Reference to the item type when it's array.
+    consNitm: TAstConsDec;  //Reference to constant defining the number of items.
+    itmType : TAstTypeDec;  {Reference to the item type when it's array.
                                 TArr = array[255] of byte;  //itemType = byte
                             }
     isDynam : boolean;      //Indicates the size is dynamic. No current supported except when initialized.
-    ptrType : TEleTypeDec;  {Reference to the type pointed, when it's pointer.
+    ptrType : TAstTypeDec;  {Reference to the type pointed, when it's pointer.
                                 TPtr = ^integer;       //ptrType = integer
                            }
     function nItems: integer;  //Number of items, when is tctArray (-1 if it's dynamic.)
@@ -324,9 +324,9 @@ type  //Declaration elements
     function IsByteSize: boolean;
     function IsWordSize: boolean;
     function IsDWordSize: boolean;
-    function IsArrayOf(itTyp: TEleTypeDec; numIt: integer): boolean;
-    function IsPointerTo(ptTyp: TEleTypeDec): boolean;
-    function IsEquivalent(typ: TEleTypeDec): boolean;
+    function IsArrayOf(itTyp: TAstTypeDec; numIt: integer): boolean;
+    function IsPointerTo(ptTyp: TAstTypeDec): boolean;
+    function IsEquivalent(typ: TAstTypeDec): boolean;
   public  //Initialization
     constructor Create; override;
     destructor Destroy; override;
@@ -334,9 +334,9 @@ type  //Declaration elements
 
   { TEleCodeCont }
   //Class to modelate constants declaration.
-  TEleConsDec = class(TEleCodeCont)
+  TAstConsDec = class(TEleCodeCont)
     //Element type
-    typ      : TEleTypeDec;
+    typ      : TAstTypeDec;
     {Flag to indicate if the constant value, stored in "value" field, is valid.
     If evaluated = true  -> The constant value can be read in "value".
     If evaluated = false -> The constant is not yet evaluated. It has been defined as an
@@ -348,7 +348,7 @@ type  //Declaration elements
     mirConDec: TObject;  //Formalmente debe ser TMirConDec, pero se pone TObject para no generar referencias circulares.
     constructor Create; override;
   end;
-  TEleConsDecs = specialize TFPGObjectList<TEleConsDec>; //lista de constantes
+  TAstConsDecs = specialize TFPGObjectList<TAstConsDec>; //lista de constantes
 
   //Operand value storage. Hardware dependent.
   TStorage = (
@@ -408,13 +408,13 @@ type  //Declaration elements
                }
   );
 
-  { TEleVarDec }
+  { TAstVarDec }
   //Class to modelate variable declarations.
-  TEleVarDec = class(TEleCodeCont)
+  TAstVarDec = class(TEleCodeCont)
   private
-    ftyp: TEleTypeDec;
-    function Gettyp: TEleTypeDec;
-    procedure Settyp(AValue: TEleTypeDec);
+    ftyp: TAstTypeDec;
+    function Gettyp: TAstTypeDec;
+    procedure Settyp(AValue: TAstTypeDec);
   public   //Manejo de parámetros adicionales
     adicPar: TAdicVarDec;  //Parámetros adicionales en la declaración de la variable.
   public
@@ -427,7 +427,7 @@ type  //Declaration elements
     required   : boolean;    {Indicates the variable is required to be allocated. Work
                               for variables used as registers. }
     //Reference to Type element
-    property typ: TEleTypeDec read Gettyp write Settyp;
+    property typ: TAstTypeDec read Gettyp write Settyp;
   public  //Campos para guardar las direcciones físicas asignadas en RAM.
     allocated: boolean;   //Activated when variable is allocated (RAM or register).
     storage  : TStorage;  //Depend on adicPar.hasAdic.
@@ -439,7 +439,7 @@ type  //Declaration elements
     constructor Create; override;
     destructor Destroy; override;
   end;
-  TEleVarDecs = specialize TFPGObjectList<TEleVarDec>;
+  TAstVarDecs = specialize TFPGObjectList<TAstVarDec>;
 
 type  //Expression elements
   TEleFunBase = class;
@@ -458,13 +458,13 @@ type  //Expression elements
   public
     opType  : TopType;      //Operand type: otVariab, otConst, otFunct.
     Sto     : TStorage;     //Storage of the value (memory, register, value)
-    Typ     : TEleTypeDec;  //Data type for the operand.
+    Typ     : TAstTypeDec;  //Data type for the operand.
     function opTypeAsStr: string; //"opType" as string
     function StoAsStr: string;  //Storage as string
     procedure StringToArrayOfChar(str: string);
     function ValueIsZero: boolean;
   public  //Temporal variables required for evaluating expression.
-    tempVars: TEleVarDecs;
+    tempVars: TAstVarDecs;
   public  //Fields used when opType is otFunct.
     fundec  : TEleFunDec;  //Reference to function declaration
     {When element is "otFunct", this flag indicates the function/method has been
@@ -478,8 +478,8 @@ type  //Expression elements
     consType : TConsType;   //Constant type
     //Fields used according to "consType" value.
     value    : TConsValue;  //Constant value, when consType=ctLiteral
-    consRef  : TEleConsDec;  //Ref. to TEleConsDec when consType=ctConsRef
-    addrVar  : TEleVarDec;   //Ref. to TEleVarDec  when consType=ctVarAddr
+    consRef  : TAstConsDec;  //Ref. to TAstConsDec when consType=ctConsRef
+    addrVar  : TAstVarDec;   //Ref. to TAstVarDec  when consType=ctVarAddr
     addrFun  : TEleFunDec;   //Ref. to TEleFun when consType=ctFunAddr
     public
     //Functions to read values.
@@ -492,8 +492,8 @@ type  //Expression elements
     function valWhi: word;
     procedure SetLiteralBoolConst(valBool: Boolean);
     procedure SetLiteraltIntConst(valInt: Int64);
-    procedure SetConstRef(cons0: TEleConsDec);
-    procedure SetAddrVar(var0: TEleVarDec);
+    procedure SetConstRef(cons0: TAstConsDec);
+    procedure SetAddrVar(var0: TAstVarDec);
     procedure SetAddrFun(fun0: TEleFunDec);
     procedure Evaluate();
   public //Fields used when opType is otVariab.
@@ -506,8 +506,8 @@ type  //Expression elements
 //    {Reference to Variable declaration when this variable is CAvar and address is defined
 //    only for a variable declaration. This is the common. In this case we don't create a
 //    constant expression for the address.}
-//    vardec0: TEleVarDec;
-    function vardec: TEleVarDec;  //Reference to Variable declaration.
+//    vardec0: TAstVarDec;
+    function vardec: TAstVarDec;  //Reference to Variable declaration.
   public  //Fields used when variable is allocated.
     function add: word;  {Base address.}
     function addL: word;
@@ -704,8 +704,8 @@ type  //Declaration elements (functions)
   //Function parameter
   TAstParam = record
     name    : string;      //Parameter name
-    typ     : TEleTypeDec; //Reference to type
-    vardec  : TEleVarDec;  //Reference to variable used for this parameter
+    typ     : TAstTypeDec; //Reference to type
+    vardec  : TAstVarDec;  //Reference to variable used for this parameter
     srcPos  : TSrcPos;     //Parameter location.
     adicVar : TAdicVarDec; //Aditional option for "vardec".
     isLocVar: boolean;     //Flag to indicate this parameter is not a parameter but a
@@ -744,7 +744,7 @@ type  //Declaration elements (functions)
   );
   { TEleFunBase }
   TEleFunBase = class(TEleProgFrame)
-    retType    : TEleTypeDec;  //Type returned
+    retType    : TAstTypeDec;  //Type returned
     IsInterrupt: boolean;      //Indicates the function is an ISR
     IsForward  : boolean;      //Identifies a forward declaration.
   public  //Parameters management
@@ -1414,14 +1414,14 @@ begin
   evaluated := true;
   value.ValInt := valInt;
 end;
-procedure TEleExpress.SetConstRef(cons0: TEleConsDec);
+procedure TEleExpress.SetConstRef(cons0: TAstConsDec);
 begin
   consType := ctConsRef;
   consRef := cons0;  //Keep reference
   evaluated := false;  //To force evaluation
   Evaluate;
 end;
-procedure TEleExpress.SetAddrVar(var0: TEleVarDec);
+procedure TEleExpress.SetAddrVar(var0: TAstVarDec);
 begin
   consType := ctVarAddr;
   addrVar := var0;  //Keep reference
@@ -1512,7 +1512,7 @@ Only is valid when the Operand type is "otVariab" }
 begin
   Result := (elements.Count=2);    //Addressed by a consatnt expression and a variable expression
 end;
-function TEleExpress.vardec: TEleVarDec;
+function TEleExpress.vardec: TAstVarDec;
 {Returns the reference to Variable declaration when this Expression is a simple
 reference to a variable declared. Something like this:
 VAR x: byte;
@@ -1569,7 +1569,7 @@ constructor TEleExpress.Create;
 begin
   inherited Create;
   idClass := eleExpress;
-  tempVars := TEleVarDecs.Create(true);
+  tempVars := TAstVarDecs.Create(true);
 end;
 destructor TEleExpress.Destroy;
 begin
@@ -1701,14 +1701,14 @@ begin
   //lstExitCalls.Destroy;
   inherited Destroy;
 end;
-{ TEleConsDec }
-constructor TEleConsDec.Create;
+{ TAstConsDec }
+constructor TAstConsDec.Create;
 begin
   inherited;
   idClass := eleConsDec;
 end;
-{ TEleVarDec }
-function TEleVarDec.Gettyp: TEleTypeDec;
+{ TAstVarDec }
+function TAstVarDec.Gettyp: TAstTypeDec;
 begin
   if ftyp.copyOf<>nil then begin
     Result := ftyp.copyOf
@@ -1716,21 +1716,21 @@ begin
     Result := ftyp;
   end;
 end;
-procedure TEleVarDec.Settyp(AValue: TEleTypeDec);
+procedure TAstVarDec.Settyp(AValue: TAstTypeDec);
 begin
   ftyp := AValue;
 end;
 
-constructor TEleVarDec.Create;
+constructor TAstVarDec.Create;
 begin
   inherited;
   idClass:=eleVarDec;
 end;
-destructor TEleVarDec.Destroy;
+destructor TAstVarDec.Destroy;
 begin
   inherited Destroy;
 end;
-function TEleTypeDec.getSize: word;
+function TAstTypeDec.getSize: word;
 var
   nItms: integer;
 begin
@@ -1746,20 +1746,20 @@ begin
     exit(fSize)
   end;
 end;
-procedure TEleTypeDec.setSize(AValue: word);
+procedure TAstTypeDec.setSize(AValue: word);
 begin
   fSize := AValue;
 end;
 
-function TEleTypeDec.groupStr: string;
+function TAstTypeDec.groupStr: string;
 begin
   WriteStr(Result, group);
 end;
-function TEleTypeDec.catTypeStr: string;
+function TAstTypeDec.catTypeStr: string;
 begin
   WriteStr(Result, catType);
 end;
-function TEleTypeDec.nItems: integer;
+function TAstTypeDec.nItems: integer;
 begin
   if copyOf<>nil then begin
     exit(copyOf.consNitm.value^.ValInt)
@@ -1767,26 +1767,26 @@ begin
     exit(consNitm.value^.ValInt)
   end;
 end;
-{ TEleTypeDec }
-function TEleTypeDec.IsByteSize: boolean;
+{ TAstTypeDec }
+function TAstTypeDec.IsByteSize: boolean;
 {Indica si el tipo, tiene 1 byte de tamaño}
 begin
 //  if copyOf<>nil then exit(copyOf.IsByteSize);  //verifica
   Result := size = 1;
 end;
-function TEleTypeDec.IsWordSize: boolean;
+function TAstTypeDec.IsWordSize: boolean;
 {Indica si el tipo, tiene 2 bytes de tamaño}
 begin
 //  if copyOf<>nil then exit(copyOf.IsWordSize);  //verifica
   Result := size = 2;
 end;
-function TEleTypeDec.IsDWordSize: boolean;
+function TAstTypeDec.IsDWordSize: boolean;
 {Indica si el tipo, tiene 4 bytes de tamaño}
 begin
 //  if copyOf<>nil then exit(copyOf.IsDWordSize);  //verifica
   Result := size = 4;
 end;
-function TEleTypeDec.IsArrayOf(itTyp: TEleTypeDec; numIt: integer): boolean;
+function TAstTypeDec.IsArrayOf(itTyp: TAstTypeDec; numIt: integer): boolean;
 {Indicates if this type is an array of the specified type and with the specified
 number of elements.}
 begin
@@ -1796,11 +1796,11 @@ begin
   if consNitm = nil then exit(false);  //Not yet set the size.
   exit( (nItems = numIt) and itmType.IsEquivalent(itTyp) );
 end;
-function TEleTypeDec.IsPointerTo(ptTyp: TEleTypeDec): boolean;
+function TAstTypeDec.IsPointerTo(ptTyp: TAstTypeDec): boolean;
 begin
   exit( (catType = tctPointer) and ptrType.IsEquivalent(ptTyp) );
 end;
-function TEleTypeDec.IsEquivalent(typ: TEleTypeDec): boolean;
+function TAstTypeDec.IsEquivalent(typ: TAstTypeDec): boolean;
 {Indicates if the type is the same type as the specified or has the same definition.}
 begin
   if self = typ then exit(true);
@@ -1817,14 +1817,14 @@ begin
   end;
   exit(false);
 end;
-constructor TEleTypeDec.Create;
+constructor TAstTypeDec.Create;
 begin
   inherited;
   idClass:=eleTypeDec;
   //Ceeate list
-  internalTypes:= TEleTypeDecs.Create(true);
+  internalTypes:= TAstTypeDecs.Create(true);
 end;
-destructor TEleTypeDec.Destroy;
+destructor TAstTypeDec.Destroy;
 begin
   internalTypes.Destroy;
   inherited;

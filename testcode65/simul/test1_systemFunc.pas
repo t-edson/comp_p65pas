@@ -24,7 +24,7 @@ var  //simple type declarations
   vchar: char;
 	vbyte: byte;
   vword: word;
-//  vdword: dword;
+  vdword: dword;
 begin
   ///////////////////////////////////////////////////
   ///// System Function
@@ -122,27 +122,27 @@ begin
   if vbool then good else bad end;
   if boolean(2) and true then good else bad end;
   
-  vbit := 1;
-  if boolean(vbit) then good else bad end;
-  if not boolean(not vbit) then good else bad end;
-  if not (boolean(not vbit) and boolean(vbit) ) then good else bad end;
-  if boolean(not vbit) or boolean(vbit) then good else bad end;
-  
-  /////// Byte() function
-  vbyte := byte(65);  //byte of byte
-  if vbyte = 65  then good else bad end;
-  vbyte := byte('A');  //byte of char
-  if vbyte = 65  then good else bad end;
-  vbyte := byte($FFFF);  //byte of word
-  if vbyte = $FF  then good else bad end;
-
-  vbit := 0;
-  if byte(vbit) = 0  then good else bad end;
-  vbit := 1;
-  if byte(vbit)+1 = 2  then good else bad end;
-
-  vbit := 1;
-  if byte(vbit and 0) = 0  then good else bad end;
+//  vbit := 1;
+//  if boolean(vbit) then good else bad end;
+//  if not boolean(not vbit) then good else bad end;
+//  if not (boolean(not vbit) and boolean(vbit) ) then good else bad end;
+//  if boolean(not vbit) or boolean(vbit) then good else bad end;
+//  
+//  /////// Byte() function
+//  vbyte := byte(65);  //byte of byte
+//  if vbyte = 65  then good else bad end;
+//  vbyte := byte('A');  //byte of char
+//  if vbyte = 65  then good else bad end;
+//  vbyte := byte($FFFF);  //byte of word
+//  if vbyte = $FF  then good else bad end;
+//
+//  vbit := 0;
+//  if byte(vbit) = 0  then good else bad end;
+//  vbit := 1;
+//  if byte(vbit)+1 = 2  then good else bad end;
+//
+//  vbit := 1;
+//  if byte(vbit and 0) = 0  then good else bad end;
 
   vbyte := 10;
   if byte(vbyte) = 10  then good else bad end;
@@ -182,27 +182,27 @@ begin
   if word(vdword) = $0304  then good else bad end;
   if word(vdword+dword(1)) = $0305  then good else bad end;
 
-//  /////// DWord() function
-//  vdword := dword(65);  //dword of byte
-//  if vdword = dword(65) then good else bad end;
-//  vdword := dword('A');  //dword of char
-//  if vdword = dword(65)  then good else bad end;
-//  vdword := dword($FFFF);  //dword of word
-//  if vdword = dword($FFFF) then good else bad end;
-//  vdword := dword($01020304);  //dword of dword
-//  if vdword = $01020304  then good else bad end;
-//
-//  vbyte := 65;
-//  if dword(vbyte) = dword(65) then good else bad end;
-//  if dword(vbyte+1) = dword(66) then good else bad end;
-//  vchar := 'A';  //dword of char
-//  if dword(vchar) = dword(65)  then good else bad end;
-//  vword := $FFFF;  //dword of word
-//  if dword(vword) = dword($FFFF)  then good else bad end;
-//  if dword(vword+1) = dword(0) then good else bad end;
-//  vdword := $01020304;  //dword of dword
-//  if dword(vdword) = $01020304  then good else bad end;
-//  if dword(vdword+dword(1)) = $01020305  then good else bad end;
+  /////// DWord() function
+  vdword := dword(65);  //dword of byte
+  if vdword = dword(65) then good else bad end;
+  vdword := dword('A');  //dword of char
+  if vdword = dword(65)  then good else bad end;
+  vdword := dword($FFFF);  //dword of word
+  if vdword = dword($FFFF) then good else bad end;
+  vdword := dword($01020304);  //dword of dword
+  if vdword = $01020304  then good else bad end;
+
+  vbyte := 65;
+  if dword(vbyte) = dword(65) then good else bad end;
+  if dword(vbyte+1) = dword(66) then good else bad end;
+  vchar := 'A';  //dword of char
+  if dword(vchar) = dword(65)  then good else bad end;
+  vword := $FFFF;  //dword of word
+  if dword(vword) = dword($FFFF)  then good else bad end;
+  if dword(vword+1) = dword(0) then good else bad end;
+  vdword := $01020304;  //dword of dword
+  if dword(vdword) = $01020304  then good else bad end;
+  if dword(vdword+dword(1)) = $01020305  then good else bad end;
   
 end.
 

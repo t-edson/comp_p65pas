@@ -4,7 +4,7 @@ Written to be executed in a Commodore64 emulator.
                         By Tito Hinostroza 30/08/2022
 }
 uses Commodore64;
-//To disable Zero-age allocation. We aill allocate manually.
+//To disable Zero-age allocation. We will allocate manually.
 {$SET_DATA_ADDR ''}  
   procedure bien;
   begin
