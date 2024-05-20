@@ -61,7 +61,6 @@ type  //TAstElement class
                 eleFinal,     //FINALIZATION section
                 //Expressions
                 eleExpress,   //Expression
-                eleCondit,    //Condition
                 //Instructions relative
                 eleSenten,    //Sentence/Instruction
                 eleAsmInstr,  //ASM instruction
@@ -518,13 +517,6 @@ type  //Expression elements
     destructor Destroy; override;
   end;
 
-  { TEleCondit }
-  {Represents a condition or boolean expression. Used to represent conditional
-  expression in conditional statements.}
-  TEleCondit = class(TAstElement)
-  public  //Initialization
-    constructor Create; override;
-  end;
 type  //Structural elements
 
   { TExitCall }
@@ -1243,13 +1235,6 @@ begin
   setlength(Operations, n+1);
   Operations[n].oper  := oper;
   Operations[n].value := value;
-end;
-
-{ TEleCondit }
-constructor TEleCondit.Create;
-begin
-  inherited Create;
-  idClass := eleCondit;
 end;
 
 { TConsValue }

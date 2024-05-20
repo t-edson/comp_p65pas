@@ -25,17 +25,26 @@ var
 
 begin
 //  xbyte := 2;
-//  w := xbyte;
+  w := xbyte;
 //  w := w + 5;
 //  location^ := 5;
-  if w = 12 then
-    xx[5] := 3;
-  else
-    ww[5] := 3;
-  end; 
 //  proc1;
 //  xbyte := ord('A')-64;
 //  w := @xbyte;
+//  if w = 12 then
+//    xx[5] := 3;
+//  else
+//    ww[5] := 3;
+//  end; 
+//  while b<10 do
+//    b := b + 1;
+//  end; 
+  for b:=0 to 25 do
+    w := 1;
+  end; 
+  repeat 
+	 b := 1;
+  until b=5;  
 end.
 
 
