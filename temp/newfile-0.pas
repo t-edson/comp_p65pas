@@ -4,4 +4,7 @@ var
   sprPucp: [8]byte;
 begin
   sprPucp := SPRITE1;  //Copy date from screen
+  asm 
+	rts 
+  end; 
 end.
