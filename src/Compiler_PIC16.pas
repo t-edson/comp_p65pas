@@ -15,14 +15,14 @@ type
     addBootldr: integer;  //Address where start Bootloader.
     addVariab : integer;  //Address where start Variables section.
     addFuncts : integer;  //Address where start function section.
-//    procedure ConstantFoldExpr(eleExp: TEleExpress);
+//    procedure ConstantFoldExpr(eleExp: TAstExpress);
     procedure AddParam(var pars: TAstParamArray; parName: string;
       const srcPos: TSrcPos; typ0: TAstTypeDec; adicDec: TAdicDeclar);
     function AddSIFtoUnit(name: string; retType: TAstTypeDec;
-      const srcPos: TSrcPos; const pars: TAstParamArray): TEleFunDec;
+      const srcPos: TSrcPos; const pars: TAstParamArray): TAstFunDec;
     function AddSNFtoUnit(name: string; retType: TAstTypeDec;
       const srcPos: TSrcPos; var pars: TAstParamArray; codSys: TCodSysNormal
-      ): TEleFunDec;
+      ): TAstFunDec;
     procedure cbClearStateRam;
     function cbReadFrequen: Single;
     function cbReadMaxFreq: Single;
@@ -44,11 +44,11 @@ type
     procedure CreateCharOperations;
     procedure CreateDWordOperations;
     function CreateInBOMethod(clsType: TAstTypeDec; opr: string; name: string;
-      parType: TAstTypeDec; retType: TAstTypeDec): TEleFunDec;
+      parType: TAstTypeDec; retType: TAstTypeDec): TAstFunDec;
     function CreateInTerMethod(clsType: TAstTypeDec; name: string; parType1,
-      parType2: TAstTypeDec; retType: TAstTypeDec): TEleFunDec;
+      parType2: TAstTypeDec; retType: TAstTypeDec): TAstFunDec;
     function CreateInUOMethod(clsType: TAstTypeDec; opr: string; name: string;
-      retType: TAstTypeDec; operTyp: TOperatorType = opkUnaryPre): TEleFunDec;
+      retType: TAstTypeDec; operTyp: TOperatorType = opkUnaryPre): TAstFunDec;
     procedure CreateWordOperations;
     procedure DefineArray(etyp: TAstTypeDec);
     procedure CreateSystemTypesAndVars;
@@ -56,7 +56,7 @@ type
     procedure DefinePointer(etyp: TAstTypeDec);
     procedure GenerateMIR;
     function PICName: string;
-//    procedure PrepareBody(cntBody, sntBlock: TEleCodeCont);
+//    procedure PrepareBody(cntBody, sntBlock: TAstCodeCont);
 //    procedure PrepareSentences;
     procedure CreateVarsAndPars;
 
@@ -86,8 +86,8 @@ procedure SetLanguage;
 
 implementation
 var
-  sifByteMulByte, sifByteDivByte, sifByteModByte: TEleFunDec;
-  sifWordDivWord, sifWordModWord, sifWordShlByte: TEleFunDec;
+  sifByteMulByte, sifByteDivByte, sifByteModByte: TAstFunDec;
+  sifWordDivWord, sifWordModWord, sifWordShlByte: TAstFunDec;
 var
   //System variables used as registers
   H      : TAstVarDec;  //To load the high byte of words.
@@ -111,15 +111,15 @@ begin
   SIF_P65pas.SetLanguage;
   {$I _language\tra_Compiler.pas}
 end;
-//procedure TCompiler_PIC16.ConstantFoldExpr(eleExp: TEleExpress);
+//procedure TCompiler_PIC16.ConstantFoldExpr(eleExp: TAstExpress);
 //{Performs:
 //- Constant evaluation, for constant nodes that can be evaluated.
 //- Constant folding, for expression nodes, that returns constants.
 //Note the similarity of this method with GenCodeExpr().}
 //var
-//  funcBase: TEleFunDec;
+//  funcBase: TAstFunDec;
 //  ele: TAstElement;
-//  parExpr: TEleExpress;
+//  parExpr: TAstExpress;
 //begin
 //  if eleExp.opType = otFunct then begin
 //    //It's an expression. There should be a function
@@ -130,7 +130,7 @@ end;
 //        //It's the declaration. No problem.
 //        //Process all parameters.
 //        for ele in eleExp.elements do begin
-//          parExpr := TEleExpress(ele);
+//          parExpr := TAstExpress(ele);
 //          ConstantFoldExpr(parExpr);  //Try to evaluate constant.
 //          if HayError then exit;
 //        end;
@@ -158,7 +158,7 @@ end;
 //      //In Normal subroutine, we scan for parameters
 //      //Process all parameters.
 //      for ele in eleExp.elements do begin
-//        parExpr := TEleExpress(ele);
+//        parExpr := TAstExpress(ele);
 //        ConstantFoldExpr(parExpr);  //Try to evaluate constant.
 //        if HayError then exit;
 //      end;
@@ -183,7 +183,7 @@ end;
 //var
 //  cons: TAstConsDec;
 //  vard: TAstVarDec;
-//  consExpres: TEleExpress;
+//  consExpres: TAstExpress;
 //begin
 //  //Calculate values in CONST sections
 //  for cons in TreeElems.AllCons do begin
@@ -194,7 +194,7 @@ end;
 //     TreeElems.OpenElement(cons);  //To resolve properly identifiers
 //     if not cons.evaluated then begin
 //       //If it isn't evaluated, must be an expression.
-//       consExpres := TEleExpress(cons.elements[0]);  //Takes the expression node.
+//       consExpres := TAstExpress(cons.elements[0]);  //Takes the expression node.
 //       //Should be an expression. Need to be calculated.
 //       ConstantFoldExpr(consExpres);
 //       if HayError then exit;
@@ -217,7 +217,7 @@ end;
 //    if vard.nCalled = 0 then continue; //Skip unused variable.
 //    if vard.elements.Count = 0 then continue;  //Skip vars with no initialization.
 //    TreeElems.OpenElement(vard);  //To resolve properly identifiers
-//    consExpres := TEleExpress(vard.elements[0]);  //Takes the expression node.
+//    consExpres := TAstExpress(vard.elements[0]);  //Takes the expression node.
 //    if not consExpres.evaluated then begin
 //      //If it isn't evaluated, must be an expression.
 //      //Should be an expression. Need to be calculated.
@@ -240,7 +240,7 @@ end;
 //end;
 //procedure TCompiler_PIC16.ConstantFolding;
 //{Do a fold constant optimization and evaluate constant expresions. }
-//  procedure ConstantFoldBody(body: TEleBody);
+//  procedure ConstantFoldBody(body: TAstBody);
 //  {Do constant folding simplification in all expression nodes. Note the similarity with
 //  TGenCodeBas.GenCodeSentences(), for scanning the AST.
 //  Constant fold are done only if constant are in the same Node. It is:
@@ -254,8 +254,8 @@ end;
 //  Won't be folded because constant will be located in the AST in different nodes.
 //  }
 //  var
-//    expFun: TEleExpress;
-//    sen: TEleSentence;
+//    expFun: TAstExpress;
+//    sen: TAstSentence;
 //    eleSen: TAstElement;
 //    ele: TAstElement;
 //    i: Integer;
@@ -264,11 +264,11 @@ end;
 //    TreeElems.OpenElement(body);
 //    for eleSen in TreeElems.curNode.elements do begin
 //      if eleSen.idClass <> eleSenten then continue;
-//      sen := TEleSentence(eleSen);
+//      sen := TAstSentence(eleSen);
 //      if sen.sntType = sntAssign then begin    //assignment
 //        {After preparation, assignment sentences could be splitted in several assignment.}
 //        for ele in sen.elements do begin
-//          expFun := TEleExpress(ele);
+//          expFun := TAstExpress(ele);
 //          ConstantFoldExpr(expFun);  //Try to evaluate constant.
 //          if HayError then exit;
 //        end;
@@ -276,7 +276,7 @@ end;
 //        {After preparation, sntProcCal sentences could be include several
 //        assignment before the Call.}
 //        for i:=0 to sen.elements.Count-2 do begin  //Excluding the call
-//          expFun := TEleExpress(sen.elements[i]);
+//          expFun := TAstExpress(sen.elements[i]);
 //          ConstantFoldExpr(expFun);  //Try to evaluate constant.
 //          if HayError then exit;
 //        end;
@@ -285,8 +285,8 @@ end;
 //    TreeElems.CloseElement;              //Close the Body.
 //  end;
 //var
-//  fun : TEleFunDec;
-//  bod: TEleBody;
+//  fun : TAstFunDec;
+//  bod: TAstBody;
 //begin
 //  compMod := cmConsEval;    //Mode Constant evaluation.
 //  pic.disableCodegen := true;  //Disable the code generation
@@ -303,7 +303,7 @@ end;
 //end;
 //procedure TCompiler_PIC16.ConstanPropagation;
 //{Do a constant propagation optimization. }
-//  function IsForm_var_assign_const(assigExp: TEleExpress;
+//  function IsForm_var_assign_const(assigExp: TAstExpress;
 //        out varDec: TAstVarDec;
 //        out consVal: TConsValue
 //        ): boolean;
@@ -311,12 +311,12 @@ end;
 //     <variable> := <constant>
 //  }
 //  var
-//    leftOp, rightOp: TEleExpress;
+//    leftOp, rightOp: TAstExpress;
 //  begin
 //    if assigExp.opType <> otFunct then exit(false);  //Validation
 //    //Must be an assignment expression
-//    leftOp := TEleExpress(assigExp.elements[0]);
-//    rightOp := TEleExpress(assigExp.elements[1]);
+//    leftOp := TAstExpress(assigExp.elements[0]);
+//    rightOp := TAstExpress(assigExp.elements[1]);
 //    if (rightOp.Sto = stConst) and rightOp.evaluated then begin
 //       //It's the form: <variable> := <constant>
 //      varDec := leftOp.vardec;  //Takes var declaration
@@ -324,7 +324,7 @@ end;
 //      exit(true);
 //    end;
 //  end;
-//  function ChangeToConstant(Op: TEleExpress; varDec: TAstVarDec; const consVal: TConsValue): boolean;
+//  function ChangeToConstant(Op: TAstExpress; varDec: TAstVarDec; const consVal: TConsValue): boolean;
 //  {Test if the operand is a variable refering to "varDec". If so, change it to a constant
 //  type, set to "consVal" and returns TRUE. }
 //  begin
@@ -340,18 +340,18 @@ end;
 //      exit(False);
 //    end;
 //  end;
-//  function ReplaceVarByConst(assigExp: TEleExpress; varDec: TAstVarDec;
+//  function ReplaceVarByConst(assigExp: TAstExpress; varDec: TAstVarDec;
 //        const consVal: TConsValue): boolean;
 //  {Replace the variable by a constant in the right part of an assignment expression.
 //  It replacing is done, returns TRUE.
 //  }
 //  var
-//    rightOp, Op: TEleExpress;
+//    rightOp, Op: TAstExpress;
 //    ele: TAstElement;
 //  begin
 //    //Search at the right expression
 //    Result := false;
-//    rightOp := TEleExpress(assigExp.elements[1]);
+//    rightOp := TAstExpress(assigExp.elements[1]);
 //    case rightOp.opType of
 //    otConst: begin
 //      //Nothing to replace
@@ -366,7 +366,7 @@ end;
 //      {Check for all of the operands of the function. Normal function at this level,
 //      won't have child nodes.}
 //      for ele in rightOp.elements do begin
-//        Op := TEleExpress(ele);
+//        Op := TAstExpress(ele);
 //        if ChangeToConstant(Op, varDec, consVal) then begin
 //          Result := True;
 //        end;
@@ -374,11 +374,11 @@ end;
 //    end;
 //    end;
 //  end;
-//  procedure ConstantPropagBody(body: TEleBody);
+//  procedure ConstantPropagBody(body: TAstBody);
 //  {Do constant propagation in all sentences of the body. }
 //  var
-//    assigExp, assigToDelete: TEleExpress;
-//    sen: TEleSentence;
+//    assigExp, assigToDelete: TAstExpress;
+//    sen: TAstSentence;
 //    eleSen, par: TAstElement;
 //    n, i: Integer;
 //    varDec, varDecToDelete: TAstVarDec;
@@ -389,7 +389,7 @@ end;
 //    TreeElems.OpenElement(body);
 //    for eleSen in TreeElems.curNode.elements do begin
 //      if eleSen.idClass <> eleSenten then continue;
-//      sen := TEleSentence(eleSen);
+//      sen := TAstSentence(eleSen);
 //      if sen.sntType = sntAssign then begin    //Assignment
 //        //Explore previous posssible assigments
 //        n := sen.elements.Count;
@@ -397,7 +397,7 @@ end;
 //        replaced := false;
 //        for i:=0 to n - 1 do begin
 //          //Search the type: <variable> := <constant>
-//          assigExp := TEleExpress(sen.elements[i]);  //Shoudn't fail
+//          assigExp := TAstExpress(sen.elements[i]);  //Shoudn't fail
 //          if replaceMode then begin
 //            if ReplaceVarByConst(assigExp, varDec, consVal) then begin
 //              //Replaced here.
@@ -432,8 +432,8 @@ end;
 //    TreeElems.CloseElement;              //Close the Body.
 //  end;
 //var
-//  fun : TEleFunDec;
-//  bod: TEleBody;
+//  fun : TAstFunDec;
+//  bod: TAstBody;
 //begin
 //  compMod := cmConsEval;    //Generates code.
 //  pic.disableCodegen := true;  //Disable the code generation
@@ -448,7 +448,7 @@ end;
 //  bod := TreeElems.BodyNode;  //lee Nodo del cuerpo principal
 //  ConstantPropagBody(bod);
 //end;
-//procedure TCompiler_PIC16.PrepareBody(cntBody, sntBlock: TEleCodeCont);
+//procedure TCompiler_PIC16.PrepareBody(cntBody, sntBlock: TAstCodeCont);
 //{Do a separation for assigmente sentences in order to have the "three-address code" form
 //like used in several compilers.
 //Parameters:
@@ -457,8 +457,8 @@ end;
 //  sntBlock  -> Block of code where are the sentences to need be prepared. It's the
 //               same of "container" except when "block" is nested like in a condiitonal.
 //}
-//  function MoveParamToAssign(curContainer: TAstElement; Op: TEleExpress;
-//                             parvar: TAstVarDec): TEleExpress;
+//  function MoveParamToAssign(curContainer: TAstElement; Op: TAstExpress;
+//                             parvar: TAstVarDec): TAstExpress;
 //  {Mueve el nodo especificado "Op", que representa a un parámetro de la función, a una
 //  nueva instruccion de asignación (que es creada al inicio del bloque "curContainer") y
 //  reemplaza el nodo faltante por una variable temporal que es la que se crea en la
@@ -468,9 +468,9 @@ end;
 //  Retorna la instrucción de asignación creada.
 //  }
 //  var
-//    _setaux: TEleExpress;
-//    Op1aux: TEleExpress;
-//    funSet: TEleFunDec;
+//    _setaux: TAstExpress;
+//    Op1aux: TAstExpress;
+//    funSet: TAstFunDec;
 //  begin
 //    //Create the new _set() expression.
 //    _setaux := CreateExpression('_set', typNull, otFunct, Op.srcDec);
@@ -498,20 +498,20 @@ end;
 //
 //    exit(_setaux);
 //  end;
-//  function SplitProcCall(curContainer: TAstElement; expMethod: TEleExpress): boolean; forward;
+//  function SplitProcCall(curContainer: TAstElement; expMethod: TAstExpress): boolean; forward;
 //  function SplitSet(curContainer: TAstElement; setMethod: TAstElement): boolean;
 //  {Verify if a set expression has more than three operands. If so then
 //  it's splitted adding one or more aditional set sentences, at the beggining of
 //  "curContainer".
 //  If at least one new set sentence is added, returns TRUE.}
 //  var
-//    Op2, parExp, new_set, Op1, idx: TEleExpress;
+//    Op2, parExp, new_set, Op1, idx: TAstExpress;
 //    par: TAstElement;
 //  begin
 //    Result := false;
-//    if TEleExpress(setMethod).fundec.getset <> gsSetInSimple then exit;
+//    if TAstExpress(setMethod).fundec.getset <> gsSetInSimple then exit;
 //    //Split expressions in second operand of assignment.
-//    Op2 := TEleExpress(setMethod.elements[1]);  //Takes assignment source.
+//    Op2 := TAstExpress(setMethod.elements[1]);  //Takes assignment source.
 //    if (Op2.opType = otFunct) then begin
 //      //Op2 is a function.
 //      if Op2.fundec.callType in [ctSysNormal, ctUsrNormal] then begin  //Normal function
@@ -532,7 +532,7 @@ end;
 //        {We expect parameters A, B should be simple operands (Constant or variables)
 //        otherwise we will move them to a separate assignment}
 //        for par in Op2.elements do begin
-//          parExp := TEleExpress(par);
+//          parExp := TAstExpress(par);
 //          if parExp.opType = otFunct then begin
 //            new_set := MoveNodeToAssign(cntBody, curContainer, parExp);
 //            if HayError then exit;
@@ -543,12 +543,12 @@ end;
 //      end;
 //    end;
 //  end;
-//  function SplitExpress(curContainer: TAstElement; expMethod: TEleExpress): boolean;
+//  function SplitExpress(curContainer: TAstElement; expMethod: TAstExpress): boolean;
 //  {Verify if an expression has more than three operands. If so then
 //  it's splitted adding one or more set sentences.
 //  If at least one new set sentence is added, returns TRUE.}
 //  var
-//    parExp, new_set: TEleExpress;
+//    parExp, new_set: TAstExpress;
 //    par: TAstElement;
 //  begin
 //    Result := false;
@@ -561,7 +561,7 @@ end;
 //        SplitProcCall(curContainer, expMethod);
 //      end else if expMethod.fundec.callType = ctSysInline then begin  //Like =, >, and, ...
 //        for par in expMethod.elements do begin
-//          parExp := TEleExpress(par);
+//          parExp := TAstExpress(par);
 //          if parExp.opType = otFunct then begin
 //            new_set := MoveNodeToAssign(cntBody, curContainer, parExp);
 //            if HayError then exit;
@@ -572,12 +572,12 @@ end;
 //      end;
 //    end;
 //  end;
-//  function SplitProcCall(curContainer: TAstElement; expMethod: TEleExpress): boolean;
+//  function SplitProcCall(curContainer: TAstElement; expMethod: TAstExpress): boolean;
 //  {Split a procedure (not INLINE) call instruction, inserting an assignment instruction
 //  for each parameter.}
 //  var
-//    parExp, new_set: TEleExpress;
-//    funcBase: TEleFunDec;
+//    parExp, new_set: TAstExpress;
+//    funcBase: TAstFunDec;
 //    ipar: Integer;
 //    par: TAstParam;
 //  begin
@@ -588,7 +588,7 @@ end;
 //      {Move all parameters (children nodes) to a separate assignment}
 //      ipar := 0;  //Parameter index
 //      while expMethod.elements.Count>0 do begin  //While remain parameters.
-//        parExp := TEleExpress(expMethod.elements[0]);  //Take parameter element
+//        parExp := TAstExpress(expMethod.elements[0]);  //Take parameter element
 //        par := funcBase.pars[ipar];
 //        new_set := MoveParamToAssign(curContainer, parExp, par.vardec);
 //        if HayError then exit;
@@ -599,20 +599,20 @@ end;
 //    end;
 //  end;
 //var
-//  sen: TEleSentence;
+//  sen: TAstSentence;
 //  eleSen, _set, ele, _proc: TAstElement;
-//  _exp, Op1, Op2, val1, val2: TEleExpress;
-//  _blk, _blk0: TEleCodeCont;
+//  _exp, Op1, Op2, val1, val2: TAstExpress;
+//  _blk, _blk0: TAstCodeCont;
 //begin
 //  //Prepare assignments for arrays.
 //  for eleSen in sntBlock.elements do begin
 //    if eleSen.idClass <> eleSenten then continue;
 //    //We have a sentence here.
-//    sen := TEleSentence(eleSen);
+//    sen := TAstSentence(eleSen);
 //    if sen.sntType = sntAssign then begin  //Assignment
 //      _set := sen.elements[0];  //Takes the _set method.
-//      Op1 := TEleExpress(_set.elements[0]);  //Takes assigment target.
-//      Op2 := TEleExpress(_set.elements[1]);  //Takes assigment target.
+//      Op1 := TAstExpress(_set.elements[0]);  //Takes assigment target.
+//      Op2 := TAstExpress(_set.elements[1]);  //Takes assigment target.
 //      if (Op1.opType = otFunct) and (Op1.fundec.getset = gsGetInItem) then begin
 //        //It's a _set() for a _getitem() INLINE assignment for array.
 //        if Op1.fundec.funset = nil then begin
@@ -648,21 +648,21 @@ end;
 //  for eleSen in sntBlock.elements do begin
 //    if eleSen.idClass <> eleSenten then continue;
 //    //We have a sentence here.
-//    sen := TEleSentence(eleSen);
+//    sen := TAstSentence(eleSen);
 //    if sen.sntType = sntAssign then begin  //Assignment
 //      _set := sen.elements[0];  //Takes the one _set method.
 //      SplitSet(sen, _set)  //Might generate additional assignments sentences
 //    end else if sen.sntType = sntProcCal then begin  //Procedure call
 //      _proc := sen.elements[0];  //Takes the proc.
-//      SplitProcCall(sen, TEleExpress(_proc))
+//      SplitProcCall(sen, TAstExpress(_proc))
 //    end else if sen.sntType in [sntIF, sntREPEAT, sntWHILE] then begin
 //      //There are expressions and blocks inside conditions and loops.
 //      for ele in sen.elements do begin
 //        if ele.idClass = eleCondit then begin  //It's a condition
-//          _exp := TEleExpress(ele.elements[0]);  //The first item is a TEleExpress
+//          _exp := TAstExpress(ele.elements[0]);  //The first item is a TAstExpress
 //          SplitExpress(ele, _exp)
 //        end else if ele.idClass = eleBlock then begin   //body of IF
-//          _blk := TEleCodeCont(ele);  //The first item is a TEleExpress
+//          _blk := TAstCodeCont(ele);  //The first item is a TAstExpress
 //          PrepareBody(cntBody, _blk);
 //        end;
 //      end;
@@ -671,17 +671,17 @@ end;
 //      _blk0 := nil;
 //      for ele in sen.elements do begin
 //        if ele.idClass = eleCondit then begin  //It's a condition
-//          _exp := TEleExpress(ele.elements[0]);  //The first item is a TEleExpress
+//          _exp := TAstExpress(ele.elements[0]);  //The first item is a TAstExpress
 //          SplitExpress(ele, _exp)
 //        end else if ele.idClass = eleBlock then begin   //Initialization or body
-//          _blk := TEleCodeCont(ele);  //The first item is a TEleExpress
+//          _blk := TAstCodeCont(ele);  //The first item is a TAstExpress
 //          PrepareBody(cntBody, _blk);
 //          if _blk0 = nil then _blk0 := _blk;  //Get intialization block
 //        end;
 //      end;
 //      //Get first and last value of index.
-//      val1 := TEleExpress(_blk0.elements[0].elements[1]);
-//      val2 := TEleExpress(_exp.elements[1]);
+//      val1 := TAstExpress(_blk0.elements[0].elements[1]);
+//      val2 := TAstExpress(_exp.elements[1]);
 //      //Special cases
 //      if (val1.opType = otConst) and (val2.opType = otConst) then begin
 //        if val1.val > val2.val then begin
@@ -691,7 +691,7 @@ end;
 //      end;
 //    end else if sen.sntType = sntExit then begin
 //      if sen.elements.Count>0 then begin   //If there is argument
-//        _exp := TEleExpress(sen.elements[0]);  //The first item is a TEleExpress
+//        _exp := TAstExpress(sen.elements[0]);  //The first item is a TAstExpress
 //        SplitExpress(sen, _exp)
 //      end;
 //    end;
@@ -699,8 +699,8 @@ end;
 //end;
 //procedure TCompiler_PIC16.PrepareSentences;
 //var
-//  fun : TEleFunDec;
-//  bod: TEleBody;
+//  fun : TAstFunDec;
+//  bod: TAstBody;
 //begin
 //  //Split subroutines
 //  for fun in usedFuncs do begin
@@ -718,7 +718,7 @@ procedure TCompiler_PIC16.CreateVarsAndPars;
 var
   elem   : TAstElement;
   xvar   : TAstVarDec;
-  fun    : TEleFunDec;
+  fun    : TAstFunDec;
   mirFun: TMirFunDec;
   i: Integer;
   mirEle : TMirElement;
@@ -832,9 +832,9 @@ end;
 
 procedure TCompiler_PIC16.GenerateMIR;
 var
-  astFunDec : TEleFunDec;
+  astFunDec : TAstFunDec;
   astVardec: TAstVarDec;
-  bod : TEleBody;
+  bod : TAstBody;
   elem : TAstElement;
   mirFunDec: TMirFunDec;
   mirVarDec: TMirVarDec;
@@ -873,7 +873,7 @@ begin
             mirVarDec := AddMirVarDec(mirFunDec, astVarDec);
             astVarDec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.
           end else if elem.idClass = eleBody then begin
-            mirRep.ConvertBody(mirFunDec, TEleBody(elem));
+            mirRep.ConvertBody(mirFunDec, TAstBody(elem));
             //if HayError then exit;   //Puede haber error
           end;
       end;
@@ -1179,7 +1179,7 @@ var
   tmpList: TStringList;
   txt, OpCode, Times, state: String;
 
-  fun: TEleFunDec;
+  fun: TAstFunDec;
   caller : TAstEleCaller;
   called : TAstElement;
   //exitCall: TExitCall;
@@ -1404,8 +1404,8 @@ begin
   parsList.Destroy;
 end;
 //Inicialización
-procedure SetCodSysInline(fun: TEleFunDec);
-{Procedimiento que, por seguridad, debería ser el único acceso a TEleFunDec.codSysInline.
+procedure SetCodSysInline(fun: TAstFunDec);
+{Procedimiento que, por seguridad, debería ser el único acceso a TAstFunDec.codSysInline.
 Así se garantiza que el "casting" se haga apropiadamente.}
 begin
   fun.callType := ctSysInline;
@@ -1417,14 +1417,14 @@ begin
 end;
 
 function TCompiler_PIC16.AddSIFtoUnit(name: string; retType: TAstTypeDec; const srcPos: TSrcPos;
-               const pars: TAstParamArray): TEleFunDec;
+               const pars: TAstParamArray): TAstFunDec;
 {Create a new system function in the current element of the Syntax Tree.
  Returns the reference to the function created.
    pars   -> Array of parameters for the function to be created.
    codSys -> SIF Routine or the the routine to generate de code.
 }
 var
-   funimp: TEleFunImp;
+   funimp: TAstFunImp;
    tmpLoc: TElemLocation;
 begin
   tmpLoc := curLocation;     //Save current location. We are going to change it.
@@ -1447,7 +1447,7 @@ begin
   curLocation := tmpLoc;   //Restore current location
 end;
 function TCompiler_PIC16.AddSNFtoUnit(name: string; retType: TAstTypeDec; const srcPos: TSrcPos;
-               var pars: TAstParamArray; codSys: TCodSysNormal): TEleFunDec;
+               var pars: TAstParamArray; codSys: TCodSysNormal): TAstFunDec;
 {Create a new system function in the current element of the Syntax Tree.
  Returns the reference to the function created.
    pars   -> Array of parameters for the function to be created.
@@ -1476,8 +1476,8 @@ var
     end;
   end;
 var
-   fundec: TEleFunDec;
-   funimp: TEleFunImp;
+   fundec: TAstFunDec;
+   funimp: TAstFunImp;
    tmpLoc: TElemLocation;
    locvar: TAstVarDec;
    i: Integer;
@@ -1538,7 +1538,7 @@ function TCompiler_PIC16.CreateInUOMethod(
                       opr     : string;      //Opertaor associated to the method
                       name    : string;      //Name of the method
                       retType : TAstTypeDec;  //Type returned by the method.
-                      operTyp: TOperatorType = opkUnaryPre): TEleFunDec;
+                      operTyp: TOperatorType = opkUnaryPre): TAstFunDec;
 {Create a new system function (associated to a unary operator) in the current element of
  the AST.
  Returns the reference to the function created.}
@@ -1564,7 +1564,7 @@ function TCompiler_PIC16.CreateInBOMethod(
                       name    : string;      //Name of the method
                       parType : TAstTypeDec;  //Parameter type
                       retType : TAstTypeDec  //Type returned by the method.
-                      ): TEleFunDec;
+                      ): TAstFunDec;
 {Create a new system function (associated to a binary operator) in the current element of
  the AST. If "opr" is null, just create a method without operator.
  Returns the reference to the function created.}
@@ -1590,7 +1590,7 @@ begin
 end;
 function TCompiler_PIC16.CreateInTerMethod(clsType: TAstTypeDec;
   name: string; parType1, parType2: TAstTypeDec; retType: TAstTypeDec
-  ): TEleFunDec;
+  ): TAstFunDec;
 {Create a new system ternary INLINE function in the current element of
  the AST.
  Returns the reference to the function created.}
@@ -1616,8 +1616,8 @@ end;
 procedure TCompiler_PIC16.DefineArray(etyp: TAstTypeDec);
 var
   consDec: TAstConsDec;
-  expr: TEleExpress;
-  f, f1, f2: TEleFunDec;
+  expr: TAstExpress;
+  f, f1, f2: TAstFunDec;
 begin
   //Create assigement method
   f := CreateInBOMethod(etyp, ':=', '_set', etyp, AstTree.typNull);
@@ -1633,7 +1633,7 @@ end;
 procedure TCompiler_PIC16.DefinePointer(etyp: TAstTypeDec);
 {Set operations that defines pointers aritmethic.}
 var
-  f, f1: TEleFunDec;
+  f, f1: TAstFunDec;
 begin
   //Asignación desde word y Puntero
   f := CreateInBOMethod(etyp, ':=', '_set', typWord, AstTree.typNull);
@@ -1672,8 +1672,8 @@ end;
 procedure TCompiler_PIC16.DefineObject(etyp: TAstTypeDec);
 var
   consDec: TAstConsDec;
-  expr: TEleExpress;
-  f, f1, f2: TEleFunDec;
+  expr: TAstExpress;
+  f, f1, f2: TAstFunDec;
 begin
 //  //Create assigement method
 //  f := CreateInBOMethod(etyp, ':=', '_set', etyp, typNull, @SIF_obj_asig_obj);
@@ -1746,7 +1746,7 @@ begin
 end;
 procedure TCompiler_PIC16.CreateBooleanOperations;
 var
-  f: TEleFunDec;
+  f: TAstFunDec;
 begin
   /////////////// Boolean type ////////////////////
   //Methods-Operators
@@ -1769,7 +1769,7 @@ begin
 end;
 procedure TCompiler_PIC16.CreateByteOperations;
 var
-  f, f1, f2: TEleFunDec;
+  f, f1, f2: TAstFunDec;
 begin
   //Methods-Operators
   TreeElems.OpenElement(typByte);
@@ -1835,7 +1835,7 @@ begin
 end;
 procedure TCompiler_PIC16.CreateCharOperations;
 var
-  f: TEleFunDec;
+  f: TAstFunDec;
 begin
   /////////////// Char type ////////////////////
   TreeElems.OpenElement(typChar);
@@ -1851,7 +1851,7 @@ begin
 end;
 procedure TCompiler_PIC16.CreateWordOperations;
 var
-  f: TEleFunDec;
+  f: TAstFunDec;
 begin
   /////////////// Word type ////////////////////
   TreeElems.OpenElement(typWord);
@@ -1921,7 +1921,7 @@ begin
 end;
 procedure TCompiler_PIC16.CreateDWordOperations;
 var
-  f: TEleFunDec;
+  f: TAstFunDec;
 begin
   /////////////// DWord type ////////////////////
   TreeElems.OpenElement(typDWord);
@@ -1997,9 +1997,9 @@ end;
 procedure TCompiler_PIC16.CreateSystemUnitInAST;
 {Initialize the system elements. Must be executed just one time when compiling.}
 var
-  uni: TEleUnit;
+  uni: TAstUnit;
   pars: TAstParamArray;  //Array of parameters
-  f, sifDelayMs, sifWord: TEleFunDec;
+  f, sifDelayMs, sifWord: TAstFunDec;
 begin
   //////// Funciones del sistema ////////////
   //Implement calls to Code Generator

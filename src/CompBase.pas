@@ -48,8 +48,8 @@ TCompilerBase = class(TContexts)
 private
   function AddArrayTypeDecCC(typName: string; nELem: integer;
     itType: TAstTypeDec; const srcPos: TSrcPos): TAstTypeDec;
-  function MethodGetPtr(const OpType: TAstTypeDec): TEleFunDec;
-  function proc_addr: TEleExpress;
+  function MethodGetPtr(const OpType: TAstTypeDec): TAstFunDec;
+  function proc_addr: TAstExpress;
 protected  //Parser routines
   ExprLevel  : Integer;  //Nivel de anidamiento de la rutina de evaluación de expresiones
   function EOExpres: boolean;
@@ -71,19 +71,19 @@ protected  //Elements creation
   function CreateEleTypeDecPtr(const typName: string; const srcPos: TSrcPos;
                          ptrType: TAstTypeDec): TAstTypeDec;
   function CreateEleTypeDecObject(const typName: string; const srcPos: TSrcPos): TAstTypeDec;
-  function CreateEleUnit(uniName: string): TEleUnit;
-  function CreateEleFunImp(funName: string; typ: TAstTypeDec): TEleFunImp;
+  function CreateEleUnit(uniName: string): TAstUnit;
+  function CreateEleFunImp(funName: string; typ: TAstTypeDec): TAstFunImp;
   function CreateExpression(opName: string; dtType: TAstTypeDec; opType: TopType;
-                            srcPos: TSrcPos): TEleExpress;
+                            srcPos: TSrcPos): TAstExpress;
   function AddExpressAndOpen(opName: string; dtType: TAstTypeDec; opType: TopType;
-           srcPos: TSrcPos): TEleExpress;
+           srcPos: TSrcPos): TAstExpress;
   function AddVarDecAndOpen(varName: string; eleTyp: TAstTypeDec; srcPos: TSrcPos
     ): TAstVarDec;
   function AddConsDecAndOpen(conName: string; eleTyp: TAstTypeDec; srcPos: TSrcPos
     ): TAstConsDec;
   function AddTypeDecAndOpen(typName: string; typeSize: integer; catType: TCatType;
     group: TTypeGroup; srcPos: TSrcPos): TAstTypeDec;
-  function AddVarDecCC(varName: string; eleTyp: TAstTypeDec; curCodCont: TEleCodeCont
+  function AddVarDecCC(varName: string; eleTyp: TAstTypeDec; curCodCont: TAstCodeCont
     ): TAstVarDec;
   function OpenTypeDec(const srcPos: TSrcPos; tname: string; tsize: word;
     catType: TCatType; group: TTypeGroup; location: TTypeLocat): TAstTypeDec;
@@ -91,17 +91,17 @@ protected  //Elements creation
   procedure CreateFunctionParams(var funPars: TAstParamArray);
   function AddFunctionUNI(funName: string; retTyp: TAstTypeDec;
     const srcPos: TSrcPos; const pars: TAstParamArray; Interrup: boolean;
-  addParam: boolean): TEleFunDec;
+  addParam: boolean): TAstFunDec;
   function AddFunctionDEC(funName: string; retTyp: TAstTypeDec; const srcPos: TSrcPos;
-                          const pars: TAstParamArray; Interrup: boolean): TEleFunDec;
+                          const pars: TAstParamArray; Interrup: boolean): TAstFunDec;
   function AddFunctionIMP(funName: string; retTyp: TAstTypeDec;
-    const srcPos: TSrcPos; funDeclar: TEleFunDec; addParam: boolean): TEleFunImp;
+    const srcPos: TSrcPos; funDeclar: TAstFunDec; addParam: boolean): TAstFunImp;
 protected //Element set
-  procedure SetVariabCA(varExp: TEleExpress; offVardec: TAstVarDec);
-  procedure SetVariabCA(varExp: TEleExpress; offset: word);
-  procedure SetVariabCVA(varExp: TEleExpress; offVardec: TAstVarDec;
+  procedure SetVariabCA(varExp: TAstExpress; offVardec: TAstVarDec);
+  procedure SetVariabCA(varExp: TAstExpress; offset: word);
+  procedure SetVariabCVA(varExp: TAstExpress; offVardec: TAstVarDec;
     idxVar: TAstVarDec);
-  procedure AddOffsetVariab(varExp: TEleExpress; offConst: TEleExpress);
+  procedure AddOffsetVariab(varExp: TAstExpress; offConst: TAstExpress);
 
 protected  //Containers
   procedure RefreshAllElementLists;
@@ -115,9 +115,9 @@ protected  //Containers
 public     //Containers
   TreeElems     : TAstTree;    //Abstract syntax tree.
   mirRep        : TMirList;     //Container for MIR representation
-  usedFuncs     : TEleFunDecs; //Store only used functions
-  unusedFuncs   : TEleFunDecs; //Store only unused functions
-  interruptFunct: TEleFunDec;  //Store ths only Interrupt function
+  usedFuncs     : TAstFunDecs; //Store only used functions
+  unusedFuncs   : TAstFunDecs; //Store only unused functions
+  interruptFunct: TAstFunDec;  //Store ths only Interrupt function
 protected //Compiler events
 //  {This is one way the Parser can communicate with the Code Generator, considering this
 //  unit is independent of Code Generation.}
@@ -136,29 +136,29 @@ protected //Calls to Code Generator (GenCod)
   //Validate phisycal address
   callStartProgram : procedure of object;
   callEndProgram   : procedure of object;
-  sifFunInc: TEleFunDec;   {Referencia a la función de incremento. Se guarda para evitar
+  sifFunInc: TAstFunDec;   {Referencia a la función de incremento. Se guarda para evitar
                         hacer búsqueda innecesaria. Notar que esta es una referencia
                         hacia el generador de código que se llenará posteriormente.}
 protected //Expressions
   function CompatibleTypes(typ1, typ2: TAstTypeDec): boolean;
   function MethodFromBinOperator(const OpType: TAstTypeDec; Op: string;
-    OpType2: TAstTypeDec): TEleFunDec;
+    OpType2: TAstTypeDec): TAstFunDec;
   function MethodFromUnaOperator(const OpType: TAstTypeDec; Op: string
-    ): TEleFunDec;
+    ): TAstFunDec;
   function MethodGetItem(const OpType: TAstTypeDec; IdxType: TAstTypeDec
-    ): TEleFunDec;
+    ): TAstFunDec;
   function AddConstDeclarByte(decName: string; consVal: integer): TAstConsDec;
-  function GetConstantArray(arrDelimt: char; itmType: TAstTypeDec): TEleExpress;
+  function GetConstantArray(arrDelimt: char; itmType: TAstTypeDec): TAstExpress;
   function GetConstantArrayStr(out arrtyp: TAstTypeDec; allowChar: boolean = true
-    ): TEleExpress;
-  function GetOperand: TEleExpress;
-  function GetExpression(const prec: Integer): TEleExpress;
+    ): TAstExpress;
+  function GetOperand: TAstExpress;
+  function GetExpression(const prec: Integer): TAstExpress;
   function AddExpressionConstByte(name: string; bytValue: byte; srcPos: TSrcPos
-    ): TEleExpress;
+    ): TAstExpress;
   function AddExpressionConstWord(name: string; wrdValue: word; srcPos: TSrcPos
-    ): TEleExpress;
+    ): TAstExpress;
   function AddExpressionConstBool(name: string; boolValue: Boolean; srcPos: TSrcPos
-    ): TEleExpress;
+    ): TAstExpress;
 public     //Types to implement
   typByte : TAstTypeDec;
   typBool : TAstTypeDec;
@@ -405,7 +405,7 @@ const
   BLOCK_SIZE = 10;    //Tamaño de bloque.
 var
   curSize, n: Integer;
-  par: TEleExpress;
+  par: TAstExpress;
 begin
   //func0.ClearParams;
   if EOBlock or EOExpres then begin
@@ -507,31 +507,31 @@ begin
   Result := CreateEleTypeDec(typName, srcPos, -1, tctObject, t_object);
 
 end;
-function TCompilerBase.CreateEleUnit(uniName: string): TEleUnit;
+function TCompilerBase.CreateEleUnit(uniName: string): TAstUnit;
 var
-  uni: TEleUnit;
+  uni: TAstUnit;
 begin
-  uni := TEleUnit.Create;
+  uni := TAstUnit.Create;
   uni.name := uniName;
   Result := uni;
 end;
-function TCompilerBase.CreateEleFunImp(funName: string; typ: TAstTypeDec): TEleFunImp;
+function TCompilerBase.CreateEleFunImp(funName: string; typ: TAstTypeDec): TAstFunImp;
 {Crea una nueva función y devuelve la referencia a la función.}
 var
-  fun : TEleFunImp;
+  fun : TAstFunImp;
 begin
-  fun := TEleFunImp.Create;
+  fun := TAstFunImp.Create;
   fun.name:= funName;
   fun.retType := typ;
   fun.ClearParams;
   Result := fun;
 end;
 function TCompilerBase.CreateExpression(opName: string; dtType: TAstTypeDec;
-  opType: TopType; srcPos: TSrcPos): TEleExpress;
+  opType: TopType; srcPos: TSrcPos): TAstExpress;
 var
-  expr: TEleExpress;
+  expr: TAstExpress;
 begin
-  expr := TEleExpress.Create;
+  expr := TAstExpress.Create;
   expr.name := opName;
   expr.Typ := dtType;  //Get data type
   expr.opType := opType;
@@ -539,9 +539,9 @@ begin
   exit(expr);
 end;
 function TCompilerBase.AddExpressAndOpen(opName: string; dtType: TAstTypeDec; opType: TopType;
-         srcPos: TSrcPos): TEleExpress;
+         srcPos: TSrcPos): TAstExpress;
 var
-  expr: TEleExpress;
+  expr: TAstExpress;
 begin
   expr := CreateExpression(opName, dtType, opType, srcPos);
   if opType = otConst then expr.Sto := stConst;  //The only option.
@@ -549,7 +549,7 @@ begin
   exit(expr);
 end;
 function TCompilerBase.AddExpressionConstByte(name: string; bytValue: byte;
-         srcPos: TSrcPos): TEleExpress;
+         srcPos: TSrcPos): TAstExpress;
 {Create a constant element expression like generated by GetExpression(), when analyze
 a literal numeric of type Byte.}
 begin
@@ -559,7 +559,7 @@ begin
   TreeElems.AddElement(Result);
 end;
 function TCompilerBase.AddExpressionConstWord(name: string; wrdValue: word;
-  srcPos: TSrcPos): TEleExpress;
+  srcPos: TSrcPos): TAstExpress;
 {Create a constant element expression like generated by GetExpression(), when analyze
 a literal numeric of type Word.}
 begin
@@ -569,7 +569,7 @@ begin
   TreeElems.AddElement(Result);
 end;
 function TCompilerBase.AddExpressionConstBool(name: string; boolValue: Boolean;
-  srcPos: TSrcPos): TEleExpress;
+  srcPos: TSrcPos): TAstExpress;
 {Create a constant element expression like generated by GetExpression(), when analyze
 a literal boolean.}
 begin
@@ -682,7 +682,7 @@ begin
   exit(xtyp);
 end;
 function TCompilerBase.AddVarDecCC(varName: string; eleTyp: TAstTypeDec;
-                                   curCodCont: TEleCodeCont): TAstVarDec;
+                                   curCodCont: TAstCodeCont): TAstVarDec;
 {Add a variable declaration. The declaration is created before the current
 Code container (The declaration section).}
 var
@@ -779,14 +779,14 @@ begin
 end;
 function TCompilerBase.AddFunctionUNI(funName: string; retTyp: TAstTypeDec;
   const srcPos: TSrcPos; const pars: TAstParamArray; Interrup: boolean;
-  addParam: boolean): TEleFunDec;
+  addParam: boolean): TAstFunDec;
 {Create a new function, in normal mode (In the Main program or a like a private function
 in Implementation section) and add it to the Syntax Tree in the current node.
 - addParam -> Indicates whether the parameters will be created as variables. }
 var
-  fundec: TEleFunDec;
+  fundec: TAstFunDec;
 begin
-  fundec := TEleFunDec.Create;
+  fundec := TAstFunDec.Create;
   fundec.name:= funName;
   fundec.retType := retTyp;
 
@@ -800,13 +800,13 @@ begin
   if addParam then CreateFunctionParams(fundec.pars);
 end;
 function TCompilerBase.AddFunctionDEC(funName: string; retTyp: TAstTypeDec;
-  const srcPos: TSrcPos; const pars: TAstParamArray; Interrup: boolean): TEleFunDec;
+  const srcPos: TSrcPos; const pars: TAstParamArray; Interrup: boolean): TAstFunDec;
 {Create a new function, in DECLARATION mode (Forward or Interface) and add it
 to the Syntax Tree in the current node. No new node is opened.}
 var
-  fundec: TEleFunDec;
+  fundec: TAstFunDec;
 begin
-  fundec := TEleFunDec.Create;
+  fundec := TAstFunDec.Create;
   fundec.name:= funName;
   fundec.retType := retTyp;
 //  xfun.ClearParams;  //Not necessary.
@@ -823,11 +823,11 @@ begin
 //  TreeElems.CloseElement;
 end;
 function TCompilerBase.AddFunctionIMP(funName: string; retTyp: TAstTypeDec;
-  const srcPos: TSrcPos; funDeclar: TEleFunDec; addParam: boolean): TEleFunImp;
+  const srcPos: TSrcPos; funDeclar: TAstFunDec; addParam: boolean): TAstFunImp;
 {Create a new function, in IMPLEMENTATION mode (Forward or Interface) and add it
 to the Syntax Tree in the current node. }
 var
-  funimp: TEleFunImp;
+  funimp: TAstFunImp;
   tmp: TAstListCallers;
   i: Integer;
 begin
@@ -848,10 +848,10 @@ begin
   funimp.pars := funDeclar.pars;     //Copy from declaration
 end;
 //Element set
-procedure TCompilerBase.SetVariabCA(varExp: TEleExpress; offVardec: TAstVarDec);
+procedure TCompilerBase.SetVariabCA(varExp: TAstExpress; offVardec: TAstVarDec);
 {Set expression as a CAvar from a variable declaration (addressed by a constant).}
 var
-  constOffset: TEleExpress;
+  constOffset: TAstExpress;
 begin
   varExp.opType    := otVariab;
   varExp.elements.Clear;             //Remove all children
@@ -861,12 +861,12 @@ begin
   constOffset.addrVar := offVardec;
   varExp.AddElement(constOffset);
 end;
-procedure TCompilerBase.SetVariabCA(varExp: TEleExpress; offset: word);
+procedure TCompilerBase.SetVariabCA(varExp: TAstExpress; offset: word);
 {Set expression as a variable addressed by a constant. Like an anonymous variable:
 ($0800)^
 }
 var
-  constOffset: TEleExpress;
+  constOffset: TAstExpress;
 begin
   varExp.opType    := otVariab;
   varExp.Sto       := stRamFix;  //*** Eliminar a futuro
@@ -877,11 +877,11 @@ begin
   constOffset.value.ValInt := offset;
   varExp.AddElement(constOffset);
 end;
-procedure TCompilerBase.SetVariabCVA(varExp: TEleExpress; offVardec: TAstVarDec;
+procedure TCompilerBase.SetVariabCVA(varExp: TAstExpress; offVardec: TAstVarDec;
   idxVar: TAstVarDec);
 {Set expression as a variable addressed by a constant and an index variable.}
 var
-  idxExpress: TEleExpress;
+  idxExpress: TAstExpress;
 begin
   SetVariabCA(varExp, offVardec);
   //Add the Index Expression
@@ -889,17 +889,17 @@ begin
   SetVariabCA(idxExpress,idxVar);
   varExp.AddElement(idxExpress);
 end;
-procedure TCompilerBase.AddOffsetVariab(varExp: TEleExpress; offConst: TEleExpress);
+procedure TCompilerBase.AddOffsetVariab(varExp: TAstExpress; offConst: TAstExpress);
 {Add an Offset Expression (must be constant) as an operand adding the current Offset of
 the variable.
 "offConst" must be a constant expression and must be part of the AST. It must be moved
 from its original position.}
 var
-  eleMeth: TEleExpress;
-  offset: TEleExpress;
-  funSet: TEleFunDec;
+  eleMeth: TAstExpress;
+  offset: TAstExpress;
+  funSet: TAstFunDec;
 begin
-  offset := TEleExpress(varExp.elements[0]);
+  offset := TAstExpress(varExp.elements[0]);
   eleMeth := CreateExpression('_add', typWord, otFunct, GetSrcPos);
   TreeElems.InsertParentTo(eleMeth, offset);
   TreeElems.ChangeParentTo(eleMeth, offConst);
@@ -925,7 +925,7 @@ Para que esta función trabaje bien, debe haberse llamado a RefreshAllElementLis
   Devuelve la cantidad de funciones no usadas.
   Para que esta función trabaje bien, debe estar actualizada "TreeElems.AllFuncs". }
   var
-    fun, fun2: TEleFunDec;
+    fun, fun2: TAstFunDec;
   begin
     Result := 0;
     for fun in TreeElems.AllFuncs do begin
@@ -963,7 +963,7 @@ y a RemoveUnusedFunc(). }
   Devuelve la cantidad de variables no usadas.}
   var
     xvar, xvar2: TAstVarDec;
-    fun: TEleFunDec;
+    fun: TAstFunDec;
   begin
     Result := 0;
     {Quita, a las variables, las referencias de variables no usadas.
@@ -1017,7 +1017,7 @@ y a RemoveUnusedFunc(). }
   var
     cons, cons2: TAstConsDec;
     xvar: TAstVarDec;
-    fun: TEleFunDec;
+    fun: TAstFunDec;
   begin
     Result := 0;
     {Quita, a las constantes, las referencias de constantes no usadas.
@@ -1089,7 +1089,7 @@ y a RemoveUnusedFunc(). }
     cons: TAstConsDec;
     xvar: TAstVarDec;
     xtyp, xtyp2{, ntyp}: TAstTypeDec;
-    fun : TEleFunDec;
+    fun : TAstFunDec;
   begin
 //TreeElems.OpenElement(TreeElems.main);
 //ntyp := TAstTypeDec(TreeElems.FindFirst('tarr1'));
@@ -1165,7 +1165,7 @@ El objetivo final es determinar los accesos a las unidades.}
   procedure ScanUnits(nod: TAstElement);
   var
     ele, eleInter , elemUnit: TAstElement;
-    uni : TEleUnit;
+    uni : TAstUnit;
     cal , c: TAstEleCaller;
   begin
 //debugln('+Scanning in:'+nod.name);
@@ -1174,7 +1174,7 @@ El objetivo final es determinar los accesos a las unidades.}
       if ele.idClass = eleUnit then begin
 //debugln('  Unit:'+ele.name);
         //"ele" es una unidad de "nod". Verifica si es usada
-        uni := TEleUnit(ele);    //Accede a la unidad.
+        uni := TAstUnit(ele);    //Accede a la unidad.
         uni.ReadInterfaceElements; //Accede a sus campos
         {Buscamos por los elementos de la interfaz de la unidad para ver si son
          usados}
@@ -1206,9 +1206,9 @@ procedure TCompilerBase.UpdateFunLstCalled;
 {Actualiza la lista lstCalled de las funciones, para saber, a qué fúnciones llama
  cada función.}
 var
-  fun    : TEleFunDec;
+  fun    : TAstFunDec;
   itCall : TAstEleCaller;
-  whoCalls: TEleBody;
+  whoCalls: TAstBody;
   n: Integer;
 begin
   for fun in TreeElems.AllFuncs do begin
@@ -1222,7 +1222,7 @@ begin
         GenError('Design error.');
         exit;
       end;
-      whoCalls := TEleBody(itCall.caller);
+      whoCalls := TAstBody(itCall.caller);
       //Se agregan todas las llamadas (así sean al mismo porcedimiento) pero luego
       //AddCalled(), los filtra.
       whoCalls.Parent.AddCalled(fun);  //Agrega al procediminto
@@ -1251,7 +1251,7 @@ procedure TCompilerBase.SeparateUsedFunctions;
 2. Set interruptFunct to point to the interrupt function (Only one).
 Must be called after call to RemoveUnusedFunc().}
 var
-  fun : TEleFunDec;
+  fun : TAstFunDec;
 begin
   usedFuncs.Clear;
   unusedFuncs.Clear;
@@ -1291,7 +1291,7 @@ function TCompilerBase.AddConstDeclarByte(decName: string;
 The constant declaration is added to the current node in the AST.}
 var
   consDec: TAstConsDec;
-  expr: TEleExpress;
+  expr: TAstExpress;
 begin
   if consVal>255 then begin
     consDec := AddConsDecAndOpen(decName, typWord, GetSrcPos);
@@ -1307,7 +1307,7 @@ begin
   TreeElems.CloseElement;  //Close constant.
   exit(consDec);
 end;
-function TCompilerBase.GetConstantArray(arrDelimt: char; itmType: TAstTypeDec): TEleExpress;
+function TCompilerBase.GetConstantArray(arrDelimt: char; itmType: TAstTypeDec): TAstExpress;
 {Get an array literal, like [1,2,3] or ('a','b').
 Parameters:
   "arrDelimt"  -> Is the ending delimiter of the array. The first delimiter is not
@@ -1327,7 +1327,7 @@ Parameters:
 var
   srcpos     : TSrcPos;
   ReadType, endWithComma: Boolean;
-  Op, Op1, itemExp: TEleExpress;
+  Op, Op1, itemExp: TAstExpress;
   itmTypeRead: TAstTypeDec;     //Type read from items
   xtyp       : TAstTypeDec;
   nElem      : Integer;
@@ -1426,7 +1426,7 @@ begin
   //Check if it's evaluated. *** ¿Y no sería mejor llamar a Op.Evaluate() ?
   Op.evaluated := true;  //This will be the more common
   for ele in Op.elements do begin
-    itemExp := TEleExpress(ele);   //Recover type.
+    itemExp := TAstExpress(ele);   //Recover type.
     if not itemExp.evaluated then begin
       Op.evaluated := false;
       break;
@@ -1435,14 +1435,14 @@ begin
   exit(Op);
 end;
 function TCompilerBase.GetConstantArrayStr(out arrtyp: TAstTypeDec;
-                                           allowChar: boolean = true): TEleExpress;
+                                           allowChar: boolean = true): TAstExpress;
 {Get a string token, including the adjacent characters in the format: #32 or #0.
 The strings are interpreted as an arrays of char.
-Generates a constant TEleExpress in the current position of the AST.
+Generates a constant TAstExpress in the current position of the AST.
 If it's needed, creates a new array type in the declaration section.
 The type used for the constants array is returned in "arrtyp".}
 var
-  Op1: TEleExpress;
+  Op1: TAstExpress;
   srcpos: TSrcPos;
   nElem, strsize: SizeInt;
   str, typName: String;
@@ -1500,19 +1500,19 @@ begin
 end;
 //Expressions
 function TCompilerBase.MethodFromBinOperator(const OpType: TAstTypeDec; Op: string;
-  OpType2: TAstTypeDec): TEleFunDec;
+  OpType2: TAstTypeDec): TAstFunDec;
 {Find a method in the class "OpType" associated to a binary operator "Op", whose unique
 parameter is of type "OpType2".
 If not a matching method found, returns NIL.
 }
 var
-  xfun: TEleFunDec;
+  xfun: TAstFunDec;
   att: TAstElement;
 begin
   Op := UpCase(Op);
   for att in OpType.elements do begin
     if att.idClass in [eleFuncImp, eleFuncDec] then begin  //Only for methods
-      xfun := TEleFunBase(att).declar;
+      xfun := TAstFunBase(att).declar;
       if (xfun.oper = Op) and
          (length(xfun.pars) = 2) and  //Binary methods have 2 parameters.
          CompatibleTypes(xfun.pars[1].typ, OpType2) {(xfun.pars[1].typ = OpType2)}
@@ -1525,9 +1525,9 @@ begin
   exit(nil);
 end;
 function TCompilerBase.MethodFromUnaOperator(const OpType: TAstTypeDec; Op: string
-  ): TEleFunDec;
+  ): TAstFunDec;
 var
-  xfun: TEleFunDec;
+  xfun: TAstFunDec;
   att: TAstElement;
 begin
 {Find a method in the class "OpType" associated to a unary operator "Op".
@@ -1536,7 +1536,7 @@ If not a matching method found, returns NIL.
   Op := UpCase(Op);
   for att in OpType.elements do begin
     if att.idClass in [eleFuncImp, eleFuncDec] then begin  //Only for methods
-      xfun := TEleFunBase(att).declar;
+      xfun := TAstFunBase(att).declar;
       if (xfun.oper = Op) and
          (length(xfun.pars) = 0) then begin  //Unary methods have 0 parameter.
         exit(xfun);
@@ -1547,18 +1547,18 @@ If not a matching method found, returns NIL.
   exit(nil);
 end;
 function TCompilerBase.MethodGetItem(const OpType: TAstTypeDec;
-  IdxType: TAstTypeDec): TEleFunDec;
+  IdxType: TAstTypeDec): TAstFunDec;
 {Find the method _getitem() in the class "OpType", whose unique parameter is of type
 "IdxType".
 If not a matching method found, returns NIL.
 }
 var
-  xfun: TEleFunDec;
+  xfun: TAstFunDec;
   att: TAstElement;
 begin
   for att in OpType.elements do begin
     if att.idClass in [eleFuncImp, eleFuncDec] then begin  //Only for methods
-      xfun := TEleFunBase(att).declar;
+      xfun := TAstFunBase(att).declar;
       if (xfun.getset = gsGetInItem) and
          CompatibleTypes(xfun.pars[1].typ, IdxType) {(xfun.pars[1].typ = IdxType)}
       then begin  //Second parameter muts match IdxType
@@ -1569,17 +1569,17 @@ begin
   //Not found
   exit(nil);
 end;
-function TCompilerBase.MethodGetPtr(const OpType: TAstTypeDec): TEleFunDec;
+function TCompilerBase.MethodGetPtr(const OpType: TAstTypeDec): TAstFunDec;
 {Find the method _getptr() in the class "OpType".
 If not a matching method found, returns NIL.
 }
 var
-  xfun: TEleFunDec;
+  xfun: TAstFunDec;
   att: TAstElement;
 begin
   for att in OpType.elements do begin
     if att.idClass in [eleFuncImp, eleFuncDec] then begin  //Only for methods
-      xfun := TEleFunBase(att).declar;
+      xfun := TAstFunBase(att).declar;
       if (xfun.getset = gsGetInPtr) then begin
         exit(xfun);
       end;
@@ -1588,16 +1588,16 @@ begin
   //Not found
   exit(nil);
 end;
-function  TCompilerBase.proc_addr(): TEleExpress;
+function  TCompilerBase.proc_addr(): TAstExpress;
 {
 The operand read is added to the syntax tree, as a TxpEleExpress element, and returned
 in this function.
 }
 var
   ele, curLoc: TAstElement;
-  Op1, constArr: TEleExpress;
+  Op1, constArr: TAstExpress;
   xvar, _varaux: TAstVarDec;
-  xfun: TEleFunDec;
+  xfun: TAstFunDec;
   arrtyp: TAstTypeDec;
 begin
   Next;    //Pasa al siguiente
@@ -1620,7 +1620,7 @@ begin
     end else if ele.idClass = eleFuncDec then begin  //Is function
       {It's a function (or procedure), but we don't know what's the exact funtion because
 //      could be different overload versions.}
-      xfun := TEleFunDec(ele);
+      xfun := TAstFunDec(ele);
       AddCallerToFromCurr(xfun);
       Op1 := AddExpressAndOpen(ele.name, typWord, otConst, GetSrcPos);
       Op1.SetAddrFun(xfun);
@@ -1628,7 +1628,7 @@ begin
     end else if ele.idClass = eleFuncImp then begin  //Is function
       {It's a function (or procedure), but we don't know what's the exact funtion because
 //      could be different overload versions.}
-      xfun := TEleFunImp(ele).declar;  //Get the declaration
+      xfun := TAstFunImp(ele).declar;  //Get the declaration
       AddCallerToFromCurr(xfun);
       Op1 := AddExpressAndOpen(ele.name, typWord, otConst, GetSrcPos);
       Op1.SetAddrFun(xfun);
@@ -1661,7 +1661,7 @@ begin
   end;
   Result := Op1;  //aquí debe haber quedado el resultado
 end;
-function TCompilerBase.GetOperand(): TEleExpress;
+function TCompilerBase.GetOperand(): TAstExpress;
 {Get an "Operand" element of the Pascal language, from the current context.
 If an operand is obtained, it is added to the current node in the AST as a TxpEleExpress
 (and set as active node), and the reference is returned in this function.
@@ -1741,11 +1741,11 @@ in this function.
     end;
   end;
   function ResolveFunction(const pars: TAstParamArray;   //Parameters
-           xfun: TEleFunDec;   //First function found in the Syntax Tree.
-           searchState: TAstFindState): TEleFunDec;
+           xfun: TAstFunDec;   //First function found in the Syntax Tree.
+           searchState: TAstFindState): TAstFunDec;
   {Identifies the function that match with the parameters}
   var
-    firstFunc: TEleFunBase;
+    firstFunc: TAstFunBase;
   begin
     TreeElems.curFind := searchState;  //Restore previous Finding, to continue the searching.
     firstFunc := xfun;  //Save reference to original function.
@@ -1763,12 +1763,12 @@ in this function.
     {$IFDEF LogExpres} Op.txt:= cIn.tok; {$ENDIF} //Toma el texto
     Result := xfun;
   end;
-  procedure InicPointerRef(varOp: TEleExpress; idxVar: TEleExpress; offset: integer);
+  procedure InicPointerRef(varOp: TAstExpress; idxVar: TAstExpress; offset: integer);
   {Init the variable "varOp" to be a "Pointer referenced variable". This is like giving a
   different storage mode to the variable but here, in the AST, we don't manage hardware
   storages. This is intended to be in a higher abstraction level that hardware allocation.}
   var
-    constOff: TEleExpress;
+    constOff: TAstExpress;
   begin
     TreeElems.OpenElement(varOp);
     TreeElems.AddElement(idxVar);
@@ -1781,17 +1781,17 @@ in this function.
 var
   xvar: TAstVarDec;
   xcon: TAstConsDec;
-  eleMeth, Op1, OpIdx, constOff: TEleExpress;
+  eleMeth, Op1, OpIdx, constOff: TAstExpress;
   level: Integer;
   ele, field, eleDec: TAstElement;
   posCall: TSrcPos;
   pars: TAstParamArray;
-  xfun, funSet: TEleFunDec;
+  xfun, funSet: TAstFunDec;
   findState: TAstFindState;
   upTok: String;
   typ, arrtyp: TAstTypeDec;
   cod: Longint;
-  opr1: TEleFunImp;
+  opr1: TAstFunImp;
   valInt: Int64;
 begin
   SkipWhites;
@@ -1836,8 +1836,8 @@ begin
       posCall := GetSrcPos;  //Save position of the call.
       Next;               //Take identifier
       SkipWhites;         //Take spaces
-      if eleDec.idClass = eleFuncDec then xfun := TEleFunDec(eleDec)
-      else xfun := TEleFunImp(eleDec).declar;  //Es implementación
+      if eleDec.idClass = eleFuncDec then xfun := TAstFunDec(eleDec)
+      else xfun := TAstFunImp(eleDec).declar;  //Es implementación
       {We create the expression here because we're going to create parameters nodes
       when scanning with CaptureParams()}
       Op1 := AddExpressAndOpen(eleDec.name, xfun.retType, otFunct, posCall);
@@ -1940,7 +1940,7 @@ begin
         posCall := GetSrcPos;   //Save position of the call.
         Next;               //Take identifier
         SkipWhites;         //Take spaces
-        xfun := TEleFunBase(field).declar;  //The ancestor of eleFuncImp and eleFuncDec
+        xfun := TAstFunBase(field).declar;  //The ancestor of eleFuncImp and eleFuncDec
         eleMeth := CreateExpression(field.name, xfun.retType, otFunct, posCall);
         TreeElems.InsertParentTo(eleMeth, Op1);
         TreeElems.OpenElement(eleMeth);  //Set parent to add parameters.
@@ -2012,7 +2012,7 @@ begin
   end;
   Result := Op1;  //aquí debe haber quedado el resultado
 end;
-function TCompilerBase.GetExpression(const prec: Integer): TEleExpress;
+function TCompilerBase.GetExpression(const prec: Integer): TAstExpress;
 {Analyze a common Pascal expression, and represent it in the AST, according to the
 predefined rules.
 In normal case, creates an element TxpEleExpress, in the current node, and returns a
@@ -2020,10 +2020,10 @@ reference to the expression element root.
 In some cases like when reading arrays or objects, a new type can be created.
 }
 var
-  Op1, Op2: TEleExpress;
+  Op1, Op2: TAstExpress;
   p: TContextState;
-  eleMeth: TEleExpress;
-  opr1: TEleFunDec;
+  eleMeth: TAstExpress;
+  opr1: TAstFunDec;
   oprTxt: String;
   oprPos: TSrcPos;
   oprPre: Integer;
@@ -2157,8 +2157,8 @@ and AddCallerToFromCurBody, to have more control on the types of elements added 
 "callers". }
 var
   fc: TAstEleCaller;
-  funimp: TEleFunImp;
-  fundec: TEleFunDec;
+  funimp: TAstFunImp;
+  fundec: TAstFunDec;
 begin
   //Creates caller class.
   fc:= TAstEleCaller.Create;
@@ -2166,12 +2166,12 @@ begin
   fc.curPos := GetSrcPos;  //Can be changed later if not apply.
   if toElem.idClass = eleFuncImp then begin
     //For implementation of functions, the caller are added directly.
-    funimp := TEleFunImp(toElem);
+    funimp := TAstFunImp(toElem);
     //Declaration "funimp.declar" must always exist.
     funimp.declar.lstCallers.Add(fc);
   end else if toElem.idClass = eleFuncDec then begin
     {Functions declaration (INTERFACE or FORWARD), receives always the caller.}
-    fundec := TEleFunDec(toElem);
+    fundec := TAstFunDec(toElem);
     fundec.lstCallers.Add(fc);
   end else begin
     //Other elements
@@ -2255,8 +2255,8 @@ begin
   mirRep    := TMirList.Create;
   ejecProg := false;
   //Containers for functions
-  usedFuncs := TEleFunDecs.Create(false);     //Only references
-  unusedFuncs:= TEleFunDecs.Create(false);
+  usedFuncs := TAstFunDecs.Create(false);     //Only references
+  unusedFuncs:= TAstFunDecs.Create(false);
 end;
 destructor TCompilerBase.Destroy;
 begin

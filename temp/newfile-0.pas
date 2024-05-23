@@ -1,10 +1,10 @@
-const
-  SPRITE1 = [$00,$00,$00,$00,$fe,$00,$03,$ff];
-var 
-  sprPucp: [8]byte;
+var
+  a: byte;
 begin
-  sprPucp := SPRITE1;  //Copy date from screen
-  asm 
+//  a := 10;
+  if a = 0 then a:=0 end;
+  asm
+  lda #1 
 	rts 
   end; 
 end.

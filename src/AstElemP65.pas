@@ -66,7 +66,7 @@ type  //TAstElement class
                 eleAsmInstr,  //ASM instruction
                 eleAsmBlock   //ASM block
                 );
-  TEleCodeCont = class;
+  TAstCodeCont = class;
   { TAstElement }
   //Base class for all syntactic elements
   TAstElement = class
@@ -102,7 +102,7 @@ type  //TAstElement class
     idClass : TAstIDClass;  //To avoid use RTTI
     elements: TAstElements; //Container list for other elements
     location: TElemLocation;  //Element location
-    codCont : TEleCodeCont;  //Temporal field for Code container.
+    codCont : TAstCodeCont;  //Temporal field for Code container.
     property name: string read Fname write Setname;
     property uname: string read Funame;
     function Path: string;
@@ -114,7 +114,7 @@ type  //TAstElement class
   public  //Location in the source code.
     //Where the element is declared.
     srcDec: TSrcPos;
-    {Ending location of the element. Useful in elements TEleBody, to limit the
+    {Ending location of the element. Useful in elements TAstBody, to limit the
     block of code.}
     srcEnd: TSrcPos;
     function posXYin(const posXY: TPoint): boolean;
@@ -125,7 +125,7 @@ type  //TAstElement class
   end;
 
   {Base class to derivate: Body, Blocks, Or a Declaration  }
-  TEleCodeCont = class(TAstElement)
+  TAstCodeCont = class(TAstElement)
   end;
 
 type  //Hardware dependent definitions
@@ -189,7 +189,7 @@ type
 
   TProcDefineVar = procedure(const varName, varInitVal: string) of object;
 
-  TEleExpress = class;
+  TAstExpress = class;
 
   TAstVarDec = class;
 
@@ -205,7 +205,7 @@ type
     absOff   : integer;       //Offset to variable when ABSOLUTE.
     //Initialization information.
     hasInit  : boolean;       //Flag. Indicates if variable is initialized
-    constDec : TEleExpress;   //Reference to the const declaration for init value. *** Eliminar
+    constDec : TAstExpress;   //Reference to the const declaration for init value. *** Eliminar
     {El campo "constDec" debería ser innecesario. Inclusive "hasInit" lo sería. Porque
     la constante de incialización es ahora un nodo hijo de la declración de la variable,
     pero se mantienen como una ayuda, más aún consdierando que GetExpression() puede
@@ -269,7 +269,7 @@ type  //Type categories and declaration styles
   );
 
 type  //Declaration elements
-  TEleFunImp = class;
+  TAstFunImp = class;
 
 
   TAstTypeDec= class;
@@ -279,7 +279,7 @@ type  //Declaration elements
   {Clase para modelar a los tipos definidos por el usuario y a los tipos del sistema.
   Es una clase relativamente extensa, debido a la flxibilidad que ofrecen los tipos en
   Pascal.}
-  TAstTypeDec = class(TEleCodeCont)
+  TAstTypeDec = class(TAstCodeCont)
   private
     fSize: word;
     internalTypes: TAstTypeDecs;  //Container for types recursively defined.
@@ -331,9 +331,9 @@ type  //Declaration elements
     destructor Destroy; override;
   end;
 
-  { TEleCodeCont }
+  { TAstCodeCont }
   //Class to modelate constants declaration.
-  TAstConsDec = class(TEleCodeCont)
+  TAstConsDec = class(TAstCodeCont)
     //Element type
     typ      : TAstTypeDec;
     {Flag to indicate if the constant value, stored in "value" field, is valid.
@@ -409,7 +409,7 @@ type  //Declaration elements
 
   { TAstVarDec }
   //Class to modelate variable declarations.
-  TAstVarDec = class(TEleCodeCont)
+  TAstVarDec = class(TAstCodeCont)
   private
     ftyp: TAstTypeDec;
     function Gettyp: TAstTypeDec;
@@ -441,8 +441,8 @@ type  //Declaration elements
   TAstVarDecs = specialize TFPGObjectList<TAstVarDec>;
 
 type  //Expression elements
-  TEleFunBase = class;
-  TEleFunDec = class;
+  TAstFunBase = class;
+  TAstFunDec = class;
 
   //Constant types
   TConsType = (
@@ -451,9 +451,9 @@ type  //Expression elements
     ctVarAddr,  //Constant expression like addr(<variable>)
     ctFunAddr   //Constant expression like addr(<function>)
   );
-  { TEleExpress }
+  { TAstExpress }
   {Represents an expression/operand. }
-  TEleExpress = class(TAstElement)
+  TAstExpress = class(TAstElement)
   public
     opType  : TopType;      //Operand type: otVariab, otConst, otFunct.
     Sto     : TStorage;     //Storage of the value (memory, register, value)
@@ -465,7 +465,7 @@ type  //Expression elements
   public  //Temporal variables required for evaluating expression.
     tempVars: TAstVarDecs;
   public  //Fields used when opType is otFunct.
-    fundec  : TEleFunDec;  //Reference to function declaration
+    fundec  : TAstFunDec;  //Reference to function declaration
     {When element is "otFunct", this flag indicates the function/method has been
     called using an operator instead of call the function by its name.}
     fcallOp : boolean;
@@ -479,7 +479,7 @@ type  //Expression elements
     value    : TConsValue;  //Constant value, when consType=ctLiteral
     consRef  : TAstConsDec;  //Ref. to TAstConsDec when consType=ctConsRef
     addrVar  : TAstVarDec;   //Ref. to TAstVarDec  when consType=ctVarAddr
-    addrFun  : TEleFunDec;   //Ref. to TEleFun when consType=ctFunAddr
+    addrFun  : TAstFunDec;   //Ref. to TAstFun when consType=ctFunAddr
     public
     //Functions to read values.
     function val: dword;
@@ -493,7 +493,7 @@ type  //Expression elements
     procedure SetLiteraltIntConst(valInt: Int64);
     procedure SetConstRef(cons0: TAstConsDec);
     procedure SetAddrVar(var0: TAstVarDec);
-    procedure SetAddrFun(fun0: TEleFunDec);
+    procedure SetAddrFun(fun0: TAstFunDec);
     procedure Evaluate();
   public //Fields used when opType is otVariab.
     offs   : integer;     //Offset to address when storage is stRamVarOf. *** Only Temporal because this field will pass to MIR.
@@ -523,7 +523,7 @@ type  //Structural elements
 //  //Clase que representa una llamada a la instrucción exit()
 //  TExitCall = class
 //    srcPos : TSrcPos;    //Posición en el código fuente
-//    codeBlk: TEleCodeCont; {Must refer to a:
+//    codeBlk: TAstCodeCont; {Must refer to a:
 //                             - Body of a function/program.
 //                             - The block section of a sentence that can contain block of
 //                               code like: IF, FOR, WHILE, REPEAT.
@@ -532,38 +532,38 @@ type  //Structural elements
 //  end;
 //  TExitCalls = specialize TFPGObjectList<TExitCall>; //lista de variables
 
-  { TEleBody }
+  { TAstBody }
   //Class to modelate the body of the main program or the procedures.
-  TEleBody = class(TEleCodeCont)
+  TAstBody = class(TAstCodeCont)
     adrr   : integer;  //Physical address
     constructor Create; override;
     destructor Destroy; override;
   end;
 
-  { TEleBlock }
+  { TAstBlock }
   //Class to modelate a block of code, like a BEGIN...END or the body of conditional.
-  TEleBlock = class(TEleCodeCont)
+  TAstBlock = class(TAstCodeCont)
     //adrr   : integer;  //dirección física
     constructor Create; override;
     destructor Destroy; override;
   end;
 
-  TEleSentence = class;
-  { TEleProgFrame }
+  TAstSentence = class;
+  { TAstProgFrame }
   {Defines an element that have a strucure similar to a general Pascal program,
   including declaractions (VAR, CONST, PROCEDURE) and a Code container (BODY).
   be used as a general code container, like the main program,
   a procedure or a unit.}
-  TEleProgFrame = class(TAstElement)
+  TAstProgFrame = class(TAstElement)
   public
-    function BodyNode: TEleBody;
+    function BodyNode: TAstBody;
   public //Manejo de llamadas a exit()
-    firstObligExit: TEleSentence;  {Referencia al primer exit(), en código obligatorio.
+    firstObligExit: TAstSentence;  {Referencia al primer exit(), en código obligatorio.
                            Si es NIL, significa que no hay ningún exit() en código
                            obligatorio, aunque podrían haber algunos en código condicional.
                            Solo importa el primero, porque después de este, ya no se
                            ejecutará ningún otro código.}
-    procedure RegisterExitCall(exitSent: TEleSentence);
+    procedure RegisterExitCall(exitSent: TAstSentence);
     {**************************************************************
     De momento, no se están usando estos campos de abajo. Con los de arriba es
     suficiente por ahora. No se necesita crear una estructura de bloques de sintaxis
@@ -571,7 +571,7 @@ type  //Structural elements
     saber si hay al menos un exit() en código obligatorio, que por fuerza será el
     último en ejecutarse}
     //lstExitCalls: TExitCalls;
-    //procedure AddExitCall(srcPos: TSrcPos; codeBlk: TEleCodeCont);
+    //procedure AddExitCall(srcPos: TSrcPos; codeBlk: TAstCodeCont);
     //function ObligatoryExit: TExitCall;
   public //Inicialización
     procedure Clear; override;
@@ -580,17 +580,17 @@ type  //Structural elements
   end;
 
   //Clase para modelar al bloque principal
-  { TEleProg }
-  TEleProg = class(TEleProgFrame)
+  { TAstProg }
+  TAstProg = class(TAstProgFrame)
     //Como este nodo representa al programa principal, se incluye información física
     srcSize: integer;  {Tamaño del código compilado. En la primera pasada, es referencial,
                         porque el tamaño puede variar al reubicarse.}
     constructor Create; override;
   end;
 
-  { TEleUnit }
+  { TAstUnit }
   //Clase para modelar a las unidades
-  TEleUnit = class(TEleProgFrame)
+  TAstUnit = class(TAstProgFrame)
   public
     srcFile: string;   //El archivo en donde está físicamente la unidad.
     InterfaceElements: TAstElements;  //Lista de eleemntos en la sección INTERFACE
@@ -598,11 +598,11 @@ type  //Structural elements
     constructor Create; override;
     destructor Destroy; override;
   end;
-  TEleUnits = specialize TFPGObjectList<TEleUnit>; //lista de constantes
+  TAstUnits = specialize TFPGObjectList<TAstUnit>; //lista de constantes
 
-  { TEleFinal }
+  { TAstFinal }
   //Clase para modelar al bloque FINALIZATION de una unidad
-  TEleFinal = class(TAstElement)
+  TAstFinal = class(TAstElement)
     adrr   : integer;  //dirección física
     constructor Create; override;
     destructor Destroy; override;
@@ -612,9 +612,9 @@ type  //Instructions relative elements
   //Sentences categories
   TSentenceType = (
     sntNull,       //Default value
-    sntAssign,     //Assignment
+//    sntAssign,     //Assignment
     sntProcCal,    //Procedure call
-    sntAsmBlock,   //ASM block
+//    sntAsmBlock,   //ASM block
 //    sntBeginEnd,   //BEGIN-END block
     sntIF,         //Conditional IF
     sntREPEAT,     //REPEAT Loop
@@ -624,9 +624,9 @@ type  //Instructions relative elements
     sntExit        //Exit instruction
   );
 
-  { TEleSentence }
+  { TAstSentence }
   {Represents a Pascal instruction.}
-  TEleSentence = class(TAstElement)
+  TAstSentence = class(TAstElement)
   public
     sntType: TSentenceType;  //Sentence type
     function sntTypeAsStr: string;
@@ -641,7 +641,7 @@ type  //Instructions relative elements
     itDefByte,    //Instruction DB
     itDefWord     //Instruction DW
   );
-  //Valid operations for TEleAsmOperat
+  //Valid operators for TAsmOperation
   TAsmOperator = (
     aopSelByte,  //Select a byte: operand.low, operand.high, >operand, <operand
     aopAddValue, //Add a value: operand + value
@@ -662,14 +662,14 @@ type  //Instructions relative elements
     nam: string;     {Operand name. Used when operand is an unsolved reference}
     used: boolean;   //Indicates if operand is used or not.
     //Operations
-    operations: TAsmOperations;
+    operations: TAsmOperations;    //Operations applied on Operand
     procedure ClearOperations;
     procedure AddOperation(oper: TAsmOperator; value: word);
   end;
-  { TEleAsmInstr }
+  { TAstAsmInstr }
   {Represents a line of assembler inside an ASM block.
   Consider this is a hardware dependent format}
-  TEleAsmInstr = class(TAstElement)
+  TAstAsmInstr = class(TAstElement)
     addr   : integer;  //Starting Address. Used only in code generation.
     iType  : TiType;   //ASM instruction type
     //Fields to generate instructions, using TP6502.codAsm() or similar.
@@ -681,12 +681,12 @@ type  //Instructions relative elements
     operand2: TAsmOperand; //Second operand, used when it's needed.
     constructor Create; override;
   end;
-  TEleAsmInstrs = specialize TFPGObjectList<TEleAsmInstr>;
+  TAstAsmInstrs = specialize TFPGObjectList<TAstAsmInstr>;
 
-  { TEleAsmBlock }
+  { TAstAsmBlock }
   {Represents an ASM block. An ASM block contains several ASM lines ()}
-  TEleAsmBlock = class(TAstElement)
-    undefInstrucs: TEleAsmInstrs;   //List of instruction with operands undefined
+  TAstAsmBlock = class(TAstElement)
+    undefInstrucs: TAstAsmInstrs;   //List of instruction with operands undefined
     constructor Create; override;
     destructor Destroy; override;
   end;
@@ -734,8 +734,8 @@ type  //Declaration elements (functions)
     ctSysInline,   //Inline system function
     ctUsrExtern    //External function
   );
-  { TEleFunBase }
-  TEleFunBase = class(TEleProgFrame)
+  { TAstFunBase }
+  TAstFunBase = class(TAstProgFrame)
     retType    : TAstTypeDec;  //Type returned
     IsInterrupt: boolean;      //Indicates the function is an ISR
     IsForward  : boolean;      //Identifies a forward declaration.
@@ -760,15 +760,15 @@ type  //Declaration elements (functions)
         - Local variables.
         - The body (Calls to other elements.)
     }
-    declar : TEleFunDec;  //Reference to declaration (When it's FORWARD or in INTERFACE)
-    implem : TEleFunImp;  //Reference to implementation element.
+    declar : TAstFunDec;  //Reference to declaration (When it's FORWARD or in INTERFACE)
+    implem : TAstFunImp;  //Reference to implementation element.
   end;
 
   //Clase para almacenar información de las funciones
   //TCodSysInline = procedure(var fun: TMirOperand) of object;
-  TCodSysNormal = procedure(funEleExp: TEleFunBase) of object;
+  TCodSysNormal = procedure(funEleExp: TAstFunBase) of object;
 
-  { TEleFunDec }
+  { TAstFunDec }
   {This element represents:
    - A single function declaration. When declaration includes the implementation too,like
    is common in a Pascal program:
@@ -777,7 +777,7 @@ type  //Declaration elements (functions)
    When the declaration have a separated implementation. Most of the attributes are placed
    here.
   }
-  TEleFunDec = class(TEleFunBase)
+  TAstFunDec = class(TAstFunBase)
   public  //Main attributes
     adrr   : integer;  //Physical address where function is compiled.
     adrr2  : integer;  //Aditional physical address, for other entry point of the function.
@@ -797,8 +797,8 @@ public mirFunDec: TObject;  //Formalmente debe ser TMirFunDec, pero se pone TObj
     fConmutat  : boolean;      //Represents a conmutative binary operator.
     asgMode    : TAsgMode;     //Indicates if function is of the form: :=, +=, -=, ...
     getset     : TFunGetset;   //Indicates if function is getter or setter.
-    funset     : TEleFunDec;  //Reference to related setter when this function is getter.
-    funget     : TEleFunDec;  //Reference to related getter when this function is setter.
+    funset     : TAstFunDec;  //Reference to related setter when this function is getter.
+    funget     : TAstFunDec;  //Reference to related getter when this function is setter.
   public  //References
     callType    : TCallType;    //How to call the function.
 //    //Callback to SIF Routine when callType is ctSysInline.
@@ -819,32 +819,32 @@ public mirFunDec: TObject;  //Formalmente debe ser TMirFunDec, pero se pone TObj
     procedure AddAddresPend(ad: word);
   public //Initialization
     {Reference to the elements list where is the body. It is:
-      - TEleFunDec.elements, when there isn't a function implementation.
-      - TEleFunImp.elements, when exists the a function implementation.
+      - TAstFunDec.elements, when there isn't a function implementation.
+      - TAstFunImp.elements, when exists the a function implementation.
     }
     elemImplem: TAstElements;  //Reference to elements of implementation.
     {Reference to:
       - Body of function declaration  ,when there isn't a function implementation.
       - Body of function implementation, when exists one.
     }
-    bodyImplem: TEleBody;
+    bodyImplem: TAstBody;
     constructor Create; override;
   end;
-  TEleFunDecs = specialize TFPGObjectList<TEleFunDec>;
+  TAstFunDecs = specialize TFPGObjectList<TAstFunDec>;
 
-  { TEleFunImp }
+  { TAstFunImp }
   { Represents a function implementation (simple or inline) or a method (simple or inline).
   This element only exists if a function declaration exists.
   When this object exists, it contains some infromation that is not included in the
   function declaration:
     - The body of the function with all the instructions.
     - The local variables. They are present are children elements.}
-  TEleFunImp = class(TEleFunBase)
+  TAstFunImp = class(TAstFunBase)
   public  //Initialization
     constructor Create; override;
     destructor Destroy; override;
   end;
-//  TEleFunImps = specialize TFPGObjectList<TEleFunImp>;
+//  TAstFunImps = specialize TFPGObjectList<TAstFunImp>;
 
   function GenArrayTypeName(itTypeName: string; nItems: integer): string; inline;
   function GenPointerTypeName(refTypeName: string): string; inline;
@@ -1278,27 +1278,27 @@ function TConsValue.valuesAsString: string;
 begin
   Result := 'int=' + IntToStr(ValInt) + ',bool=' + IfThen(ValBool,'T','F');
 end;
-{ TEleBlock }
-constructor TEleBlock.Create;
+{ TAstBlock }
+constructor TAstBlock.Create;
 begin
   inherited Create;
   idClass := eleBlock;
 end;
-destructor TEleBlock.Destroy;
+destructor TAstBlock.Destroy;
 begin
   inherited Destroy;
 end;
-{ TEleExpress }
-function TEleExpress.opTypeAsStr: string;
+{ TAstExpress }
+function TAstExpress.opTypeAsStr: string;
 begin
   WriteStr(Result, opType);
 end;
-function TEleExpress.StoAsStr: string;
+function TAstExpress.StoAsStr: string;
 //Resturns storage as string.
 begin
   WriteStr(Result, Sto);
 end;
-procedure TEleExpress.StringToArrayOfChar(str: string);
+procedure TAstExpress.StringToArrayOfChar(str: string);
 {Init the constant value as array of char from a string.}
 var
   i: Integer;
@@ -1309,40 +1309,40 @@ begin
     value.items[i].ValInt := ord(str[i+1]);
   end;
 end;
-function TEleExpress.ValueIsZero: boolean;
+function TAstExpress.ValueIsZero: boolean;
 {Check if the Expression is numéric and the value stored is 0. Only applies to constants.}
 begin
   Result := (Typ.group in [t_uinteger, t_integer, t_float]) and  //Is a numeric type
             (value.ValInt = 0);  //Has value zero.
 end;
-function TEleExpress.IsConstantPlusVariable: boolean;
+function TAstExpress.IsConstantPlusVariable: boolean;
 {Identifies if this operand is a function of type: constant + variable}
 var
-  op1, op2: TEleExpress;
+  op1, op2: TAstExpress;
 begin
   if (opType = otFunct) and (elements.Count = 2) then begin
     //Two parameter function
-    op1 := TEleExpress(elements[0]);
-    op2 := TEleExpress(elements[1]);
+    op1 := TAstExpress(elements[0]);
+    op2 := TAstExpress(elements[1]);
     exit( (op1.Sto = stConst) and op1.evaluated and (op2.Sto = stRamFix) and (name='_add'));
   end else begin
     exit(false);
   end;
 end;
-function TEleExpress.IsVariablePlusConstant: boolean;
+function TAstExpress.IsVariablePlusConstant: boolean;
 var
-  op1, op2: TEleExpress;
+  op1, op2: TAstExpress;
 begin
   if (opType = otFunct) and (elements.Count = 2) then begin
     //Two parameter function
-    op1 := TEleExpress(elements[0]);
-    op2 := TEleExpress(elements[1]);
+    op1 := TAstExpress(elements[0]);
+    op2 := TAstExpress(elements[1]);
     exit( (op1.Sto = stRamFix) and (op2.Sto = stConst) and op2.evaluated and (name='_add'));
   end else begin
     exit(false);
   end;
 end;
-procedure TEleExpress.exchange2Children;
+procedure TAstExpress.exchange2Children;
 {Exchange two children elements}
 var
   tmp: TAstElement;
@@ -1352,35 +1352,35 @@ begin
   end;
 end;
 //Access to constant value
-function TEleExpress.val: dword; inline;
+function TAstExpress.val: dword; inline;
 begin
   Result := value.ValInt;
 end;
-function TEleExpress.valL: word; inline;
+function TAstExpress.valL: word; inline;
 begin
   Result := LO(word(value.ValInt));
 end;
-function TEleExpress.valH: word; inline;
+function TAstExpress.valH: word; inline;
 begin
   Result := HI(word(value.ValInt));
 end;
-function TEleExpress.valU: word; inline;
+function TAstExpress.valU: word; inline;
 begin
   Result := (value.valInt >> 24) and $FF;
 end;
-function TEleExpress.valE: word; inline;
+function TAstExpress.valE: word; inline;
 begin
   Result := (value.valInt >> 16) and $FF;
 end;
-function TEleExpress.valWlo: word; inline;
+function TAstExpress.valWlo: word; inline;
 begin
   Result := word(value.ValInt);
 end;
-function TEleExpress.valWhi: word; inline;
+function TAstExpress.valWhi: word; inline;
 begin
   Result := (value.valInt >> 16) and $FFFF;
 end;
-procedure TEleExpress.SetLiteralBoolConst(valBool: Boolean);
+procedure TAstExpress.SetLiteralBoolConst(valBool: Boolean);
 {Set the value of a Constant boolean expression.}
 begin
   consType := ctLiteral;
@@ -1393,38 +1393,38 @@ begin
     value.ValInt := 0;
   end;
 end;
-procedure TEleExpress.SetLiteraltIntConst(valInt: Int64);
+procedure TAstExpress.SetLiteraltIntConst(valInt: Int64);
 begin
   consType := ctLiteral;
   evaluated := true;
   value.ValInt := valInt;
 end;
-procedure TEleExpress.SetConstRef(cons0: TAstConsDec);
+procedure TAstExpress.SetConstRef(cons0: TAstConsDec);
 begin
   consType := ctConsRef;
   consRef := cons0;  //Keep reference
   evaluated := false;  //To force evaluation
   Evaluate;
 end;
-procedure TEleExpress.SetAddrVar(var0: TAstVarDec);
+procedure TAstExpress.SetAddrVar(var0: TAstVarDec);
 begin
   consType := ctVarAddr;
   addrVar := var0;  //Keep reference
   evaluated := false;  //To force evaluation
   Evaluate;
 end;
-procedure TEleExpress.SetAddrFun(fun0: TEleFunDec);
+procedure TAstExpress.SetAddrFun(fun0: TAstFunDec);
 begin
   consType := ctFunAddr;
   addrFun := fun0;  //Keep reference
   evaluated := false;  //To force evaluation
   Evaluate;
 end;
-procedure TEleExpress.Evaluate();
+procedure TAstExpress.Evaluate();
 var
-  xfun: TEleFunDec;
+  xfun: TAstFunDec;
   ele: TAstElement;
-  itemExp: TEleExpress;
+  itemExp: TAstExpress;
   i: Integer;
 begin
   if evaluated then exit;  //Already evaluated
@@ -1437,7 +1437,7 @@ begin
         //Constant array. Let's evaluate by items
         evaluated := true;    //Defaule
         for ele in elements do begin
-          itemExp := TEleExpress(ele);   //Recover type.
+          itemExp := TAstExpress(ele);   //Recover type.
           itemExp.Evaluate();
           if not itemExp.evaluated then begin
             evaluated := false;
@@ -1483,30 +1483,30 @@ begin
   end;
   end;
 end;
-function TEleExpress.IsCAvar: Boolean;
+function TAstExpress.IsCAvar: Boolean;
 {Indicates if this Expression is a variable addressed by a constant address.
 Only is valid when the Operand type is "otVariab" }
 begin
   Result := (elements.Count=0) or  //Addressed by vardec0
             (elements.Count=1);    //Addressed by a consatnt expression
 end;
-function TEleExpress.IsCVAvar: Boolean;
+function TAstExpress.IsCVAvar: Boolean;
 {Indicates if this Expression is a variable addressed by a constant address and a variable
 index.
 Only is valid when the Operand type is "otVariab" }
 begin
   Result := (elements.Count=2);    //Addressed by a consatnt expression and a variable expression
 end;
-function TEleExpress.vardec: TAstVarDec;
+function TAstExpress.vardec: TAstVarDec;
 {Returns the reference to Variable declaration when this Expression is a simple
 reference to a variable declared. Something like this:
 VAR x: byte;
 x := 0;
 If this is not the case, we returns NIL.}
 var
-  constOffset: TEleExpress;
+  constOffset: TAstExpress;
 begin
-  constOffset := TEleExpress(elements[0]);
+  constOffset := TAstExpress(elements[0]);
   if constOffset.opType <> otConst then exit(nil);  //It's not constant;
   if constOffset.consType = ctVarAddr then begin
     //It's a constant of the form @<variable>.
@@ -1515,7 +1515,7 @@ begin
     exit(Nil);
   end;
 end;
-function TEleExpress.add: word;
+function TAstExpress.add: word;
 begin
   //By now we obtain it from vardec (when allocated)
 //  if dirVar then begin
@@ -1529,15 +1529,15 @@ begin
 end;
 
 //Access to variable addres
-function TEleExpress.addL: word; inline;
+function TAstExpress.addL: word; inline;
 begin
   Result := add;
 end;
-function TEleExpress.addH: word; inline;
+function TAstExpress.addH: word; inline;
 begin
   Result := add+1;
 end;
-function TEleExpress.allocated: boolean;
+function TAstExpress.allocated: boolean;
 begin
   //This should work only for stRamFix.
 //  if dirVar then begin
@@ -1550,43 +1550,43 @@ begin
 end;
 
 //Initialization
-constructor TEleExpress.Create;
+constructor TAstExpress.Create;
 begin
   inherited Create;
   idClass := eleExpress;
   tempVars := TAstVarDecs.Create(true);
 end;
-destructor TEleExpress.Destroy;
+destructor TAstExpress.Destroy;
 begin
   tempVars.Destroy;
   inherited Destroy;
 end;
-{ TEleSentence }
-function TEleSentence.sntTypeAsStr: string;
+{ TAstSentence }
+function TAstSentence.sntTypeAsStr: string;
 begin
   WriteStr(Result, sntType);
 end;
-constructor TEleSentence.Create;
+constructor TAstSentence.Create;
 begin
   inherited Create;
   //name := 'sent';  Don't give name to optimize
   sntType := sntNull;
   idClass := eleSenten;
 end;
-{ TEleAsmInstr }
-constructor TEleAsmInstr.Create;
+{ TAstAsmInstr }
+constructor TAstAsmInstr.Create;
 begin
   inherited Create;
   idClass := eleAsmInstr;
 end;
-{ TEleAsmBlock }
-constructor TEleAsmBlock.Create;
+{ TAstAsmBlock }
+constructor TAstAsmBlock.Create;
 begin
   inherited Create;
   idClass := eleAsmBlock;
-  undefInstrucs:= TEleAsmInstrs.Create(false);
+  undefInstrucs:= TAstAsmInstrs.Create(false);
 end;
-destructor TEleAsmBlock.Destroy;
+destructor TAstAsmBlock.Destroy;
 begin
   undefInstrucs.Destroy;
   inherited Destroy;
@@ -1602,8 +1602,8 @@ end;
 //  tiempo de compilación. Se podrúa mejorar después.}
 //  Result := (codeBlk.idClass = eleBody);  //Cuerpo de una función o el programa principal
 //end;
-{ TEleProgFrame }
-function TEleProgFrame.BodyNode: TEleBody;
+{ TAstProgFrame }
+function TAstProgFrame.BodyNode: TAstBody;
 {Devuelve la referencia al cuerpo del programa. Si no lo encuentra, devuelve NIL.}
 var
   elem: TAstElement;
@@ -1614,9 +1614,9 @@ begin
     exit(nil);  //No debería pasar
   end;
   //Devuelve referencia
-  Result := TEleBody(elem);
+  Result := TAstBody(elem);
 end;
-procedure TEleProgFrame.RegisterExitCall(exitSent: TEleSentence);
+procedure TAstProgFrame.RegisterExitCall(exitSent: TAstSentence);
 {Registra una llamada a una instrucción exit(). De momento solo se usa para actualizar a
 "firstObligExit".
 "exitSent" es la instrucción exit() que queremos registrar. Debe haber sido ya incluida
@@ -1638,7 +1638,7 @@ begin
   end;
 end;
 
-//procedure TEleProgFrame.AddExitCall(srcPos: TSrcPos; codeBlk: TEleCodeCont);
+//procedure TAstProgFrame.AddExitCall(srcPos: TSrcPos; codeBlk: TAstCodeCont);
 //var
 //  exitCall: TExitCall;
 //begin
@@ -1649,7 +1649,7 @@ end;
 //  exitCall.codeBlk  := codeBlk;
 //  lstExitCalls.Add(exitCall);
 //end;
-//function TEleProgFrame.ObligatoryExit: TExitCall;
+//function TAstProgFrame.ObligatoryExit: TExitCall;
 //{Devuelve la referencia de una llamada a exit(), dentro de código obligatorio del Body.
 //Esto ayuda a saber si ya el usuario incluyó la salida dentro del código y no es necesario
 //agregar un RETURN al final.
@@ -1670,18 +1670,18 @@ end;
 //  exit(nil);
 //end;
 //Inicialización
-procedure TEleProgFrame.Clear;
+procedure TAstProgFrame.Clear;
 begin
   inherited Clear;
   //lstExitCalls.Clear;
 end;
-constructor TEleProgFrame.Create;
+constructor TAstProgFrame.Create;
 begin
   inherited Create;
   idClass := eleProgFrame;
   //lstExitCalls:= TExitCalls.Create(true);
 end;
-destructor TEleProgFrame.Destroy;
+destructor TAstProgFrame.Destroy;
 begin
   //lstExitCalls.Destroy;
   inherited Destroy;
@@ -1814,20 +1814,20 @@ begin
   internalTypes.Destroy;
   inherited;
 end;
-{ TEleProg }
-constructor TEleProg.Create;
+{ TAstProg }
+constructor TAstProg.Create;
 begin
   inherited;
   idClass := eleProg;
   Parent := nil;  //la raiz no tiene padre
 end;
-{ TEleFunBase }
-procedure TEleFunBase.ClearParams;
+{ TAstFunBase }
+procedure TAstFunBase.ClearParams;
 //Elimina los parámetros de una función
 begin
   setlength(pars,0);
 end;
-function TEleFunBase.ParamTypesList: string;
+function TAstFunBase.ParamTypesList: string;
 {Devuelve una lista con los nombres de los tipos de los parámetros, de la forma:
 (byte, word) }
 var
@@ -1842,8 +1842,8 @@ begin
   if length(tmp)>0 then tmp := copy(tmp,1,length(tmp)-2);
   Result := '('+tmp+')';
 end;
-{ TEleFunDec }
-procedure TEleFunDec.SetElementsUnused;
+{ TAstFunDec }
+procedure TAstFunDec.SetElementsUnused;
 {Marca todos sus elementos con "nCalled = 0". Se usa cuando se determina que una función
 no es usada.}
 var
@@ -1854,7 +1854,7 @@ begin
     elem.ClearCallers;
   end;
 end;
-procedure TEleFunDec.AddAddresPend(ad: word);
+procedure TAstFunDec.AddAddresPend(ad: word);
 {Add a pending address to the function to be completed later.}
 begin
   addrsPend[nAddresPend] := ad;
@@ -1864,12 +1864,12 @@ begin
     setlength(addrsPend, curSize);  //make space
   end;
 end;
-function TEleFunDec.nCalled: integer;
+function TAstFunDec.nCalled: integer;
 begin
   if IsInterrupt then exit(1);   //Los INTERRUPT son llamados implícitamente
   Result := lstCallers.Count;
 end;
-function TEleFunDec.nLocalVars: integer;
+function TAstFunDec.nLocalVars: integer;
 {Returns the numbers of local variables for this function.}
 var
   elem : TAstElement;
@@ -1879,13 +1879,13 @@ begin
     if elem.idClass = eleVarDec then inc(Result);
   end;
 end;
-function TEleFunDec.IsTerminal: boolean;
+function TAstFunDec.IsTerminal: boolean;
 {Indica si la función ya no llama a otras funciones. Para que funcione, se debe haber
 llenado primero, "lstCalled".}
 begin
   Result := (lstCalled.Count = 0);
 end;
-function TEleFunDec.IsTerminal2: boolean;
+function TAstFunDec.IsTerminal2: boolean;
 {Indica si la función es Terminal, en el sentido que cumple:
 - Tiene variables locales.
 - No llama a otras funciones o las funciones a las que llama no tienen variables locales.
@@ -1900,7 +1900,7 @@ begin
   nCallesFuncWithLocals := 0;
   for called in lstCalledAll do begin
     if called.idClass = eleFuncDec then begin
-      if TEleFunDec(called).nLocalVars > 0 then inc(nCallesFuncWithLocals);
+      if TAstFunDec(called).nLocalVars > 0 then inc(nCallesFuncWithLocals);
     end;
   end;
   if nCallesFuncWithLocals = 0 then begin
@@ -1910,12 +1910,12 @@ begin
     exit(false);
   end;
 end;
-function TEleFunDec.HasImplem: boolean;
+function TAstFunDec.HasImplem: boolean;
 {Indica si la declaración tiene implementación separada.}
 begin
   exit(implem<>nil);
 end;
-constructor TEleFunDec.Create;
+constructor TAstFunDec.Create;
 begin
   inherited Create;
   idClass := eleFuncDec;
@@ -1927,21 +1927,21 @@ begin
   //By default, we assume this is a declaration and implementation.
   elemImplem := elements;
 end;
-{ TEleFunImp }
+{ TAstFunImp }
 //Inicialización
-constructor TEleFunImp.Create;
+constructor TAstFunImp.Create;
 begin
   inherited;
   idClass:=eleFuncImp;
   implem := Self;
   //self.declar must be set later.
 end;
-destructor TEleFunImp.Destroy;
+destructor TAstFunImp.Destroy;
 begin
   inherited Destroy;
 end;
-{ TEleUnit }
-procedure TEleUnit.ReadInterfaceElements;
+{ TAstUnit }
+procedure TAstUnit.ReadInterfaceElements;
 {Actualiza la lista "InterfaceElements", con los elementos accesibles desde la
 sección INTERFACE. De esta forma se facilita la exploración de elementos públicos.}
 var
@@ -1955,34 +1955,34 @@ begin
     end;
   end;
 end;
-constructor TEleUnit.Create;
+constructor TAstUnit.Create;
 begin
   inherited;
   idClass:=eleUnit;
   InterfaceElements:= TAstElements.Create(false);
 end;
-destructor TEleUnit.Destroy;
+destructor TAstUnit.Destroy;
 begin
   InterfaceElements.Destroy;
   inherited Destroy;
 end;
-{ TEleBody }
-constructor TEleBody.Create;
+{ TAstBody }
+constructor TAstBody.Create;
 begin
   inherited;
   idClass := eleBody;
 end;
-destructor TEleBody.Destroy;
+destructor TAstBody.Destroy;
 begin
   inherited Destroy;
 end;
-{ TEleFinal }
-constructor TEleFinal.Create;
+{ TAstFinal }
+constructor TAstFinal.Create;
 begin
   inherited Create;
   idClass := eleFinal;
 end;
-destructor TEleFinal.Destroy;
+destructor TAstFinal.Destroy;
 begin
   inherited Destroy;
 end;

@@ -140,10 +140,10 @@ type  //MIR declarations
   { TMirFunDec }
   TMirFunDec = Class(TMirProgFrame)
     pars     : TMirParamArray; //Reference to paramenters.
-    astFunDec: TEleFunDec;     //AST function.
+    astFunDec: TAstFunDec;     //AST function.
     //binOper  : char;         //Binary operator when it's associated to an operator.
     IsTerminal2: boolean;      //Flag. Indicates is function is terminal.
-    procedure ReadParamsFromAST(astFunDec0: TEleFunDec);
+    procedure ReadParamsFromAST(astFunDec0: TAstFunDec);
   public  //Operator
     operTyp    : TOperatorType; //Operand type
     oper       : string;   //Operator associated to the function when it works as a method.
@@ -183,7 +183,7 @@ type  //MIR Operand for expressions
     Sto     : TStorage;      //Storage of the value (memory, register, value)
     Typ     : TAstTypeDec;   //Data type for the operand.
     conDec  : TMirConDec;    //Ref. to constant declaration.
-    astOperand: TEleExpress; //Ref. to AST element. Should be used only for error location.
+    astOperand: TAstExpress; //Ref. to AST element. Should be used only for error location.
     function StoAsStr: string;  //Storage as string
   public //Fields used when "opType" is otFunc.
     funDec  : TMirFunDec;    //Reference to function declaration, when it's accesible.
@@ -295,24 +295,24 @@ type  //Main Container
 //    function AddVarDec(mcont: TMirFunDec; varDec0: TAstVarDec): TMirVarDec;
 //    function AddVarDec(mcont: TMirFunDec; varName: string; eleTyp: TAstTypeDec
 //      ): TMirVarDec;
-//    function AddFunDecSNF(funcName0: TEleFunDec): TMirFunDec;
-//    function AddFunDecUNF(funcName0: TEleFunDec): TMirFunDec;
+//    function AddFunDecSNF(funcName0: TAstFunDec): TMirFunDec;
+//    function AddFunDecUNF(funcName0: TAstFunDec): TMirFunDec;
   public  //Adding instructions
     procedure AddFunParamAssign(mcont: TMirProgFrame; var func: TMirOperand;
-      Op1: TEleExpress);
-    function AddFunCall(mcont: TMirProgFrame; Op1: TEleExpress): TMirFunCall;
-    function AddAssign(mcont: TMirProgFrame; vardec: TMirVarDec; Op2: TEleExpress
+      Op1: TAstExpress);
+    function AddFunCall(mcont: TMirProgFrame; Op1: TAstExpress): TMirFunCall;
+    function AddAssign(mcont: TMirProgFrame; vardec: TMirVarDec; Op2: TAstExpress
       ): TMirAssign;
     function AddGoto(mcont: TMirProgFrame; ilabel: integer = - 1): TMirGoto;
     function AddGoto(mcont: TMirProgFrame; mlabel: TMirLabel): TMirGoto;
     function AddLabel(mcont: TMirProgFrame): TMirLabel;
     procedure EndGoto(mcont: TMirProgFrame; gotoInstr: TMirGoto);
     procedure EndGoto(mcont: TMirProgFrame; ilabel: integer);
-    function AddIfGoto(mcont: TMirProgFrame; condition: TEleExpress;
+    function AddIfGoto(mcont: TMirProgFrame; condition: TAstExpress;
       negated: boolean): TMirIfGoto;
     procedure EndIfGoto(mcont: TMirProgFrame; ifInstruc: TMirIfGoto);
   public  //Reading from AST
-    procedure ConvertBody(cntFunct: TMirProgFrame; sntBlock: TEleCodeCont);
+    procedure ConvertBody(cntFunct: TMirProgFrame; sntBlock: TAstCodeCont);
   public  //Initialization
     procedure Clear;
     constructor Create; virtual;
@@ -324,11 +324,11 @@ type  //Main Container
   function AddMirVarDec(mcont: TMirProgFrame; varDec0: TAstVarDec): TMirVarDec;
   function AddMirVarDec(mcont: TMirProgFrame;
       varName: string; eleTyp: TAstTypeDec): TMirVarDec;
-  function AddMirFunDecSNF(mcont: TMirProgFrame; funcName0: TEleFunDec): TMirFunDec;
-  function AddMirFunDecUNF(mcont: TMirProgFrame; funcName0: TEleFunDec): TMirFunDec;
+  function AddMirFunDecSNF(mcont: TMirProgFrame; funcName0: TAstFunDec): TMirFunDec;
+  function AddMirFunDecUNF(mcont: TMirProgFrame; funcName0: TAstFunDec): TMirFunDec;
 
 type  //Events for AST elements
-  //This type will be used to cast the field TEleFunDec.codSysInline.
+  //This type will be used to cast the field TAstFunDec.codSysInline.
   //This needs to be defined here because uses the TMirOperand type declared here.
   TCodSysInline = procedure(var fun: TMirOperand) of object;
 
@@ -563,7 +563,7 @@ begin
   mirType := mtyConDec;
 end;
 { TMirFunDec }
-procedure TMirFunDec.ReadParamsFromAST(astFunDec0: TEleFunDec);
+procedure TMirFunDec.ReadParamsFromAST(astFunDec0: TAstFunDec);
 {Read parameters from an AST function declaration.}
 var
   i: Integer;
@@ -913,7 +913,7 @@ begin
   decs := TMirDeclars(mcont.items[0]);  //Declarations
   decs.items.Add(Result);
 end;
-function AddMirFunDecSNF(mcont: TMirProgFrame; funcName0: TEleFunDec): TMirFunDec;
+function AddMirFunDecSNF(mcont: TMirProgFrame; funcName0: TAstFunDec): TMirFunDec;
 begin
   Result := TMirFunDec.Create;
   Result.text := funcName0.name;
@@ -923,7 +923,7 @@ begin
   Result.oper := funcName0.oper;
   mcont.items.Add(Result);
 end;
-function AddMirFunDecUNF(mcont: TMirProgFrame; funcName0: TEleFunDec): TMirFunDec;
+function AddMirFunDecUNF(mcont: TMirProgFrame; funcName0: TAstFunDec): TMirFunDec;
 {Add a User Normal Function to the MIR list.}
 begin
   Result := TMirFunDec.Create;
@@ -934,8 +934,8 @@ begin
   mcont.items.Add(Result);
 end;
 procedure GetMIROperandFromASTExpress(out MirOper: TMirOperand;
-                                      const AstOper: TEleExpress);
-{Read data from a TEleExpress and set a TMirOperand}
+                                      const AstOper: TAstExpress);
+{Read data from a TAstExpress and set a TMirOperand}
 var
   AstVarDec: TAstVarDec;
 begin
@@ -978,9 +978,9 @@ end;
 { TMirList }
 //Adding instructions
 procedure TMirList.AddFunParamAssign(mcont: TMirProgFrame;
-                                     var func: TMirOperand; Op1: TEleExpress);
+                                     var func: TMirOperand; Op1: TAstExpress);
 var
-  astPar: TEleExpress;
+  astPar: TAstExpress;
   vardec, tmpdec: TMirVarDec;
   i: Integer;
 begin
@@ -997,7 +997,7 @@ begin
     //        }
     {Move all parameters (children nodes) to a separate assignment}
     for i:=0 to Op1.elements.Count-1 do begin
-      astPar := TEleExpress(Op1.elements[i]);
+      astPar := TAstExpress(Op1.elements[i]);
       GetMIROperandFromASTExpress(func.elements[i], astPar);
       vardec := func.funDec.pars[i].vardec;
       AddAssign(mcont, vardec, astPar); //???? Y no hay que buscar el método _set?
@@ -1014,7 +1014,7 @@ begin
     otherwise we will move them to a separate assignment}
     //Check if some parameter needs to be converted in an assignment
     for i:=0 to Op1.elements.Count-1 do begin
-      astPar := TEleExpress(Op1.elements[i]);
+      astPar := TAstExpress(Op1.elements[i]);
       GetMIROperandFromASTExpress(func.elements[i], astPar);
       if astPar.opType = otFunct then begin
         //Create a new temporal variable declaration.
@@ -1028,7 +1028,7 @@ begin
   end;
   end;
 end;
-function TMirList.AddFunCall(mcont: TMirProgFrame; Op1: TEleExpress
+function TMirList.AddFunCall(mcont: TMirProgFrame; Op1: TAstExpress
   ): TMirFunCall;
 begin
   Result:= TMirFunCall.Create;
@@ -1040,7 +1040,7 @@ begin
   mcont.AddInstruction(Result);
 end;
 function TMirList.AddAssign(mcont: TMirProgFrame; vardec: TMirVarDec;
-  Op2: TEleExpress): TMirAssign;
+  Op2: TAstExpress): TMirAssign;
 {General function to add an assignment instruction to the MIR container "mcont".
  The assignment in created in TAC format. This is a recursive function.
 Parameters:
@@ -1048,7 +1048,7 @@ Parameters:
   "Op2"    -> Operando from the value for assignment is taken. Can be a simple Operand
               or a function call. It is an AST expression element.}
 var
-  astPar: TEleExpress;
+  astPar: TAstExpress;
   i: Integer;
   tmpdec: TMirVarDec;
 begin
@@ -1116,7 +1116,7 @@ begin
   mcont.AddInstruction(lblInstruct);
 end;
 function TMirList.AddIfGoto(mcont: TMirProgFrame;
-  condition: TEleExpress; negated: boolean): TMirIfGoto;
+  condition: TAstExpress; negated: boolean): TMirIfGoto;
 {General function to add an IF instruction to the MIR container "mcont".
 Parameters:
   "condition" -> The condition expression.
@@ -1148,7 +1148,7 @@ begin
   mcont.AddInstruction(lblInstruct);
 end;
 //Reading from AST
-procedure TMirList.ConvertBody(cntFunct: TMirProgFrame; sntBlock: TEleCodeCont);
+procedure TMirList.ConvertBody(cntFunct: TMirProgFrame; sntBlock: TAstCodeCont);
 {Convert a ASTBody to instructions in MIR representation.
 Parameters:
   cntFunct  -> The function where MIR will be created, or the main program. This will
@@ -1156,8 +1156,8 @@ Parameters:
   sntBlock  -> Block of code where are the sentences to need be prepared. It's the
                same of "cntFunct" except when "block" is nested like in a condiitonal.
 }
-{  function MoveParamToAssign(curContainer: TAstElement; Op: TEleExpress;
-                             parvar: TAstVarDec): TEleExpress;
+{  function MoveParamToAssign(curContainer: TAstElement; Op: TAstExpress;
+                             parvar: TAstVarDec): TAstExpress;
   {Mueve el nodo especificado "Op", que representa a un parámetro de la función, a una
   nueva instruccion de asignación (que es creada al inicio del bloque "curContainer") y
   reemplaza el nodo faltante por una variable temporal que es la que se crea en la
@@ -1167,9 +1167,9 @@ Parameters:
   Retorna la instrucción de asignación creada.
   }
   var
-    _setaux: TEleExpress;
-    Op1aux: TEleExpress;
-    funSet: TEleFunBase;
+    _setaux: TAstExpress;
+    Op1aux: TAstExpress;
+    funSet: TAstFunBase;
   begin
     //Create the new _set() expression.
     _setaux := CreateExpression('_set', typNull, otFunct, Op.srcDec);
@@ -1205,24 +1205,24 @@ Parameters:
   "curContainer".
   If at least one new set sentence is added, returns TRUE.}
   var
-    Op2, Op1: TEleExpress;
+    Op2, Op1: TAstExpress;
     vardec: TMirVarDec;
   begin
     Result := false;
-    if TEleExpress(setMethod).fundec.getset <> gsSetInSimple then exit;
-    Op1 := TEleExpress(setMethod.elements[0]);  //Takes target.
+    if TAstExpress(setMethod).fundec.getset <> gsSetInSimple then exit;
+    Op1 := TAstExpress(setMethod.elements[0]);  //Takes target.
     if Op1.opType <> otVariab then exit;
     //Split expressions in second operand of assignment.
-    Op2 := TEleExpress(setMethod.elements[1]);  //Takes assignment source.
+    Op2 := TAstExpress(setMethod.elements[1]);  //Takes assignment source.
     vardec := TMirVarDec(Op1.vardec.mirVarDec);
     AddAssign(cntFunct, vardec, Op2);
   end;
-  function SplitExpress(expMethod: TEleExpress): boolean;
+  function SplitExpress(expMethod: TAstExpress): boolean;
   {Verify if an expression has more than three operands. If so then
   it's splitted adding one or more set sentences.
   If at least one new set sentence is added, returns TRUE.}
   var
-    parExp, new_set: TEleExpress;
+    parExp, new_set: TAstExpress;
     par: TAstElement;
   begin
     Result := false;
@@ -1232,7 +1232,7 @@ Parameters:
       AddFunCall(cntFunct, expMethod);
     end;
   end;
-  function SplitProcCall(expMethod: TEleExpress): boolean;
+  function SplitProcCall(expMethod: TAstExpress): boolean;
   {Split a procedure (not INLINE) call instruction, inserting an assignment instruction
   for each parameter.}
   begin
@@ -1256,15 +1256,15 @@ Parameters:
 //      SetInsertMode(insPoint0);
 //    end;
 //  end;
-  function ReadValidConditionBlock(sen: TEleSentence; var i: Integer;
-           out condit: TEleExpress; out block: TEleCodeCont): boolean;
+  function ReadValidConditionBlock(sen: TAstSentence; var i: Integer;
+           out condit: TAstExpress; out block: TAstCodeCont): boolean;
   var
-    expBool: TEleExpress;
+    expBool: TAstExpress;
   begin
     while i<sen.elements.Count do begin
-      expBool := TEleExpress(sen.elements[i]);   //Even element is condition
-      block   := TEleCodeCont(sen.elements[i+1]); //Odd element is block
-      condit := TEleExpress(expBool.elements[0]);
+      expBool := TAstExpress(sen.elements[i]);   //Even element is condition
+      block   := TAstCodeCont(sen.elements[i+1]); //Odd element is block
+      condit := TAstExpress(expBool.elements[0]);
       if (condit.opType = otConst) and condit.evaluated and
          (condit.value.ValBool=false) then begin
          //FALSE conditions are not considered.
@@ -1283,14 +1283,14 @@ Parameters:
     //Not found
     Exit(false);
   end;
-  procedure ConvertIF(sen: TEleSentence);
+  procedure ConvertIF(sen: TAstSentence);
   {COnvert an IF AST structure to the MIR representation. Only a BASIC simplification is
   applied. Optimization needs to be done later.}
   var
     i, lblEndIf: Integer;
     ifgot: TMirIfGoto;
-    condit: TEleExpress;
-    _blk: TEleCodeCont;
+    condit: TAstExpress;
+    _blk: TAstCodeCont;
     gotToEnd: TMirGoto;
   begin
     //There are expressions and blocks inside conditions and loops.
@@ -1323,19 +1323,19 @@ Parameters:
       EndGoto(cntFunct, lblEndIf);
     end;
   end;
-  procedure ConvertWHILE(sen: TEleSentence);
+  procedure ConvertWHILE(sen: TAstSentence);
   {Convert an WHILE AST structure to the MIR representation.}
   var
     ifgot: TMirIfGoto;
-    condit, expBool: TEleExpress;
-    _blk: TEleCodeCont;
+    condit, expBool: TAstExpress;
+    _blk: TAstCodeCont;
     lblBegin: TMirLabel;
   begin
     //There are expressions and blocks inside conditions and loops.
-    expBool := TEleExpress(sen.elements[0]);   //Even element is condition
-    _blk   := TEleCodeCont(sen.elements[1]); //Odd element is block
+    expBool := TAstExpress(sen.elements[0]);   //Even element is condition
+    _blk   := TAstCodeCont(sen.elements[1]); //Odd element is block
     if _blk.elements.Count=0 then exit;   //Empty block
-    condit := TEleExpress(expBool.elements[0]);
+    condit := TAstExpress(expBool.elements[0]);
     //Label to the beginning of the WHILE to test condition.
     lblBegin := AddLabel(cntFunct);
     ifgot := AddIfGoto(cntFunct, condit, true);
@@ -1346,20 +1346,20 @@ Parameters:
     EndIfGoto(cntFunct, ifgot);
   end;
 var
-  sen: TEleSentence;
+  sen: TAstSentence;
   eleSen, _set, ele, _proc: TAstElement;
-  Op1, Op2, val1, val2: TEleExpress;
-  _blk, _blk0: TEleCodeCont;
+  Op1, Op2, val1, val2: TAstExpress;
+  _blk, _blk0: TAstCodeCont;
 begin
   //Prepare assignments for arrays.
 //  for eleSen in sntBlock.elements do begin
 //    if eleSen.idClass <> eleSenten then continue;
 //    //We have a sentence here.
-//    sen := TEleSentence(eleSen);
+//    sen := TAstSentence(eleSen);
 //    if sen.sntType = sntAssign then begin  //Assignment
 //      _set := sen.elements[0];  //Takes the _set method.
-//      Op1 := TEleExpress(_set.elements[0]);  //Takes assigment target.
-//      Op2 := TEleExpress(_set.elements[1]);  //Takes assigment target.
+//      Op1 := TAstExpress(_set.elements[0]);  //Takes assigment target.
+//      Op2 := TAstExpress(_set.elements[1]);  //Takes assigment target.
 //      if (Op1.opType = otFunct) and (Op1.fundec.getset = gsGetInItem) then begin
 //        //It's a _set() for a _getitem() INLINE assignment for array.
 //        if Op1.fundec.funset = nil then begin
@@ -1393,35 +1393,35 @@ begin
 //  end;
   //Prepare sentences
   for eleSen in sntBlock.elements do begin
-    if eleSen.idClass <> eleSenten then continue;
+{    if eleSen.idClass <> eleSenten then continue;
     //We have a sentence here.
-    sen := TEleSentence(eleSen);
+    sen := TAstSentence(eleSen);
     if sen.sntType = sntAssign then begin  //Assignment
       _set := sen.elements[0];  //Takes the one _set method.
       SplitSet( _set)  //Might generate additional assignments sentences
     end else if sen.sntType = sntProcCal then begin  //Procedure call
       _proc := sen.elements[0];  //Takes the proc.
-      SplitProcCall(TEleExpress(_proc))
+      SplitProcCall(TAstExpress(_proc))
     end else if sen.sntType = sntIF then begin
       ConvertIF(sen);
     end else if sen.sntType = sntWHILE then begin
       ConvertWHILE(sen);
-{    end else if sen.sntType = sntFOR then begin
+    end else if sen.sntType = sntFOR then begin
       //FOR sentences could need some aditional changes.
       _blk0 := nil;
       for ele in sen.elements do begin
         if ele.idClass = eleCondit then begin  //It's a condition
-          expBool := TEleExpress(ele.elements[0]);  //The first item is a TEleExpress
+          expBool := TAstExpress(ele.elements[0]);  //The first item is a TAstExpress
           SplitExpress(ele, expBool)
         end else if ele.idClass = eleBlock then begin   //Initialization or body
-          _blk := TEleCodeCont(ele);  //The first item is a TEleExpress
+          _blk := TAstCodeCont(ele);  //The first item is a TAstExpress
           PrepareBody(cntFunct, _blk);
           if _blk0 = nil then _blk0 := _blk;  //Get intialization block
         end;
       end;
       //Get first and last value of index.
-      val1 := TEleExpress(_blk0.elements[0].elements[1]);
-      val2 := TEleExpress(expBool.elements[1]);
+      val1 := TAstExpress(_blk0.elements[0].elements[1]);
+      val2 := TAstExpress(expBool.elements[1]);
       //Special cases
       if (val1.opType = otConst) and (val2.opType = otConst) then begin
         if val1.val > val2.val then begin
@@ -1431,10 +1431,10 @@ begin
       end;
     end else if sen.sntType = sntExit then begin
       if sen.elements.Count>0 then begin   //If there is argument
-        expBool := TEleExpress(sen.elements[0]);  //The first item is a TEleExpress
+        expBool := TAstExpress(sen.elements[0]);  //The first item is a TAstExpress
         SplitExpress(sen, expBool)
       end;
- }   end;
+    end;}
 
   end;
 end;

@@ -12,14 +12,13 @@ type
     function PICName: string; virtual; abstract;
     function RAMmax: integer; virtual; abstract;
   private
-    procedure AnalyzeFORrepeat;
-    procedure AnalyzeFORwhile;
-    procedure AnalyzeFORFirstAsign(out idx, valIni: TEleExpress);
+    procedure AnalyzeFOR;
+    procedure AnalyzeFORFirstAsign(out idx, valIni: TAstExpress);
     procedure GetAdicVarDeclar2(varTyp: TAstTypeDec; out aditVar: TAdicVarDec;
       out mainTypCreated: TAstTypeDec);
     function GetConstValue(constTyp: TAstTypeDec; out mainTypCreated: TAstTypeDec
-      ): TEleExpress;
-    procedure AnalyzeEXIT(exitSent: TEleSentence);
+      ): TAstExpress;
+    procedure AnalyzeEXIT(exitSent: TAstSentence);
     procedure AnalyzeIF;
     procedure AnalyzeREPEAT;
     procedure AnalyzeWHILE;
@@ -46,11 +45,11 @@ type
     function GetTypeDeclarColon(out decTyp: TAstTypeDec; out
       decStyle: TTypDeclarStyle; out TypeCreated: boolean): boolean;
     function VerifyEND: boolean;
-    function GetCondition(out ex: TEleExpress; ConstBool: boolean = false): boolean;
+    function GetCondition(out ex: TAstExpress; ConstBool: boolean = false): boolean;
     function OpenContextFrom(filePath: string): boolean;
     function AnalyzeStructBody: boolean;
-    function MoveNodeToAssign(cntBody: TEleCodeCont; curContainer: TAstElement;
-                              Op: TEleExpress): TEleExpress;
+    function MoveNodeToAssign(cntBody: TAstCodeCont; curContainer: TAstElement;
+                              Op: TAstExpress): TAstExpress;
     procedure AnalyzeSentence;
     procedure AnalyzeCurBlock;
     procedure AnalyzeProcDeclar(objContainer: TAstTypeDec);
@@ -137,7 +136,7 @@ end;
 
 //Elements processing
 function TAnalyzer.GetConstValue(constTyp: TAstTypeDec;
-                                 out mainTypCreated: TAstTypeDec): TEleExpress;
+                                 out mainTypCreated: TAstTypeDec): TAstExpress;
 {Add a constant expression, to the current node of the AST. Returns the declaration
 created.
 "typExpec" is the expected type of the constant. If it's NIL it's ignored.
@@ -150,7 +149,7 @@ created). Some constant like: [[1],[2],[3]] creates two types.
 When no new types are created, "mainTypCreated" returns NIL.
 }
 var
-  init: TEleExpress;
+  init: TAstExpress;
   ntyp, typesCreated, indexNode: Integer;
   parentNod, typDecElem: TAstElement;
   arrtyp: TAstTypeDec;
@@ -269,7 +268,7 @@ var
   xcon: TAstConsDec;
   consTyp: TAstTypeDec;
   nItems: Int64;
-  consIni: TEleExpress;
+  consIni: TAstExpress;
 begin
   aditVar.hasAdic  := decNone;       //Bandera
   aditVar.hasInit  := false;
@@ -683,7 +682,7 @@ If some problems happens, Error is generated and the NIL value is returned.
   También actualiza el valor de "arrTyp.consNitm" y "arrTyp.isDynam".
   Si se pone "dynam" a TRUE, se asume que el tamño es dinámico}
   var
-    sizExp: TEleExpress;
+    sizExp: TAstExpress;
     consDec: TAstConsDec;
   begin
     if dynam then begin  //Special case
@@ -1092,7 +1091,7 @@ begin
   ProcComments;
 end;
 procedure TAnalyzer.AnalyzeConstDeclar;
-  procedure GetIntialization(consTyp: TAstTypeDec; out consIni: TEleExpress;
+  procedure GetIntialization(consTyp: TAstTypeDec; out consIni: TAstExpress;
                              out mainTypCreated: TAstTypeDec);
   {Get the constant initialization for the declaration.}
   begin
@@ -1108,7 +1107,7 @@ var
   consNames: array of string;  //nombre de variables
   srcPosArray: TSrcPosArray;
   consDec: TAstConsDec;
-  consIni: TEleExpress;
+  consIni: TAstExpress;
   consTyp, mainTypCreated: TAstTypeDec;
   decStyle: TTypDeclarStyle;
   consTypCreated: boolean;
@@ -1240,7 +1239,7 @@ procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TAstTypeDec);
 {Compila la declaración de procedimientos. Tanto procedimientos como funciones
  se manejan internamente como funciones.}
   function FindProcInInterface(procName: string; const pars: TAstParamArray;
-                               const srcPos: TSrcPos): TEleFunDec;
+                               const srcPos: TSrcPos): TAstFunDec;
   {Explore the current context to verify (and validate) the existence, in the INTERFACE
   section, of a function declared in the IMPLEMENTATION section.
   If found the function, returns the reference. Otherwise returns NIL.
@@ -1248,8 +1247,8 @@ procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TAstTypeDec);
   var
     ele : TAstElement;
     uname: String;
-    fun: TEleFunImp;
-    funInterface: TEleFunDec;
+    fun: TAstFunImp;
+    funInterface: TAstFunDec;
   begin
     {Se supone que esta exploración solo se hará en la primera pasada, así que no hay
     problema, en hacer una exploración común.}
@@ -1265,7 +1264,7 @@ procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TAstTypeDec);
           //Is an INTERFACE element.
           if ele.idClass = eleFuncDec then begin
             //Para las declaraciones, se debe comparar los parámetros
-            funInterface := TEleFunDec(ele);
+            funInterface := TAstFunDec(ele);
             if SameParamsType(funInterface, pars) then begin
               Result := funInterface;
               //Continue exploring to verify duplicity.
@@ -1278,7 +1277,7 @@ procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TAstTypeDec);
         end else if ele.location = locImplement then begin
           //Is an IMPLEMENTATION element.
           //It shouldn't be a similar function (name and parameters).
-          fun := TEleFunImp(ele);
+          fun := TAstFunImp(ele);
           if SameParamsType(fun, pars) then begin
             {Two similar functions in the same IMPLEMENTATION scope.}
             GenError(ER_DUPLIC_FUNC_,[procName], srcPos);
@@ -1290,7 +1289,7 @@ procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TAstTypeDec);
     //Doesn't found.
   end;
   function FindProcAsForwawd(procName: string; const pars: TAstParamArray;
-                               const srcPos: TSrcPos): TEleFunDec;
+                               const srcPos: TSrcPos): TAstFunDec;
   {Explore the current context to verify (and validate) the existence of a functon
   declared as FORWARD, of any ohter function (No FORWARD).
   If found the function, returns the reference. Otherwise returns NIL.
@@ -1298,8 +1297,8 @@ procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TAstTypeDec);
   var
     uname: String;
     ele : TAstElement;
-    fun: TEleFunImp;
-    fundec: TEleFunDec;
+    fun: TAstFunImp;
+    fundec: TAstFunDec;
   begin
     Result := nil;
     uname := upcase(procName);
@@ -1311,7 +1310,7 @@ procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TAstTypeDec);
         //Match the name.
         if ele.idClass = eleFuncDec then begin
           //Function with the same name. Can be a FORWARD or Overload.
-          fundec := TEleFunDec(ele);
+          fundec := TAstFunDec(ele);
           if SameParamsType(fundec, pars) then begin
             //Have the same name and parameters type
             if fundec.IsForward then begin
@@ -1334,7 +1333,7 @@ procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TAstTypeDec);
         end else if ele.idClass = eleFuncImp then begin
           //We don't need check implementations. They have been checked before.
           ////Para las funciones, se debe comparar los parámetros
-          //fun := TEleFunImp(ele);
+          //fun := TAstFunImp(ele);
           //if fun.SameParamsType(pars) then begin
           //  //Is not FORWARD, must be duplicated:
           //  GenError(ER_DUPLIC_FUNC_,[procName], srcPos);
@@ -1349,9 +1348,9 @@ procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TAstTypeDec);
     end;
   end;
 var
-  funDec, funInterface, funForward: TEleFunDec;
-  fun: TEleFunDec;
-  bod: TEleBody;
+  funDec, funInterface, funForward: TAstFunDec;
+  fun: TAstFunDec;
+  bod: TAstBody;
   IsInterrupt, IsForward: Boolean;
   procName, tokL: String;
   retType: TAstTypeDec;
@@ -1609,7 +1608,7 @@ begin
     if not CaptureStr('END') then exit(false);
   end;
 end;
-function TAnalyzer.GetCondition(out ex: TEleExpress; ConstBool: boolean=false): boolean;
+function TAnalyzer.GetCondition(out ex: TAstExpress; ConstBool: boolean=false): boolean;
 {Create a Condition Block and read a boolean expression in "ex".
 If parameter ConstBool is activated, a constant expression, evaluated to TRUE, is
 inserted.
@@ -1676,7 +1675,7 @@ begin
   //Salió sin errores
   exit(true);
 end;
-function TAnalyzer.MoveNodeToAssign(cntBody: TEleCodeCont; curContainer: TAstElement; Op: TEleExpress): TEleExpress;
+function TAnalyzer.MoveNodeToAssign(cntBody: TAstCodeCont; curContainer: TAstElement; Op: TAstExpress): TAstExpress;
 {Mueve el nodo especificado "Op" a una nueva instruccion de asignación (que es creada
 al inicio del bloque "curContainer") y reemplaza el nodo faltante por una variable
 temporal. Esta variable temporal se crea en el contenedor "cntBody" y es la que se usa
@@ -1686,9 +1685,9 @@ Realiza un cambio en el nodo actual.
 }
 var
   _varaux: TAstVarDec;
-  _setaux: TEleExpress;
-  Op1aux, Op2aux: TEleExpress;
-  funSet: TEleFunDec;
+  _setaux: TAstExpress;
+  Op1aux, Op2aux: TAstExpress;
+  funSet: TAstFunDec;
   OpPos: Integer;
   OpParent: TAstElement;
 begin
@@ -1729,7 +1728,7 @@ end;
 procedure TAnalyzer.AnalyzeIF;
 {Compile an IF structure.}
 var
-  ex: TEleExpress;
+  ex: TAstExpress;
 begin
   if not GetCondition(ex) then exit;
   if not CaptureStr('THEN') then exit; //toma "then"
@@ -1764,7 +1763,7 @@ end;
 procedure TAnalyzer.AnalyzeWHILE;
 {Compile a WHILE structure.}
 var
-  ex: TEleExpress;
+  ex: TAstExpress;
 begin
   if not GetCondition(ex) then exit;  //Condición
   if not CaptureStr('DO') then exit;  //toma "do"
@@ -1777,7 +1776,7 @@ end;
 procedure TAnalyzer.AnalyzeREPEAT;
 {Compile the WHILE structure.}
 var
-  ex: TEleExpress;
+  ex: TAstExpress;
 begin
   TreeElems.AddElementBlockAndOpen(GetSrcPos);  //Open block
   AnalyzeCurBlock;
@@ -1790,12 +1789,12 @@ end;
 {
 procedure TAnalyzer.AnalyzeFOR;
 {Analize a FOR loop and generate a FOR loop sentence}
-  procedure CreateCondition(idx: TEleExpress);
+  procedure CreateCondition(idx: TAstExpress);
   {Create a condition getting de expression of the <TO ... DO> section.}
   var
     elem: TEleCondit;
-    Op2, _lequ, xvar: TEleExpress;
-    funSet: TEleFunBase;
+    Op2, _lequ, xvar: TAstExpress;
+    funSet: TAstFunBase;
   begin
     //Create and open condition
     elem := TEleCondit.Create;
@@ -1830,10 +1829,10 @@ procedure TAnalyzer.AnalyzeFOR;
     end;
     SkipWhites;
   end;
-  procedure CReateInc(idx: TEleExpress);
+  procedure CReateInc(idx: TAstExpress);
   {Add a sentence Inc() applied to the index variable "idx".}
   var
-    Op1, xvar: TEleExpress;
+    Op1, xvar: TAstExpress;
   begin
     //Open sentence
     TreeElems.AddElementSentAndOpen(GetSrcPos, sntProcCal);
@@ -1850,7 +1849,7 @@ procedure TAnalyzer.AnalyzeFOR;
     TreeElems.CloseElement;
   end;
 var
-  Op1, idx, valIni: TEleExpress;
+  Op1, idx, valIni: TAstExpress;
 begin
   {Get the first asignment: i:=0; }
   TreeElems.AddElementBlockAndOpen(GetSrcPos);  //Open block for first assigment.
@@ -1863,7 +1862,7 @@ begin
     exit;
   end;
   //We have an asigment here
-  idx := TEleExpress(Op1.elements[0]);  //Get index variable (like "i").
+  idx := TAstExpress(Op1.elements[0]);  //Get index variable (like "i").
   if idx.opType <> otVariab then begin
     GenError(ER_VARIAB_EXPEC);
     exit;
@@ -1873,7 +1872,7 @@ begin
     exit;
   end;
   SkipWhites;
-  valIni := TEleExpress(Op1.elements[1]);
+  valIni := TAstExpress(Op1.elements[1]);
   //Ya se tiene la asignación inicial
   if not CaptureStr('TO') then exit;
   //Toma expresión Final
@@ -1889,9 +1888,9 @@ begin
   if not VerifyEND then exit;
 end;
 }
-procedure TAnalyzer.AnalyzeFORFirstAsign(out idx, valIni: TEleExpress);
+procedure TAnalyzer.AnalyzeFORFirstAsign(out idx, valIni: TAstExpress);
 var
-  Op1: TEleExpress;
+  Op1: TAstExpress;
 begin
   Next;         //Takes "FOR"
   //Generates index asignment
@@ -1903,7 +1902,7 @@ begin
     exit;
   end;
   //We have an asigment here
-  idx := TEleExpress(Op1.elements[0]);  //Get index variable (like "i").
+  idx := TAstExpress(Op1.elements[0]);  //Get index variable (like "i").
   if idx.opType <> otVariab then begin
     GenError(ER_VARIAB_EXPEC);
     exit;
@@ -1919,91 +1918,17 @@ begin
     exit;
   end;
   SkipWhites;
-  valIni := TEleExpress(Op1.elements[1]);
+  valIni := TAstExpress(Op1.elements[1]);
 end;
-procedure TAnalyzer.AnalyzeFORwhile;
-{Analize a FOR loop and generate a WHILE loop sentence}
-  procedure CreateCondition(idx: TEleExpress; out valFin: TEleExpress);
-  {Create a condition getting de expression of the <TO ... DO> section.}
-  var
-    _lequ, xvar: TEleExpress;
-    funSet: TEleFunDec;
-  begin
-    //Create the _lequ() expression: i<n.
-    _lequ := CreateExpression('_lequ', typNull, otFunct, GetSrcPos);
-    funSet := MethodFromBinOperator(idx.Typ, '<=', idx.Typ);
-    if funSet = nil then begin   //Operator not found
-      GenError('Undefined operation: %s %s %s', [idx.Typ.name, '<', idx.Typ.name]);
-      exit;
-    end;
-    _lequ.fundec := funSet;
-    //Add the new expression
-    TreeElems.AddElementAndOpen(_lequ);
-    //Create a new variable for the expression "i<..."
-    xvar := CreateExpression(idx.name, idx.Typ, otVariab, GetSrcPos);
-    SetVariabCA(xvar, idx.vardec);
-    TreeElems.AddElement(xvar);
-
-    valFin := GetExpression(0);
-
-    TreeElems.CloseElement;      //Close condition
-    if HayError then exit;
-    if valFin.Typ <> idx.Typ then begin
-      GenError('Expected expression of type %s', [idx.Typ.name], valFin.srcDec);
-      exit;
-    end;
-    SkipWhites;
-  end;
-  procedure CReateInc(idx: TEleExpress);
-  {Add a sentence Inc() applied to the index variable "idx".}
-  var
-    Op1, xvar: TEleExpress;
-  begin
-    //Open sentence
-    TreeElems.AddElementSentAndOpen(GetSrcPos, sntProcCal);
-    //Use reference sifFunInc" to access directly to function Inc().
-    Op1 := CreateExpression(sifFunInc.name, sifFunInc.retType, otFunct, GetSrcPos);
-    Op1.fundec := sifFunInc;
-    TreeElems.AddElementAndOpen(Op1);  //Open Inc()
-    //Create a new variable for the expression "i<..."
-    xvar := CreateExpression(idx.name, idx.Typ, otVariab, GetSrcPos);
-    SetVariabCA(xvar, idx.vardec);
-    TreeElems.AddElement(xvar);
-    TreeElems.CloseElement;  //Close Inc()
-    //Close Sentence
-    TreeElems.CloseElement;
-  end;
-var
-  idx, valIni, valFin: TEleExpress;
-begin
-  AnalyzeFORFirstAsign(idx, valIni);
-  if HayError then exit;
-  //Generates WHILE loop
-  TreeElems.AddElementSentAndOpen(GetSrcPos, sntWHILE);  //Open sentence
-  //Ya se tiene la asignación inicial
-  if not CaptureStr('TO') then exit;
-  //Toma expresión Final
-  CreateCondition(idx, valFin);
-  if not CaptureStr('DO') then exit;  //toma "do"
-  //Aquí debe estar el cuerpo del "for"
-  TreeElems.AddElementBlockAndOpen(GetSrcPos);  //Open block
-  if not AnalyzeStructBody then exit;
-  //Agrega instrucción de incremento.
-  CreateInc(idx);
-  //Close block
-  TreeElems.CloseElement;
-  if not VerifyEND then exit;
-  TreeElems.CloseElement;  //Close sentence
-end;
-procedure TAnalyzer.AnalyzeFORrepeat;
+procedure TAnalyzer.AnalyzeFOR;
 {Analyze a FOR loop and generates an IF-REPEAT loop structure.}
-  function CreateComparison(varComp: TEleExpress; out valFin: TEleExpress;
-                            readExpression: boolean = true): TEleExpress;
+  function CreateComparison(varComp: TAstExpress; out valFin: TAstExpress;
+                            readExpression: boolean = true): TAstExpress;
   {Create an expression of comparison that, usually, must be inside a condition.
-  Returns the TEleExpress of the comparison created.
+  Returns the TAstExpress of the comparison created.
   The operator of the comparison is not set here. Must be set later.}
   var
-    _comp, xvar: TEleExpress;
+    _comp, xvar: TAstExpress;
   begin
     //Create the _comp() expression:
     _comp := CreateExpression('', typNull, otFunct, GetSrcPos);
@@ -2020,10 +1945,10 @@ procedure TAnalyzer.AnalyzeFORrepeat;
     TreeElems.CloseElement;      //Close _comp()
     Result := _comp;
   end;
-  function SetOperation(_comp: TEleExpress; opType: TAstTypeDec; opStr: string): boolean;
+  function SetOperation(_comp: TAstExpress; opType: TAstTypeDec; opStr: string): boolean;
   {Set the operation for a comparison expression. If generates error, returns FALSE.}
   var
-    funSet: TEleFunDec;
+    funSet: TAstFunDec;
   begin
     //Create and set function for comparison.
     funSet := MethodFromBinOperator(opType, opStr, opType);
@@ -2035,13 +1960,11 @@ procedure TAnalyzer.AnalyzeFORrepeat;
     _comp.name := opStr;
     exit(true);
   end;
-  procedure CreateInc(idx: TEleExpress);
+  procedure CreateInc(idx: TAstExpress);
   {Add a sentence Inc() applied to the index variable "idx".}
   var
-    Op1, xvar: TEleExpress;
+    Op1, xvar: TAstExpress;
   begin
-    //Open sentence
-    TreeElems.AddElementSentAndOpen(GetSrcPos, sntProcCal);
     //Use reference sifFunInc" to access directly to function Inc().
     Op1 := CreateExpression(sifFunInc.name, sifFunInc.retType, otFunct, GetSrcPos);
     Op1.fundec := sifFunInc;
@@ -2051,11 +1974,9 @@ procedure TAnalyzer.AnalyzeFORrepeat;
     SetVariabCA(xvar, idx.vardec);
     TreeElems.AddElement(xvar);
     TreeElems.CloseElement;  //Close Inc()
-    //Close Sentence
-    TreeElems.CloseElement;
   end;
 var
-  idx, valIni, valFin, tmpVar, _lequ: TEleExpress;
+  idx, valIni, valFin, tmpVar, _lequ: TAstExpress;
 begin
   TreeElems.AddElementSentAndOpen(GetSrcPos, sntFOR);  //Open sentence
 
@@ -2078,8 +1999,8 @@ begin
   if not VerifyEND then exit;
   TreeElems.CloseElement;  //Close sentence
 end;
-procedure TAnalyzer.AnalyzeEXIT(exitSent: TEleSentence);
-  function GetExitExpression(out oper: TEleExpress): boolean;
+procedure TAnalyzer.AnalyzeEXIT(exitSent: TAstSentence);
+  function GetExitExpression(out oper: TAstExpress): boolean;
   {Get the argument of the Exit instruction. If not an expression follows, returns FALSE}
   begin
     if (tokType=tkBlkDelim) or (token=';') then begin
@@ -2093,16 +2014,16 @@ procedure TAnalyzer.AnalyzeEXIT(exitSent: TEleSentence);
   end;
 var
   parentNod: TAstElement;
-  func: TEleFunImp;
-  oper: TEleExpress;
-  prog: TEleProg;
+  func: TAstFunImp;
+  oper: TAstExpress;
+  prog: TAstProg;
 begin
   ProcComments;
   //Detect if an expression must follow
   parentNod := TreeElems.curCodCont.Parent;  //Se supone que nunca debería fallar
   //posExit := GetSrcPos;
   if parentNod.idClass = eleProg then begin
-    prog := TEleProg(parentNod);
+    prog := TAstProg(parentNod);
     //It's the main body
     if GetExitExpression(oper) then begin
       GenError('Main program cannot return a value.');
@@ -2110,7 +2031,7 @@ begin
     //Lleva el registro de las llamadas a exit()
     prog.RegisterExitCall(exitSent);
   end else if parentNod.idClass in [eleFuncDec, eleFuncImp] then begin
-    func := TEleFunImp(parentNod);
+    func := TAstFunImp(parentNod);
     if func.retType = typNull then begin
       //Is Procedure
         if GetExitExpression(oper) then begin
@@ -2166,9 +2087,9 @@ procedure TAnalyzer.AnalyzeSentence;
 var
   tokUp: String;
   ele, declarSec: TAstElement;
-  ex: TEleExpress;
+  ex: TAstExpress;
   declarPos: Integer;
-  snt, exitSent: TEleSentence;
+  exitSent: TAstSentence;
 begin
   if not (TreeElems.curNode.idClass in [eleBody, eleBlock]) then begin
     //No debería pasar, porque las instrucciones solo pueden estar en eleBody
@@ -2225,21 +2146,10 @@ begin
       end;
       TreeElems.CloseElement;  //Close sentence
     end else if tokUp = 'FOR' then begin
-//      TreeElems.AddElementSentAndOpen(GetSrcPos, sntFOR);  //Open sentence
-//      Next;         //Takes "for"
-//      AnalyzeFOR;
-//      if HayError then begin
-//        exit;
-//      end else if TreeElems.curNode.idClass <> eleSenten then begin
-//        //Something went wrong
-//        GenError('Syntax error.');
-//        exit;
-//      end;
-//      TreeElems.CloseElement;  //Close sentence
-      if ForToRepeat then AnalyzeFORrepeat else AnalyzeFORwhile;
+      AnalyzeFOR;
       if HayError then exit;
     end else if tokUp = 'ASM' then begin  //ASM block
-      TreeElems.AddElementSentAndOpen(GetSrcPos, sntAsmBlock);  //Open sentence
+//      TreeElems.AddElementSentAndOpen(GetSrcPos, sntAsmBlock);  //Open sentence
       vParserASM_6502.ProcessASMBlock(self);
       //In case there is not support for ASM blocks, this code can bypass the block.
       //repeat Next; until atEof or (UpCase(token)='END');
@@ -2247,7 +2157,7 @@ begin
       //  GenError('Unclosed ASM block.');
       //end;
       //Next;
-      TreeElems.CloseElement;  //Close sentence
+//      TreeElems.CloseElement;  //Close sentence
     end else if tokUp = 'EXIT' then begin  //EXIT instruction.
       exitSent := TreeElems.AddElementSentAndOpen(GetSrcPos, sntExit);  //Open sentence
       Next;
@@ -2255,9 +2165,9 @@ begin
       TreeElems.CloseElement;  //Close sentence
     end else begin
       //Could be Assigment sentence, Procedure call or Function operand.
-      snt := TreeElems.AddElementSentAndOpen(GetSrcPos, sntAssign); //Open sentence
+//      snt := TreeElems.AddElementSentAndOpen(GetSrcPos, sntAssign); //Open sentence
       //Parse expression
-      GetExpression(0);
+      ele := GetExpression(0);
       //Validate expression
       if HayError then begin
         exit;
@@ -2270,29 +2180,27 @@ begin
       declarSec := TreeElems.curCodCont.Parent;  //Declaration section.
       declarPos := TreeElems.curCodCont.Index;  //Position before of the body.
       MoveInternalTypes(TreeElems.curNode, declarSec, declarPos);
-      //Take the first (should be the unique) element.
-      ele :=TreeElems.curNode.elements[0];
       //We expected one expression element.
       if ele.idClass = eleExpress then begin
         //The expected element
-        ex := TEleExpress(ele);
+        ex := TAstExpress(ele);
         if ex.opType = otFunct then begin
           //Should be a procedure or function call.
-          if ex.fcallOp then begin   //It comes from an operator
-            //Validate if expression is allowed here.
-            if ex.fundec.retType <> typNull then begin  //Return a type. Like "x + y".
-               GenError('Expressions are not allowed here.', ex.srcDec);
-            end;
-            //Set sentence type
-            if ex.fundec.getset in [gsSetInItem,gsSetInPtr,gsSetInSimple] then begin
-              //Only assignment ':=' is considered as an Assignment
-            end else begin
-              //Operands like '+=' ,'-=', ... are not.
-              snt.sntType := sntProcCal;   //Update type.
-            end;
-          end else begin             //Should be a function call, like inc(x);
-            snt.sntType := sntProcCal;   //Update type.
-          end;
+//          if ex.fcallOp then begin   //It comes from an operator
+//            //Validate if expression is allowed here.
+//            if ex.fundec.retType <> typNull then begin  //Return a type. Like "x + y".
+//               GenError('Expressions are not allowed here.', ex.srcDec);
+//            end;
+//            //Set sentence type
+//            if ex.fundec.getset in [gsSetInItem,gsSetInPtr,gsSetInSimple] then begin
+//              //Only assignment ':=' is considered as an Assignment
+//            end else begin
+//              //Operands like '+=' ,'-=', ... are not.
+//              snt.sntType := sntProcCal;   //Update type.
+//            end;
+//          end else begin             //Should be a function call, like inc(x);
+//            snt.sntType := sntProcCal;   //Update type.
+//          end;
         end else begin
           //Returns a type. Should be an expression
           GenError('Invalid sentence.', ex.srcDec);
@@ -2300,7 +2208,7 @@ begin
       end else begin  //Maybe a simple operand.
         GenError('Expression expected.');
       end;
-      TreeElems.CloseElement;  //Close sentence
+//      TreeElems.CloseElement;  //Close sentence
     end;
   end else begin
     //Any other thing.
@@ -2345,7 +2253,7 @@ end;
 procedure TAnalyzer.AnalyzeUsesDeclaration;
 {Compila la unidad indicada.}
 var
-  uni: TEleUnit;
+  uni: TAstUnit;
   uPath: String;
   uName: String;
   p: TContextState;
@@ -2411,7 +2319,7 @@ procedure TAnalyzer.DoAnalyzeUnit(uni: TAstElement);
 {Realiza la compilación de una unidad}
 var
   elem: TAstElement;
-  fundec: TEleFunDec;
+  fundec: TAstFunDec;
   tokL: String;
 begin
 //debugln('   Ini Unit: %s-%s',[TreeElems.curNode.name, ExtractFIleName(curCon.fileSrc)]);
@@ -2524,7 +2432,7 @@ begin
   end;
   //Verifica si todas las funciones de INTERFACE, se implementaron
   for elem in TreeElems.curNode.elements do if elem.idClass = eleFuncDec then begin
-    fundec := TEleFunDec(elem);
+    fundec := TAstFunDec(elem);
     if fundec.BodyNode = nil then begin  //Sin cuerpo. Debe ser FORWARD.
       if fundec.implem = nil then begin
         GenError('Function %s not implemented.', [fundec.name], fundec.srcDec);
@@ -2552,9 +2460,9 @@ procedure TAnalyzer.DoAnalyzeProgram;
 Input: The current context.
 Output: The AST.}
 var
-  bod: TEleBody;
+  bod: TAstBody;
   elem: TAstElement;
-  fundec: TEleFunDec;
+  fundec: TAstFunDec;
   tokL: String;
 begin
   ClearError;
@@ -2640,7 +2548,7 @@ begin
   if HayError then exit;
   //Verifica si todas las funciones FORWARD, se implementaron
   for elem in TreeElems.curNode.elements do if elem.idClass = eleFuncDec then begin
-    fundec := TEleFunDec(elem);
+    fundec := TAstFunDec(elem);
     if fundec.BodyNode = nil then begin  //Sin cuerpo. Debe ser FORWARD.
       if fundec.implem = nil then begin
         GenError('Function %s not implemented.', [fundec.name], fundec.srcDec);

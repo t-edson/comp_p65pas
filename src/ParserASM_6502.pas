@@ -15,9 +15,9 @@ type
   TParserAsm_6502 = class
   private
     cpx     : TCompilerBase;   //Reference to compiler
-    labels  : TEleAsmInstrs;   //Lista de etiquetas
-    curBlock: TEleAsmBlock;    //Bloque ASM actual.
-    curInst : TEleAsmInstr;    //Instruction ASM actual.
+    labels  : TAstAsmInstrs;   //Lista de etiquetas
+    curBlock: TAstAsmBlock;    //Bloque ASM actual.
+    curInst : TAstAsmInstr;    //Instruction ASM actual.
     procedure AddDirectiveDB;
     procedure AddDirectiveDW;
     procedure AddInstructionLabel(lblName: string);
@@ -26,7 +26,7 @@ type
     function CaptureParenthes: boolean;
     procedure EndASM;
     function GetFaddressByte(addr: integer): byte;
-    function IsLabelDeclared(txt: string; out lblEle: TEleAsmInstr): boolean;
+    function IsLabelDeclared(txt: string; out lblEle: TAstAsmInstr): boolean;
     procedure ProcASMline(out blkEnd: boolean);
     procedure ProcInstrASM(idInst: TP6502Inst; var blkEnd: boolean);
     procedure StartASM;
@@ -70,11 +70,11 @@ begin
   end;
   Result := addr;
 end;
-function TParserAsm_6502.IsLabelDeclared(txt: string; out lblEle: TEleAsmInstr): boolean;
+function TParserAsm_6502.IsLabelDeclared(txt: string; out lblEle: TAstAsmInstr): boolean;
 {Indica si un nombre es una etiqueta. Si lo es, devuelve TRUE, y devuelve en lblEle, la
 referencia a la instrucción de la etiqueta.}
 var
-  lbl: TEleAsmInstr;
+  lbl: TAstAsmInstr;
 begin
   //No se espera procesar muchas etiquetas
   for lbl in labels do begin  { TODO : ¿No se podría prescindir de "labels2 y usar solamente la lista de todas las instrucciones? }
@@ -234,11 +234,11 @@ If not operand eas found error is generated and returns FALSE.}
   end;
 var
   ele: TAstElement;
-  xfun: TEleFunImp;
+  xfun: TAstFunImp;
   xvar: TAstVarDec;
   xcon: TAstConsDec;
   positOper: char;
-  lblEle: TEleAsmInstr;
+  lblEle: TAstAsmInstr;
 begin
   Result := false;
   operand.used := false;
@@ -293,7 +293,7 @@ begin
       //Se identifica un elemento del lenguaje
       if ele.idClass = eleFuncImp then begin
         //Es un identificador de función del árbol de sintaxis
-        xfun := TEleFunImp(ele);
+        xfun := TAstFunImp(ele);
         cpx.AddCallerToFromCurr(xfun);  //lleva la cuenta
         cpx.Next;  //Take variable name
         operand.Val := -1;        //Indicates to use "operRef"
@@ -354,7 +354,7 @@ procedure TParserAsm_6502.EndASM;  //Termina el procesamiento de código ASM
   {Completa la instrucción "unsInstruct", buscando en la lista de etiquetas.
   Si no encuentra la etiqueta, devuelve FALSE.}
   var
-    lblInstr: TEleAsmInstr;
+    lblInstr: TAstAsmInstr;
   begin
     for lblInstr in labels do begin  //Ve si la etiqueta existe
       if operand.Nam  = lblInstr.uname  then begin
@@ -367,7 +367,7 @@ procedure TParserAsm_6502.EndASM;  //Termina el procesamiento de código ASM
     exit(false);  //No se encontró.
   end;
 var
-  jmpInst : TEleAsmInstr;
+  jmpInst : TAstAsmInstr;
 begin
   //Complete operand for instructions with udefined label references.
   {Al final de esta iteración todas las instruciones que incluyan operandos con
@@ -391,8 +391,8 @@ end;
 procedure TParserAsm_6502.ProcInstrASM(idInst: TP6502Inst; var blkEnd: boolean);
 {Proccess an 6502 ASM instruction. Instruction must be previously validated and
  identified in "idInst".
- Basically this procedure, add a new TEleAsmInstr (including instruction, addresing
- mode and operamd) to the current TEleAsmBlock, that represents a 6502 instruction.
+ Basically this procedure, add a new TAstAsmInstr (including instruction, addresing
+ mode and operamd) to the current TAstAsmBlock, that represents a 6502 instruction.
  An instruction ends with the EOL token or the ASM delimiter "END".
  This procedure must not process the EOL token or the "END" delimiter.
  If the the "END" delimiter is found, the flag "blkEnd" is activated.
@@ -569,7 +569,7 @@ procedure TParserAsm_6502.ProcASMline(out blkEnd: boolean);
 var
   idInst: TP6502Inst;
   tok, lbl: String;
-  lblEle: TEleAsmInstr;
+  lblEle: TAstAsmInstr;
   undefLabel: boolean;
 begin
   blkEnd := false;
@@ -688,7 +688,7 @@ begin
     //We need to close the current instruction.
     cpx.TreeElems.CloseElement;
   end;
-  curInst := TEleAsmInstr.Create;
+  curInst := TAstAsmInstr.Create;
   curInst.name := '<inst>';
   curInst.srcDec := srcDec;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
@@ -708,7 +708,7 @@ begin
     //We need to close the current instruction.
     cpx.TreeElems.CloseElement;
   end;
-  curInst := TEleAsmInstr.Create;
+  curInst := TAstAsmInstr.Create;
   curInst.name := lblName;
   curInst.srcDec := cpx.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
@@ -722,7 +722,7 @@ begin
     //We need to close the current instruction.
     cpx.TreeElems.CloseElement;
   end;
-  curInst := TEleAsmInstr.Create;
+  curInst := TAstAsmInstr.Create;
   curInst.name := 'ORG';
   curInst.srcDec := cpx.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
@@ -736,7 +736,7 @@ begin
     //We need to close the current instruction.
     cpx.TreeElems.CloseElement;
   end;
-  curInst := TEleAsmInstr.Create;
+  curInst := TAstAsmInstr.Create;
   curInst.name := 'DB';
   curInst.srcDec := cpx.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
@@ -749,7 +749,7 @@ begin
     //We need to close the current instruction.
     cpx.TreeElems.CloseElement;
   end;
-  curInst := TEleAsmInstr.Create;
+  curInst := TAstAsmInstr.Create;
   curInst.name := 'DW';
   curInst.srcDec := cpx.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
@@ -764,7 +764,7 @@ begin
   cpx := cpx0;  //Reference to compiler.
   cpx.Next;     //Get ASM
   cpx.curCtx.OnDecodeNext := @DecodeNext;  //Set a new lexer
-  curBlock := TEleAsmBlock.Create;
+  curBlock := TAstAsmBlock.Create;
   curBlock.srcDec := cpx.GetSrcPos;
   curBlock.name := 'ASMblk';
   cpx.TreeElems.AddElementAndOpen(curBlock);
@@ -874,7 +874,7 @@ end;
 constructor TParserAsm_6502.Create;
 begin
   inherited Create;
-  labels := TEleAsmInstrs.Create(false);
+  labels := TAstAsmInstrs.Create(false);
 end;
 destructor TParserAsm_6502.Destroy;
 begin

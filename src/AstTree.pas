@@ -27,22 +27,22 @@ type  //Abstract Syntax Tree
   Se usa también como para resolver nombres de elementos.}
   TAstTree = class
   public  //Tree definition/events
-    main      : TEleProg;  //Root node
+    main      : TAstProg;  //Root node
     curNode   : TAstElement;  //Reference to current node
-    curCodCont: TEleCodeCont;  {Reference to current code container, used to solve
+    curCodCont: TAstCodeCont;  {Reference to current code container, used to solve
                                  identifiers. It could be:
                                    - Body opened.
                                    - Constant declaration opened.
                                    - Variable declaration opened.
                                    - Type declaration opened.
-                                  Note this don't consider TEleBlock elements.
+                                  Note this don't consider TAstBlock elements.
                                    }
     OnFindElement: procedure(elem: TAstElement) of object;  //Evento de búsqueda
   public  //Containers
     AllCons  : TAstConsDecs;
     AllVars  : TAstVarDecs;
-    AllUnits : TEleUnits;
-    AllFuncs : TEleFunDecs;
+    AllUnits : TAstUnits;
+    AllFuncs : TAstFunDecs;
     AllTypes : TAstTypeDecs;
     procedure Clear;
     procedure RefreshAllUnits;
@@ -55,7 +55,7 @@ type  //Abstract Syntax Tree
     procedure DeleteTypeNode(typNode: TAstTypeDec);
     procedure ChangeParentTo(newparent, elem: TAstElement; position: integer = - 1);
     procedure InsertParentTo(newparent, elem: TAstElement);
-    function AddBodyAndOpen(srcPos: TSrcPos): TEleBody;
+    function AddBodyAndOpen(srcPos: TSrcPos): TAstBody;
     function AddConsDecAndOpen(srcPos: TSrcPos; cname: string;
       ctype: TAstTypeDec): TAstConsDec;
     function AddVarDecAndOpen(srcPos: TSrcPos; vname: string;
@@ -64,26 +64,26 @@ type  //Abstract Syntax Tree
       catType: TCatType; group: TTypeGroup; position: integer = - 1
   ): TAstTypeDec;
     function AddElementBlockAndOpen(srcPos: TSrcPos; position: integer = - 1
-      ): TEleBlock;
-    function AddElementSentAndOpen(srcPos: TSrcPos; sntType: TSentenceType): TEleSentence;
+      ): TAstBlock;
+    function AddElementSentAndOpen(srcPos: TSrcPos; sntType: TSentenceType): TAstSentence;
   public  //Element resolution (FindFirst() - FindNext())
     curFind: TAstFindState; //State variables for searching
     function FindFirst(const name: string): TAstElement;
     function FindNext: TAstElement;
-    function FindNextFuncName: TEleFunDec;
+    function FindNextFuncName: TAstFunDec;
     function FindFirstType(const name: string): TAstTypeDec;
     function FindNextType: TAstTypeDec;
     function FindVar(varName: string): TAstVarDec;
     function FindType(typName: string): TAstTypeDec;
   public  //Searching/Identify
     function LastNode: TAstElement;
-    function BodyNode: TEleBody;
+    function BodyNode: TAstBody;
     function CurNodeName: string;
     function ExistsArrayType(itemType: TAstTypeDec; nEle: integer;
                              out typFound: TAstTypeDec): boolean;
     function ExistsPointerType(ptrType: TAstTypeDec;
                              out typFound: TAstTypeDec): boolean;
-    function GetElementBodyAt(posXY: TPoint): TEleBody;
+    function GetElementBodyAt(posXY: TPoint): TAstBody;
     function GetElementAt(posXY: TPoint): TAstElement;
     function GetElementCalledAt(const srcPos: TSrcPos): TAstElement;
     function GetELementDeclaredAt(const srcPos: TSrcPos): TAstElement;
@@ -96,14 +96,14 @@ type  //Abstract Syntax Tree
     destructor Destroy; override;
   end;
 
-  function SameParamsType(f: TEleFunBase; const funpars: TAstParamArray): boolean;
-  function SameParamsName(f: TEleFunBase; const funpars: TAstParamArray): boolean;
+  function SameParamsType(f: TAstFunBase; const funpars: TAstParamArray): boolean;
+  function SameParamsName(f: TAstFunBase; const funpars: TAstParamArray): boolean;
 var
   // Tipo nulo. Usado para elementos sin tipo.
   typNull : TAstTypeDec;
 
 implementation
-function SameParamsType(f: TEleFunBase; const funpars: TAstParamArray): boolean;
+function SameParamsType(f: TAstFunBase; const funpars: TAstParamArray): boolean;
 {Compara los parámetros de la función con una lista de parámetros. Si tienen el mismo
 número de parámetros y el mismo tipo, devuelve TRUE.}
 var
@@ -125,7 +125,7 @@ begin
   //Si llegó hasta aquí; hay coincidencia, sale con TRUE
   exit(true);
 end;
-function SameParamsName(f: TEleFunBase; const funpars: TAstParamArray): boolean;
+function SameParamsName(f: TAstFunBase; const funpars: TAstParamArray): boolean;
 {Compara los parámetros de la función con una lista de parámetros. Si tienen el mismo
 nombre, devuelve TRUE. No se hace verificación de tipo o cantidad de parámetros. Esa
 verifiación debe haberse hecho previamente con SameParamsType().}
@@ -163,7 +163,7 @@ begin
   AllUnits.Clear;   //por si estaba llena
   for ele in main.elements do begin
     if ele.idClass = eleUnit then begin
-       AllUnits.Add( TEleUnit(ele) );
+       AllUnits.Add( TAstUnit(ele) );
     end;
   end;
 end;
@@ -184,7 +184,7 @@ begin
 //debugln('<adding>' + elem.Parent.name + ',' + elem.name);
     AllVars.Add(TAstVarDec(elem));
     end;
-  eleFuncDec : AllFuncs.Add(TEleFunDec(elem)); //Declarations are now stored in AllFuncs.
+  eleFuncDec : AllFuncs.Add(TAstFunDec(elem)); //Declarations are now stored in AllFuncs.
   eleTypeDec : AllTypes.Add(TAstTypeDec(elem));
   //No se incluye el código de RefreshAllUnits() porque solo trabaja en el "main".
   end;
@@ -272,20 +272,20 @@ begin
   //Reinsert "elem" as child of newparent
   newparent.AddElement(elem, 0);
 end;
-function TAstTree.AddBodyAndOpen(srcPos: TSrcPos): TEleBody;
+function TAstTree.AddBodyAndOpen(srcPos: TSrcPos): TAstBody;
 {Similar to AddElementAndOpen() but create and open a Body node. Returns the Body created.
 This function must be used always when creating a Body, because it mantains updated the
 variable "curBody" that is used to resolve names.}
 begin
-  Result := TEleBody.Create;
+  Result := TAstBody.Create;
   Result.name := TIT_BODY_ELE;
   Result.srcDec := srcPos;
   curNode.codCont := curCodCont;  //Save before change
   //For functions, updates "bodyImplem" on declaration
   if curNode.idClass = eleFuncDec then begin
-    TeleFunDec(curNode).bodyImplem := Result;
+    TAstFunDec(curNode).bodyImplem := Result;
   end else if curNode.idClass = eleFuncImp then begin
-    TEleFunImp(curNode).declar.bodyImplem := Result;   //Point to implementation
+    TAstFunImp(curNode).declar.bodyImplem := Result;   //Point to implementation
   end;
   AddElementAndOpen(Result);
   curCodCont := Result;  //Update current Code container
@@ -326,16 +326,16 @@ begin
   AddElementAndOpen(Result, position);  //Open type
   curCodCont := Result;  //Update current Code container
 end;
-function TAstTree.AddElementBlockAndOpen(srcPos: TSrcPos; position: integer = -1): TEleBlock;
+function TAstTree.AddElementBlockAndOpen(srcPos: TSrcPos; position: integer = -1): TAstBlock;
 begin
-  Result := TEleBlock.Create;
+  Result := TAstBlock.Create;
   Result.name := 'block';
   Result.srcDec := srcPos;
   AddElementAndOpen(Result, position);
 end;
-function TAstTree.AddElementSentAndOpen(srcPos: TSrcPos; sntType: TSentenceType): TEleSentence;
+function TAstTree.AddElementSentAndOpen(srcPos: TSrcPos; sntType: TSentenceType): TAstSentence;
 begin
-  Result := TEleSentence.Create;
+  Result := TAstSentence.Create;
   //Result.name := 'sent';
   Result.srcDec := srcPos;
   Result.sntType := sntType;
@@ -430,7 +430,7 @@ begin
     end;
   until false;
 end;
-function TAstTree.FindNextFuncName: TEleFunDec;
+function TAstTree.FindNextFuncName: TAstFunDec;
 {Scans recursively toward root, in the syntax tree, until find a function element with
 the same name provided in a previous call to FindFirst.
 Must be called after calling FindFirst() with the name of the function.
@@ -444,9 +444,9 @@ begin
   //Puede que haya encontrado la función o no
   if ele = nil then exit(nil);  //No encontró
   if ele.idClass = eleFuncDec then begin
-    Result := TEleFunDec(ele);   //devuelve como función
+    Result := TAstFunDec(ele);   //devuelve como función
   end else begin //Implementation
-    Result := TEleFunImp(ele).declar;   //devuelve como función
+    Result := TAstFunImp(ele).declar;   //devuelve como función
   end;
 end;
 function TAstTree.FindFirstType(const name: string): TAstTypeDec;
@@ -506,7 +506,7 @@ function TAstTree.LastNode: TAstElement;
 begin
   Result := main.LastNode;
 end;
-function TAstTree.BodyNode: TEleBody;
+function TAstTree.BodyNode: TAstBody;
 {Devuelve la referencia al cuerpo principal del programa.}
 begin
   Result := main.BodyNode;
@@ -540,12 +540,12 @@ begin
   //Verify result
   Result := typFound <> nil;
 end;
-function TAstTree.GetElementBodyAt(posXY: TPoint): TEleBody;
+function TAstTree.GetElementBodyAt(posXY: TPoint): TAstBody;
 {Busca en el árbol de sintaxis, dentro del nodo principal, y sus nodos hijos, en qué
 cuerpo (nodo Body) se encuentra la coordenada del cursor "posXY".
 Si no encuentra, devuelve NIL.}
 var
-  res: TEleBody;
+  res: TAstBody;
 
   procedure ExploreForBody(nod: TAstElement);
   var
@@ -556,7 +556,7 @@ var
       if ele.idClass = eleBody then begin
         //Encontró un Body, verifica
         if ele.posXYin(posXY) then begin
-          res := TEleBody(ele);   //guarda referencia
+          res := TAstBody(ele);   //guarda referencia
           exit;
         end;
       end else begin
@@ -575,7 +575,7 @@ function TAstTree.GetElementAt(posXY: TPoint): TAstElement;
 {Busca en el árbol de sintaxis, en qué nodo Body se encuentra la coordenada del
 cursor "posXY". Si no encuentra, devuelve NIL.}
 var
-  res: TEleBody;
+  res: TAstBody;
 
   procedure ExploreFor(nod: TAstElement);
   var
@@ -589,7 +589,7 @@ var
       if res<>nil then exit;  //encontró
       //No encontró en los hijos, busca en el mismo nodo
       if ele.posXYin(posXY) then begin
-        res := TEleBody(ele);   //guarda referencia
+        res := TAstBody(ele);   //guarda referencia
         if res<>nil then exit;  //encontró
       end;
     end;
@@ -661,14 +661,14 @@ mismo nombre y los mismos tipos de parámetros.}
 var
   ele: TAstElement;
   uname: String;
-  funbas: TEleFunBase;
+  funbas: TAstFunBase;
 begin
   uname := Upcase(funName);
   for ele in curNode.elements do begin
     if ele.uname = uname then begin
       //hay coincidencia de nombre
       if ele.idClass in [eleFuncImp, eleFuncDec] then begin
-        funbas := TEleFunBase(ele);
+        funbas := TAstFunBase(ele);
         //para las funciones, se debe comparar los parámetros
         if SameParamsType(funbas, pars) then begin
           exit(true);
@@ -687,11 +687,11 @@ procedure TAstTree.print();
   procedure printNode(nod: TAstElement; level: integer);
   var
     ele: TAstElement;
-    expr: TEleExpress;
+    expr: TAstExpress;
   begin
     for ele in nod.elements do begin
       if ele.idClass = eleExpress then begin
-        expr := TEleExpress(ele);
+        expr := TAstExpress(ele);
         debugln(Space(level*2)+'ele='+expr.Name + '('+expr.StoAsStr+')');
       end else begin
         debugln(Space(level*2)+'ele='+ele.Name {+ '('+ele.Sto+')'});
@@ -712,12 +712,12 @@ end;
 //Constructor y destructor
 constructor TAstTree.Create;
 begin
-  main:= TEleProg.Create;  //No debería
+  main:= TAstProg.Create;  //No debería
   main.name := 'Main';
   AllCons  := TAstConsDecs.Create(false);  //Create list
   AllVars  := TAstVarDecs.Create(false);   //Create list
-  AllFuncs := TEleFunDecs.Create(false);   //Create list
-  AllUnits := TEleUnits.Create(false);     //Create list
+  AllFuncs := TAstFunDecs.Create(false);   //Create list
+  AllUnits := TAstUnits.Create(false);     //Create list
   AllTypes := TAstTypeDecs.Create(false);  //Create list
   curNode := main;                         //Empieza con el nodo principal como espacio de nombres actual
 end;
