@@ -18,7 +18,7 @@ type
       out mainTypCreated: TAstTypeDec);
     function GetConstValue(constTyp: TAstTypeDec; out mainTypCreated: TAstTypeDec
       ): TAstExpress;
-    procedure AnalyzeEXIT(exitSent: TAstSentence);
+    procedure AnalyzeEXIT;
     procedure AnalyzeIF;
     procedure AnalyzeREPEAT;
     procedure AnalyzeWHILE;
@@ -505,7 +505,6 @@ end;
 procedure TAnalyzer.ReadProcHeader(out procName: String; out retType: TAstTypeDec;
   out srcPos: TSrcPos; var pars: TAstParamArray; out IsInterrupt, IsForward: Boolean);
 {Hace el procesamiento del encabezado de la declaración de una función/procedimiento.
-Devuelve la referencia al objeto TxpEleFun creado, en "fun".
 Conviene separar el procesamiento del enzabezado, para poder usar esta rutina, también,
 en el procesamiento de unidades.}
   procedure ReadFunctionParams(var funPars: TAstParamArray);
@@ -1786,108 +1785,6 @@ begin
   if not CaptureStr('UNTIL') then exit; //toma "until"
   if not GetCondition(ex) then exit;
 end;
-{
-procedure TAnalyzer.AnalyzeFOR;
-{Analize a FOR loop and generate a FOR loop sentence}
-  procedure CreateCondition(idx: TAstExpress);
-  {Create a condition getting de expression of the <TO ... DO> section.}
-  var
-    elem: TEleCondit;
-    Op2, _lequ, xvar: TAstExpress;
-    funSet: TAstFunBase;
-  begin
-    //Create and open condition
-    elem := TEleCondit.Create;
-    elem.name := 'cond';
-    elem.srcDec := GetSrcPos;
-    TreeElems.AddElementAndOpen(elem);
-
-    //Create the _lequ() expression: i<n.
-    _lequ := CreateExpression('_lequ', typNull, otFunct, GetSrcPos);
-    funSet := MethodFromBinOperator(idx.Typ, '<=', idx.Typ);
-    if funSet = nil then begin   //Operator not found
-      GenError('Undefined operation: %s %s %s', [idx.Typ.name, '<', idx.Typ.name]);
-      exit;
-    end;
-    _lequ.rfun := funSet;
-    //Add the new expression
-    TreeElems.AddElementAndOpen(_lequ);
-    //Create a new variable for the expression "i<..."
-    xvar := CreateExpression(idx.name, idx.Typ, otVariab, GetSrcPos);
-    xvar.SetVariab(idx.vardec);
-    TreeElems.AddElement(vardec);
-
-    Op2 := GetExpression(0);
-
-    TreeElems.CloseElement;      //Close _lequ()
-
-    TreeElems.CloseElement;      //Close condition
-    if HayError then exit;
-    if Op2.Typ <> idx.Typ then begin
-      GenError('Expected expression of type %s', [idx.Typ.name], Op2.srcDec);
-      exit;
-    end;
-    SkipWhites;
-  end;
-  procedure CReateInc(idx: TAstExpress);
-  {Add a sentence Inc() applied to the index variable "idx".}
-  var
-    Op1, xvar: TAstExpress;
-  begin
-    //Open sentence
-    TreeElems.AddElementSentAndOpen(GetSrcPos, sntProcCal);
-    //Use reference sifFunInc" to access directly to function Inc().
-    Op1 := CreateExpression(sifFunInc.name, sifFunInc.retType, otFunct, GetSrcPos);
-    Op1.rfun := sifFunInc;
-    TreeElems.AddElementAndOpen(Op1);  //Open Inc()
-    //Create a new variable for the expression "i<..."
-    xvar := CreateExpression(idx.name, idx.Typ, otVariab, GetSrcPos);
-    xvar.SetVariab(idx.rvar);
-    TreeElems.AddElement(xvar);
-    TreeElems.CloseElement;  //Close Inc()
-    //Close Sentence
-    TreeElems.CloseElement;
-  end;
-var
-  Op1, idx, valIni: TAstExpress;
-begin
-  {Get the first asignment: i:=0; }
-  TreeElems.AddElementBlockAndOpen(GetSrcPos);  //Open block for first assigment.
-  Op1 := GetExpression(0);
-  TreeElems.CloseElement;  //Close block
-  if HayError then exit;
-
-  if Op1.name<>'_set' then begin
-    GenError('Expected ":=".', Op1.srcDec);
-    exit;
-  end;
-  //We have an asigment here
-  idx := TAstExpress(Op1.elements[0]);  //Get index variable (like "i").
-  if idx.opType <> otVariab then begin
-    GenError(ER_VARIAB_EXPEC);
-    exit;
-  end;
-  if (idx.Typ<>typByte) and (idx.Typ<>typWord) then begin
-    GenError(ER_ONL_BYT_WORD);
-    exit;
-  end;
-  SkipWhites;
-  valIni := TAstExpress(Op1.elements[1]);
-  //Ya se tiene la asignación inicial
-  if not CaptureStr('TO') then exit;
-  //Toma expresión Final
-  CreateCondition(idx);
-  if not CaptureStr('DO') then exit;  //toma "do"
-  //Aquí debe estar el cuerpo del "for"
-  TreeElems.AddElementBlockAndOpen(GetSrcPos);  //Open block
-  if not AnalyzeStructBody then exit;
-  //Agrega instrucción de incremento.
-  CreateInc(idx);
-  //Close block
-  TreeElems.CloseElement;
-  if not VerifyEND then exit;
-end;
-}
 procedure TAnalyzer.AnalyzeFORFirstAsign(out idx, valIni: TAstExpress);
 var
   Op1: TAstExpress;
@@ -1999,7 +1896,7 @@ begin
   if not VerifyEND then exit;
   TreeElems.CloseElement;  //Close sentence
 end;
-procedure TAnalyzer.AnalyzeEXIT(exitSent: TAstSentence);
+procedure TAnalyzer.AnalyzeEXIT;
   function GetExitExpression(out oper: TAstExpress): boolean;
   {Get the argument of the Exit instruction. If not an expression follows, returns FALSE}
   begin
@@ -2015,8 +1912,8 @@ procedure TAnalyzer.AnalyzeEXIT(exitSent: TAstSentence);
 var
   parentNod: TAstElement;
   func: TAstFunImp;
-  oper: TAstExpress;
   prog: TAstProg;
+  exitSent: TAstExpress;
 begin
   ProcComments;
   //Detect if an expression must follow
@@ -2025,7 +1922,7 @@ begin
   if parentNod.idClass = eleProg then begin
     prog := TAstProg(parentNod);
     //It's the main body
-    if GetExitExpression(oper) then begin
+    if GetExitExpression(exitSent) then begin
       GenError('Main program cannot return a value.');
     end;
     //Lleva el registro de las llamadas a exit()
@@ -2034,19 +1931,19 @@ begin
     func := TAstFunImp(parentNod);
     if func.retType = typNull then begin
       //Is Procedure
-        if GetExitExpression(oper) then begin
+        if GetExitExpression(exitSent) then begin
           GenError('Procedures doesn''t return a value.');
         end;
     end else begin
       //Is Function
-      if GetExitExpression(oper) then begin
+      if GetExitExpression(exitSent) then begin
         //The expected. Check type match.
         if HayError then exit;
-        if oper.Typ <> func.retType then begin
+        if exitSent.Typ <> func.retType then begin
           GenError('Expected a "%s" expression.', [func.retType.name]);
         end;
         //Detect dependence when returning value
-        if oper.Typ.OnRequireWR<>nil then oper.Typ.OnRequireWR;
+        if exitSent.Typ.OnRequireWR<>nil then exitSent.Typ.OnRequireWR;
       end else begin
         GenWarn('Expected return value.');
       end;
@@ -2089,7 +1986,6 @@ var
   ele, declarSec: TAstElement;
   ex: TAstExpress;
   declarPos: Integer;
-  exitSent: TAstSentence;
 begin
   if not (TreeElems.curNode.idClass in [eleBody, eleBlock]) then begin
     //No debería pasar, porque las instrucciones solo pueden estar en eleBody
@@ -2159,10 +2055,8 @@ begin
       //Next;
 //      TreeElems.CloseElement;  //Close sentence
     end else if tokUp = 'EXIT' then begin  //EXIT instruction.
-      exitSent := TreeElems.AddElementSentAndOpen(GetSrcPos, sntExit);  //Open sentence
       Next;
-      AnalyzeEXIT(exitSent);
-      TreeElems.CloseElement;  //Close sentence
+      AnalyzeEXIT();
     end else begin
       //Could be Assigment sentence, Procedure call or Function operand.
 //      snt := TreeElems.AddElementSentAndOpen(GetSrcPos, sntAssign); //Open sentence

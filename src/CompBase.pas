@@ -1590,7 +1590,7 @@ begin
 end;
 function  TCompilerBase.proc_addr(): TAstExpress;
 {
-The operand read is added to the syntax tree, as a TxpEleExpress element, and returned
+The operand read is added to the syntax tree, as a TAstExpress element, and returned
 in this function.
 }
 var
@@ -1663,7 +1663,7 @@ begin
 end;
 function TCompilerBase.GetOperand(): TAstExpress;
 {Get an "Operand" element of the Pascal language, from the current context.
-If an operand is obtained, it is added to the current node in the AST as a TxpEleExpress
+If an operand is obtained, it is added to the current node in the AST as a TAstExpress
 (and set as active node), and the reference is returned in this function.
 If an operand is not found, an error is generated, a NIL value is returned and the AST
 can be modified or not, depending on the point where the error is raised.
@@ -1675,7 +1675,7 @@ can be modified or not, depending on the point where the error is raised.
                      |
                      +--------------------------------------->
 
-The operand read is added to the syntax tree, as a TxpEleExpress element, and returned
+The operand read is added to the syntax tree, as a TAstExpress element, and returned
 in this function.
 
 }
@@ -2015,7 +2015,7 @@ end;
 function TCompilerBase.GetExpression(const prec: Integer): TAstExpress;
 {Analyze a common Pascal expression, and represent it in the AST, according to the
 predefined rules.
-In normal case, creates an element TxpEleExpress, in the current node, and returns a
+In normal case, creates an element TAstExpress, in the current node, and returns a
 reference to the expression element root.
 In some cases like when reading arrays or objects, a new type can be created.
 }

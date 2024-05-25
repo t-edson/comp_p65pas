@@ -558,12 +558,12 @@ type  //Structural elements
   public
     function BodyNode: TAstBody;
   public //Manejo de llamadas a exit()
-    firstObligExit: TAstSentence;  {Referencia al primer exit(), en código obligatorio.
+    firstObligExit: TAstExpress;  {Referencia al primer exit(), en código obligatorio.
                            Si es NIL, significa que no hay ningún exit() en código
                            obligatorio, aunque podrían haber algunos en código condicional.
                            Solo importa el primero, porque después de este, ya no se
                            ejecutará ningún otro código.}
-    procedure RegisterExitCall(exitSent: TAstSentence);
+    procedure RegisterExitCall(exitSent: TAstExpress);
     {**************************************************************
     De momento, no se están usando estos campos de abajo. Con los de arriba es
     suficiente por ahora. No se necesita crear una estructura de bloques de sintaxis
@@ -602,7 +602,7 @@ type  //Structural elements
 
   { TAstFinal }
   //Clase para modelar al bloque FINALIZATION de una unidad
-  TAstFinal = class(TAstElement)
+  TAstFinal = class(TAstCodeCont)
     adrr   : integer;  //dirección física
     constructor Create; override;
     destructor Destroy; override;
@@ -613,15 +613,15 @@ type  //Instructions relative elements
   TSentenceType = (
     sntNull,       //Default value
 //    sntAssign,     //Assignment
-    sntProcCal,    //Procedure call
+//    sntProcCal,    //Procedure call
 //    sntAsmBlock,   //ASM block
 //    sntBeginEnd,   //BEGIN-END block
     sntIF,         //Conditional IF
     sntREPEAT,     //REPEAT Loop
     sntWHILE,      //WHILE Loop
     sntFOR,        //FOR loop
-    sntCASE,       //Conditional CASE
-    sntExit        //Exit instruction
+    sntCASE        //Conditional CASE
+//    sntExit        //Exit instruction
   );
 
   { TAstSentence }
@@ -1616,7 +1616,7 @@ begin
   //Devuelve referencia
   Result := TAstBody(elem);
 end;
-procedure TAstProgFrame.RegisterExitCall(exitSent: TAstSentence);
+procedure TAstProgFrame.RegisterExitCall(exitSent: TAstExpress);
 {Registra una llamada a una instrucción exit(). De momento solo se usa para actualizar a
 "firstObligExit".
 "exitSent" es la instrucción exit() que queremos registrar. Debe haber sido ya incluida

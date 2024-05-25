@@ -1,10 +1,19 @@
 var
-  a: byte;
+  x: byte;
+  y: byte;
+procedure proc1: byte;
 begin
-//  a := 10;
-  if a = 0 then a:=0 end;
-  asm
-  lda #1 
-	rts 
-  end; 
-end.
+  x := 1;
+  exit(1);
+end; 
+
+begin
+
+  x := x + 1;
+  
+end. 
+
+
+
+
+
