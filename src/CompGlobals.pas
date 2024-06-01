@@ -1,18 +1,50 @@
+{Globals definitions for the compiler P65^Pas.
+                         By Tito Hinostroza 2024
+}
 unit CompGlobals;
 {$mode ObjFPC}{$H+}
 interface
 uses  Classes, SysUtils, EpikTimer, LazLogger;
 
 const
-  NOM_PROG = 'P65Pas';   //nombre de programa
+  NOM_PROG = 'P65Pas';   //Program name
   VER_PROG = '1.0.0-Beta';
 
+type //Globals System functions identifiers
+  TSysFunID = (
+  SFI_BREAK,
+  SFI_CONTINUE,
+  SFI_EXIT0,       //exit() with no parameters
+  SFI_EXIT1,       //exit() with 1 parameter
+  SFI_ORD,
+  SFI_PRED,
+  SFI_SUCC,
+  SFI_HALT,
+  SFI_CHR,
+  SFI_VAL,
+  SFI_ROUND,
+  SFI_TRUNC,
+  SFI_INC,
+  SFI_DEC,
+  SFI_ABS,
+  SFI_ADDR,
+  SFI_LOW,
+  SFI_HIGH,
+  SFI_BYTE,
+  SFI_INT,
+  SFI_STR,
+  SFI_BOOLEAN,
+  SFI_WORD,
+  SFI_DWORD
+  );
+
+
 var
-   //Esta propiedad tal vez deba estar junto a las demás opciones del compilador.
-   unitPaths   : TStringList; //Lista de rutas donde buscar unidades.
+  //Esta propiedad tal vez deba estar junto a las demás opciones del compilador.
+  unitPaths   : TStringList; //Lista de rutas donde buscar unidades.
 /////////////// Campos para manejo del diccionario //////////
 var
- curLanguage: string;  //identificador del lenguaje
+  curLanguage: string;  //identificador del lenguaje
 
 procedure StartCountElapsed;
 procedure EndCountElapsed(msg: string);

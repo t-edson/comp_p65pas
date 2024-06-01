@@ -18,7 +18,7 @@ type
       out mainTypCreated: TAstTypeDec);
     function GetConstValue(constTyp: TAstTypeDec; out mainTypCreated: TAstTypeDec
       ): TAstExpress;
-    procedure AnalyzeEXIT;
+    procedure AnalyzeEXIT(exitSent: TAstExpress);
     procedure AnalyzeIF;
     procedure AnalyzeREPEAT;
     procedure AnalyzeWHILE;
@@ -1896,24 +1896,12 @@ begin
   if not VerifyEND then exit;
   TreeElems.CloseElement;  //Close sentence
 end;
-procedure TAnalyzer.AnalyzeEXIT;
-  function GetExitExpression(out oper: TAstExpress): boolean;
-  {Get the argument of the Exit instruction. If not an expression follows, returns FALSE}
-  begin
-    if (tokType=tkBlkDelim) or (token=';') then begin
-      //Not expression specified
-      exit(false);
-    end else begin
-      //Must follow an expression
-      oper := GetExpression(0);
-    end;
-    exit(true);
-  end;
+procedure TAnalyzer.AnalyzeEXIT(exitSent: TAstExpress);
 var
   parentNod: TAstElement;
   func: TAstFunImp;
   prog: TAstProg;
-  exitSent: TAstExpress;
+  argType: TAstTypeDec;
 begin
   ProcComments;
   //Detect if an expression must follow
@@ -1922,7 +1910,7 @@ begin
   if parentNod.idClass = eleProg then begin
     prog := TAstProg(parentNod);
     //It's the main body
-    if GetExitExpression(exitSent) then begin
+    if exitSent.fundec.sfi = SFI_EXIT1 then begin
       GenError('Main program cannot return a value.');
     end;
     //Lleva el registro de las llamadas a exit()
@@ -1931,19 +1919,17 @@ begin
     func := TAstFunImp(parentNod);
     if func.retType = typNull then begin
       //Is Procedure
-        if GetExitExpression(exitSent) then begin
-          GenError('Procedures doesn''t return a value.');
-        end;
+      if exitSent.fundec.sfi = SFI_EXIT1 then begin
+        GenError('Procedures doesn''t return a value.');
+      end;
     end else begin
       //Is Function
-      if GetExitExpression(exitSent) then begin
+      if exitSent.fundec.sfi = SFI_EXIT1 then begin
         //The expected. Check type match.
-        if HayError then exit;
-        if exitSent.Typ <> func.retType then begin
+        argType := TAstExpress(exitSent.elements[0]).Typ;
+        if argType <> func.retType then begin
           GenError('Expected a "%s" expression.', [func.retType.name]);
         end;
-        //Detect dependence when returning value
-        if exitSent.Typ.OnRequireWR<>nil then exitSent.Typ.OnRequireWR;
       end else begin
         GenWarn('Expected return value.');
       end;
@@ -2045,7 +2031,6 @@ begin
       AnalyzeFOR;
       if HayError then exit;
     end else if tokUp = 'ASM' then begin  //ASM block
-//      TreeElems.AddElementSentAndOpen(GetSrcPos, sntAsmBlock);  //Open sentence
       vParserASM_6502.ProcessASMBlock(self);
       //In case there is not support for ASM blocks, this code can bypass the block.
       //repeat Next; until atEof or (UpCase(token)='END');
@@ -2053,10 +2038,6 @@ begin
       //  GenError('Unclosed ASM block.');
       //end;
       //Next;
-//      TreeElems.CloseElement;  //Close sentence
-    end else if tokUp = 'EXIT' then begin  //EXIT instruction.
-      Next;
-      AnalyzeEXIT();
     end else begin
       //Could be Assigment sentence, Procedure call or Function operand.
 //      snt := TreeElems.AddElementSentAndOpen(GetSrcPos, sntAssign); //Open sentence
@@ -2065,10 +2046,6 @@ begin
       //Validate expression
       if HayError then begin
         exit;
-//      end else if TreeElems.curNode.idClass <> eleSenten then begin
-//        //Something went wrong
-//        GenError('Syntax error.');
-//        exit;
       end;
       //Check for possible types generated to move to the declaration section.
       declarSec := TreeElems.curCodCont.Parent;  //Declaration section.
@@ -2080,11 +2057,11 @@ begin
         ex := TAstExpress(ele);
         if ex.opType = otFunct then begin
           //Should be a procedure or function call.
-//          if ex.fcallOp then begin   //It comes from an operator
-//            //Validate if expression is allowed here.
-//            if ex.fundec.retType <> typNull then begin  //Return a type. Like "x + y".
-//               GenError('Expressions are not allowed here.', ex.srcDec);
-//            end;
+          if ex.fcallOp then begin   //It comes from an operator
+            //Validate if expression is allowed here.
+            if ex.fundec.retType <> typNull then begin  //Return a type. Like "x + y".
+               GenError('Expressions are not allowed here.', ex.srcDec);
+            end;
 //            //Set sentence type
 //            if ex.fundec.getset in [gsSetInItem,gsSetInPtr,gsSetInSimple] then begin
 //              //Only assignment ':=' is considered as an Assignment
@@ -2092,9 +2069,11 @@ begin
 //              //Operands like '+=' ,'-=', ... are not.
 //              snt.sntType := sntProcCal;   //Update type.
 //            end;
-//          end else begin             //Should be a function call, like inc(x);
+          end else begin             //Should be a function call, like inc(x);
 //            snt.sntType := sntProcCal;   //Update type.
-//          end;
+            //Validates EXIT sentence.
+            if ex.fundec.sfi in [SFI_EXIT0, SFI_EXIT1] then AnalyzeEXIT(ex);
+          end;
         end else begin
           //Returns a type. Should be an expression
           GenError('Invalid sentence.', ex.srcDec);
@@ -2102,7 +2081,6 @@ begin
       end else begin  //Maybe a simple operand.
         GenError('Expression expected.');
       end;
-//      TreeElems.CloseElement;  //Close sentence
     end;
   end else begin
     //Any other thing.

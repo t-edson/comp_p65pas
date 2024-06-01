@@ -10,7 +10,7 @@ unit AstElemP65;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fgl, TypInfo, LexPas, LazLogger, StrUtils;
+  Classes, SysUtils, fgl, TypInfo, LexPas, CompGlobals, LazLogger, StrUtils;
 const
   ADRR_ERROR = $FFFF;
 const //Prefixes used to name anonym type declarations
@@ -298,7 +298,6 @@ type  //Declaration elements
                             "casting"). Para evitar problemas en el "casting", se
                             recomienda acceder a este campo en un solo procedimiento que
                             haga el casting.}
-    OnRequireWR : procedure of object; //Used to detect dependencies on Work registers.  *** ¿Se necesita?
   public   //Identification
     copyOf  : TAstTypeDec;  //Indicates this type is copy of other
     group   : TTypeGroup;   //Type group (numéric, string, etc)
@@ -720,11 +719,7 @@ type  //Declaration elements (functions)
   TFunGetset = (
     gsNone,         //Is not neither getter nor setter.
     gsGetInSimple,  //Getter INLINE simple:  _get()
-    gsGetInItem,    //Getter INLINE for array: _getitem(index)
-    gsGetInPtr,     //Getter INLINE for pointer: _getptr()
-    gsSetInSimple,  //Setter INLINE simple: _set(value)
-    gsSetInItem,    //Setter INLINE for array: _setitem(index, value)
-    gsSetInPtr      //Setter INLINE for poiner: _setptr(value)
+    gsSetInSimple   //Setter INLINE simple: _set(value)
     );
 
   TCallType = (
@@ -779,6 +774,7 @@ type  //Declaration elements (functions)
   }
   TAstFunDec = class(TAstFunBase)
   public  //Main attributes
+    sfi    : TSysFunID;
     adrr   : integer;  //Physical address where function is compiled.
     adrr2  : integer;  //Aditional physical address, for other entry point of the function.
     srcSize: integer;  {Tamaño del código compilado. En la primera pasada, es referencial,

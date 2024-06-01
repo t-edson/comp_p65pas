@@ -18,7 +18,7 @@ type
 //    procedure ConstantFoldExpr(eleExp: TAstExpress);
     procedure AddParam(var pars: TAstParamArray; parName: string;
       const srcPos: TSrcPos; typ0: TAstTypeDec; adicDec: TAdicDeclar);
-    function AddSIFtoUnit(name: string; retType: TAstTypeDec;
+    function AddSIFtoUnit(name: string; sfi: TSysFunID; retType: TAstTypeDec;
       const srcPos: TSrcPos; const pars: TAstParamArray): TAstFunDec;
     function AddSNFtoUnit(name: string; retType: TAstTypeDec;
       const srcPos: TSrcPos; var pars: TAstParamArray; codSys: TCodSysNormal
@@ -39,6 +39,7 @@ type
     procedure cbSetStatRAMCom(value: string);
     procedure Cod_EndProgram;
     procedure Cod_StartProgram;
+    procedure ConvertBody(cntFunct: TMirProgFrame; sntBlock: TAstCodeCont);
     procedure CreateBooleanOperations;
     procedure CreateByteOperations;
     procedure CreateCharOperations;
@@ -64,9 +65,9 @@ type
 //    procedure EvaluateConstantDeclare;
 //    procedure ConstantFolding;
 //    procedure ConstanPropagation;
+    procedure DoCompile;
     procedure DoOptimize;
 //    procedure DoGenerateCode;
-    procedure DoCompile;
   public      //Events
     OnAfterCompile: procedure of object;   //Al finalizar la compilación.
   public      //Override methods
@@ -829,6 +830,264 @@ begin
 }
 end;
 
+//Reading from AST
+procedure TCompiler_PIC16.ConvertBody(cntFunct: TMirProgFrame; sntBlock: TAstCodeCont);
+{Convert a ASTBody to instructions in MIR representation.
+Parameters:
+  cntFunct  -> The function where MIR will be created, or the main program. This will
+               be used as reference to locate the new variable declarations.
+  sntBlock  -> Block of code where are the sentences to need be prepared. It's the
+               same of "cntFunct" except when "block" is nested like in a condiitonal.
+}
+{  function MoveParamToAssign(curContainer: TAstElement; Op: TAstExpress;
+                             parvar: TAstVarDec): TAstExpress;
+  {Mueve el nodo especificado "Op", que representa a un parámetro de la función, a una
+  nueva instruccion de asignación (que es creada al inicio del bloque "curContainer") y
+  reemplaza el nodo faltante por una variable temporal que es la que se crea en la
+  instrucción de asignación.
+  Es similar a MoveNodeToAssign() pero no reemplaza el nodo movido y no crea una variable
+  auxiliar, sino que usa "parvar".
+  Retorna la instrucción de asignación creada.
+  }
+  var
+    _setaux: TAstExpress;
+    Op1aux: TAstExpress;
+    funSet: TAstFunBase;
+  begin
+    //Create the new _set() expression.
+    _setaux := CreateExpression('_set', typNull, otFunct, Op.srcDec);
+    funSet := MethodFromBinOperator(Op.Typ, ':=', Op.Typ);
+    if funSet = nil then begin   //Operator not found
+      GenError('Undefined operation: %s %s %s', [Op.Typ.name, ':=', Op.Typ.name], Op.srcDec);
+      _setaux.Destroy;    //We destroy because it hasn't been included in the AST.
+      exit(nil);
+    end;
+    _setaux.rfun := funSet;
+
+    //Add the new assigment before the main
+    TreeElems.openElement(curContainer);
+    TreeElems.AddElement(_setaux, 0);    //Add a new assigmente before
+    _setaux.elements := TxpElements.Create(true);  //Create list
+    TreeElems.openElement(_setaux);
+
+    //Add first operand (variable) of the assignment.
+    Op1aux := CreateExpression(parvar.name, parvar.typ, otVariab, Op.srcDec);
+    Op1aux.SetVariab(parvar);
+    TreeElems.addElement(Op1aux);
+    AddCallerToFromCurr(parvar); //Add reference to auxiliar variable.
+
+    //Move the second operand to the previous _set created
+    TreeElems.ChangeParentTo(_setaux, Op);
+
+    exit(_setaux);
+  end;
+}
+  function SplitSet(setMethod: TAstElement): boolean;
+  {Process a set sentence. If a set expression has more than three operands
+  it's splitted adding one or more aditional set sentences, at the beggining of
+  "curContainer".
+  If at least one new set sentence is added, returns TRUE.}
+  var
+    Op2, Op1: TAstExpress;
+    vardec: TMirVarDec;
+  begin
+    Result := false;
+    if TAstExpress(setMethod).fundec.getset <> gsSetInSimple then exit;
+    Op1 := TAstExpress(setMethod.elements[0]);  //Takes target.
+    if Op1.opType <> otVariab then exit;
+    //Split expressions in second operand of assignment.
+    Op2 := TAstExpress(setMethod.elements[1]);  //Takes assignment source.
+    vardec := TMirVarDec(Op1.vardec.mirVarDec);
+    mirRep.AddAssign(cntFunct, vardec, Op2);
+  end;
+  function SplitExpress(expMethod: TAstExpress): boolean;
+  {Verify if an expression has more than three operands. If so then
+  it's splitted adding one or more set sentences.
+  If at least one new set sentence is added, returns TRUE.}
+  var
+    parExp, new_set: TAstExpress;
+    par: TAstElement;
+  begin
+    Result := false;
+    if (expMethod.opType = otFunct) then begin  //Neither variables nor constants.
+      {We expect parameters should be simple operands (Constant or variables)
+      otherwise we will move them to a separate assignment}
+      mirRep.AddFunCall(cntFunct, expMethod);
+    end;
+  end;
+  function SplitProcCall(expMethod: TAstExpress): boolean;
+  {Split a procedure (not INLINE) call instruction, inserting an assignment instruction
+  for each parameter.}
+  begin
+    Result := false;
+    if expMethod.opType <> otFunct then exit;   //Not a fucntion call
+    mirRep.AddFunCall(cntFunct, expMethod);
+  end;
+//  procedure GotoToEnd;
+//  {Add a goto to the End of code is there is some aditional code after teh point we
+//  are inserting instructions.}
+//  var
+//    gotToEnd: TMirGoto;
+//    insPoint0: Integer;
+//  begin
+//    if InsertModeActive then begin
+//      //There are instruction after. We need a GOTO to the end.
+//      gotToEnd := AddGoto(cntFunct);
+//      insPoint0 := insPoint;  //Save position.
+//      ClearInsertMode;
+//      EndGoto(cntFunct, gotToEnd);
+//      SetInsertMode(insPoint0);
+//    end;
+//  end;
+  function ReadValidConditionBlock(sen: TAstSentence; var i: Integer;
+           out condit: TAstExpress; out block: TAstCodeCont): boolean;
+  var
+    expBool: TAstExpress;
+  begin
+    while i<sen.elements.Count do begin
+      expBool := TAstExpress(sen.elements[i]);   //Even element is condition
+      block   := TAstCodeCont(sen.elements[i+1]); //Odd element is block
+      condit := TAstExpress(expBool.elements[0]);
+      if (condit.opType = otConst) and condit.evaluated and
+         (condit.value.ValBool=false) then begin
+         //FALSE conditions are not considered.
+         inc(i, 2);      //Try the next.
+         Continue;
+      end;
+      if block.elements.Count = 0 then begin
+         //FALSE conditions are not considered.
+        inc(i, 2);      //Try the next.
+        Continue;
+      end;
+      //Is valid
+      inc(i, 2);  //Point to next position
+      Exit(true);
+    end;
+    //Not found
+    Exit(false);
+  end;
+  procedure ConvertIF(sen: TAstSentence);
+  {COnvert an IF AST structure to the MIR representation. Only a BASIC simplification is
+  applied. Optimization needs to be done later.}
+  var
+    i, lblEndIf: Integer;
+    ifgot: TMirIfGoto;
+    condit: TAstExpress;
+    _blk: TAstCodeCont;
+    gotToEnd: TMirGoto;
+  begin
+    //There are expressions and blocks inside conditions and loops.
+    gotToEnd := Nil;
+    lblEndIf := -1;
+    i := 0;
+    while ReadValidConditionBlock(sen, i, condit, _blk) do begin
+      //if (condit.opType = otConst) and (condit.value.ValBool=true) then begin
+      //  //True conditions (or ELSE) are the last to be executed.
+      //  ConvertBody(cntFunct, _blk);
+      //  GotoToEnd;
+      //  break;  //No more is executed.
+      //end else begin      //It's function
+      //  if nextCondit<>nil then begin  //There are more conditions.
+          //We add IF negated because normal form is: IF NOT ... GOTO ...
+          ifgot := mirRep.AddIfGoto(cntFunct, condit, true);
+          ConvertBody(cntFunct, _blk);
+          //Add goto to the end of IF structure (including ELSEIF ...).
+          if gotToEnd=Nil then begin  //First Goto
+            gotToEnd := mirRep.AddGoto(cntFunct);
+            lblEndIf := gotToEnd.ilabel;
+          end else begin
+            gotToEnd := mirRep.AddGoto(cntFunct, lblEndIf);
+          end;
+          //Add label
+          mirRep.EndIfGoto(cntFunct, ifgot);
+    end;
+    if lblEndIf<>-1 then begin
+      //There is al least one GOTO to the end of IF.
+      mirRep.EndGoto(cntFunct, lblEndIf);
+    end;
+  end;
+  procedure ConvertWHILE(sen: TAstSentence);
+  {Convert an WHILE AST structure to the MIR representation.}
+  var
+    ifgot: TMirIfGoto;
+    condit, expBool: TAstExpress;
+    _blk: TAstCodeCont;
+    lblBegin: TMirLabel;
+  begin
+    //There are expressions and blocks inside conditions and loops.
+    expBool := TAstExpress(sen.elements[0]);   //Even element is condition
+    _blk   := TAstCodeCont(sen.elements[1]); //Odd element is block
+    if _blk.elements.Count=0 then exit;   //Empty block
+    condit := TAstExpress(expBool.elements[0]);
+    //Label to the beginning of the WHILE to test condition.
+    lblBegin := mirRep.AddLabel(cntFunct);
+    ifgot := mirRep.AddIfGoto(cntFunct, condit, true);
+    ConvertBody(cntFunct, _blk);
+    //Add goto to the begin of IF structure (including ELSEIF ...).
+    mirRep.AddGoto(cntFunct, lblBegin);
+    //Add label
+    mirRep.EndIfGoto(cntFunct, ifgot);
+  end;
+var
+  sen: TAstSentence;
+  eleSen, _set, ele, _proc: TAstElement;
+  Op1, Op2, val1, val2: TAstExpress;
+  _blk, _blk0: TAstCodeCont;
+begin
+  //Prepare sentences
+  for eleSen in sntBlock.elements do begin
+    if eleSen.idClass = eleExpress then begin
+      SplitSet(eleSen)  //Might generate additional assignments sentences
+    end else if eleSen.idClass = eleSenten then begin
+
+    end else begin
+      //Other AST element.
+      GenError('Invalid Syntax element: %s', [eleSen.name], eleSen.srcDec);
+      exit;
+    end;
+//    //We have a sentence here.
+//    sen := TAstSentence(eleSen);
+//    if sen.sntType = sntAssign then begin  //Assignment
+//      _set := sen.elements[0];  //Takes the one _set method.
+//      SplitSet( _set)  //Might generate additional assignments sentences
+//    end else if sen.sntType = sntProcCal then begin  //Procedure call
+//      _proc := sen.elements[0];  //Takes the proc.
+//      SplitProcCall(TAstExpress(_proc))
+//    end else if sen.sntType = sntIF then begin
+//      ConvertIF(sen);
+//    end else if sen.sntType = sntWHILE then begin
+//      ConvertWHILE(sen);
+//    end else if sen.sntType = sntFOR then begin
+//      //FOR sentences could need some aditional changes.
+//      _blk0 := nil;
+//      for ele in sen.elements do begin
+//        if ele.idClass = eleCondit then begin  //It's a condition
+//          expBool := TAstExpress(ele.elements[0]);  //The first item is a TAstExpress
+//          SplitExpress(ele, expBool)
+//        end else if ele.idClass = eleBlock then begin   //Initialization or body
+//          _blk := TAstCodeCont(ele);  //The first item is a TAstExpress
+//          PrepareBody(cntFunct, _blk);
+//          if _blk0 = nil then _blk0 := _blk;  //Get intialization block
+//        end;
+//      end;
+//      //Get first and last value of index.
+//      val1 := TAstExpress(_blk0.elements[0].elements[1]);
+//      val2 := TAstExpress(expBool.elements[1]);
+//      //Special cases
+//      if (val1.opType = otConst) and (val2.opType = otConst) then begin
+//        if val1.val > val2.val then begin
+//          //Unreachable code
+////          TreeElems.DeleteTypeNode();
+//        end;
+//      end;
+//    end else if sen.sntType = sntExit then begin
+//      if sen.elements.Count>0 then begin   //If there is argument
+//        expBool := TAstExpress(sen.elements[0]);  //The first item is a TAstExpress
+//        SplitExpress(sen, expBool)
+//      end;
+//    end;
+  end;
+end;
 
 procedure TCompiler_PIC16.GenerateMIR;
 var
@@ -873,7 +1132,7 @@ begin
             mirVarDec := AddMirVarDec(mirFunDec, astVarDec);
             astVarDec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.
           end else if elem.idClass = eleBody then begin
-            mirRep.ConvertBody(mirFunDec, TAstBody(elem));
+            ConvertBody(mirFunDec, TAstBody(elem));
             //if HayError then exit;   //Puede haber error
           end;
       end;
@@ -887,7 +1146,7 @@ begin
   end;
   //Split body
   bod := TreeElems.BodyNode;  //lee Nodo del cuerpo principal
-  mirRep.ConvertBody(mirRep.root, bod);
+  ConvertBody(mirRep.root, bod);
 end;
 procedure TCompiler_PIC16.DoOptimize;
 {Usa la información del árbol de sintaxis, para optimizar su estructura con
@@ -896,19 +1155,18 @@ Se debe llamar después de llamar a DoAnalyzeProgram().}
 begin
   if IsUnit then exit;
   ExprLevel := 0;
-
   ClearError;
   //Detecting unused elements
-  RefreshAllElementLists; //Actualiza lista de elementos
+  TreeElems.RefreshAllUnits; //Actualiza lista de unidades
   RemoveUnusedFunc;       //Se debe empezar con las funciones. 1ms aprox.
   RemoveUnusedVars;       //Luego las variables. 1ms aprox.
   RemoveUnusedCons;       //1ms aprox.
   RemoveUnusedTypes;      //1ms aprox.
-  //Updating callers and calleds.
   UpdateFunLstCalled;     //Actualiza lista "lstCalled" de las funciones usadas.
   if HayError then exit;
   SeparateUsedFunctions;  //Updates "usedFuncs".
-//  GenerateMIR;            //Genera la representación MIR
+  //Genera la representación MIR
+  GenerateMIR;
   //Evaluate declared constants
 //  EvaluateConstantDeclare;
 //  if HayError then exit;
@@ -1416,8 +1674,8 @@ begin
   Result := pic.Model;
 end;
 
-function TCompiler_PIC16.AddSIFtoUnit(name: string; retType: TAstTypeDec; const srcPos: TSrcPos;
-               const pars: TAstParamArray): TAstFunDec;
+function TCompiler_PIC16.AddSIFtoUnit(name: string; sfi: TSysFunID; retType: TAstTypeDec;
+         const srcPos: TSrcPos; const pars: TAstParamArray): TAstFunDec;
 {Create a new system function in the current element of the Syntax Tree.
  Returns the reference to the function created.
    pars   -> Array of parameters for the function to be created.
@@ -1428,15 +1686,12 @@ var
    tmpLoc: TElemLocation;
 begin
   tmpLoc := curLocation;     //Save current location. We are going to change it.
-  //Add declaration
+  {Note that we add declaration e implementation at the interface section. This is not
+  the normal but the compiler works OK}
   curLocation := locInterface;
-  Result := AddFunctionDEC(name, retType, srcPos, pars, false);
+  Result := AddFunctionUNI(name, retType, srcPos, pars, false, true);
+  Result.sfi := sfi;
   Result.callType := ctSysInline; //INLINE function
-  //Implementation
-  {Note that implementation is added always after declarartion. It's not the usual
-  in common units, where all declarations are first}
-  curLocation := locImplement;
-  funimp := AddFunctionIMP(name, retType, srcPos, Result, true);
   //Here variables can be added
   {Create a body, to be uniform with normal function and for have a space where
   compile code and access to posible variables or other elements.}
@@ -1640,13 +1895,6 @@ begin
   f.asgMode := asgSimple;
   f := CreateInBOMethod(etyp, ':=', '_set', etyp, AstTree.typNull);
   f.asgMode := asgSimple;
-  //Getter and setter
-  f1 := CreateInUOMethod(etyp, '', '_getptr', etyp.ptrType, opkNone);
-  f1.getset := gsGetInPtr;
-  f := CreateInBOMethod(etyp, '', '_setptr', etyp.ptrType, AstTree.typNull);
-  f.asgMode := asgSimple;
-  f.getset := gsSetInPtr;
-  f1.funset := f;
 
   CreateInBOMethod(etyp, '=',  '_equ',  typWord, typBool);
   CreateInBOMethod(etyp, '=',  '_equ',  etyp   , typBool);
@@ -1680,6 +1928,7 @@ begin
 //  f.asgMode := asgSimple;
 //  f.getset := gsSetInSimple;
 end;
+//Creació de la unidad System
 procedure TCompiler_PIC16.CreateSystemTypesAndVars;
 begin
   /////////////// System types ////////////////////
@@ -1999,6 +2248,7 @@ procedure TCompiler_PIC16.CreateSystemUnitInAST;
 var
   uni: TAstUnit;
   pars: TAstParamArray;  //Array of parameters
+  pars1null: TAstParamArray;  //Array of parameters with one Null parameter
   f, sifDelayMs, sifWord: TAstFunDec;
 begin
   //////// Funciones del sistema ////////////
@@ -2026,6 +2276,10 @@ begin
   CreateWordOperations;
   CreateDWordOperations;
 
+  //Fills "pars1null" with one Null parameter. Parameter NULL, allows any type.
+  SetLength(pars1null, 0);
+  AddParam(pars1null, 'n', srcPosNull, AstTree.typNull, decNone);
+
   ///////////////// System INLINE functions (SIF) ///////////////
   //Create system function "delay_ms". Too complex as SIF. We better implement as SNF.
 //  setlength(pars, 0);  //Reset parameters
@@ -2033,50 +2287,31 @@ begin
 //  sifDelayMs :=
 //  AddSIFtoUnit('delay_ms', typNull, srcPosNull, pars, @SIF_delay_ms);
 
-  //Create system function "inc"
+  //Create system function "exit"
   setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);  //Parameter NULL, allows any type.
+  AddSIFtoUnit('exit', SFI_EXIT0, AstTree.typNull, srcPosNull, pars);  //Versión sin parámetros
   sifFunInc :=
-  AddSIFtoUnit('inc', AstTree.typNull, srcPosNull, pars);
-
+  AddSIFtoUnit('exit', SFI_EXIT1, AstTree.typNull, srcPosNull, pars1null);
+  //Create system function "inc"
+  sifFunInc :=
+  AddSIFtoUnit('inc', SFI_INC, AstTree.typNull, srcPosNull, pars1null);
   //Create system function "dec"
-  setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);  //Parameter NULL, allows any type.
-  AddSIFtoUnit('dec', AstTree.typNull, srcPosNull, pars);
-
+  AddSIFtoUnit('dec', SFI_DEC, AstTree.typNull, srcPosNull, pars1null);
   //Create system function "ord"
-  setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);
-  AddSIFtoUnit('ord', typByte, srcPosNull, pars);
-
+  AddSIFtoUnit('ord', SFI_ORD, typByte, srcPosNull, pars1null);
   //Create system function "chr"
-  setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);
-  AddSIFtoUnit('chr', typChar, srcPosNull, pars);
-
+  AddSIFtoUnit('chr', SFI_CHR, typChar, srcPosNull, pars1null);
   //Create system function "byte"
-  setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);  //Parameter NULL, allows any type.
-  AddSIFtoUnit('byte', typByte, srcPosNull, pars);
-
+  AddSIFtoUnit('byte', SFI_BYTE, typByte, srcPosNull, pars1null);
   //Create system function "boolean"
-  setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);  //Parameter NULL, allows any type.
-  AddSIFtoUnit('boolean', typBool, srcPosNull, pars);
-
+  AddSIFtoUnit('boolean', SFI_BOOLEAN, typBool, srcPosNull, pars1null);
   //Create system function "word"
-  setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);  //Parameter NULL, allows any type.
   sifWord :=
-  AddSIFtoUnit('word', typWord, srcPosNull, pars);
+  AddSIFtoUnit('word', SFI_WORD, typWord, srcPosNull, pars1null);
   AddCallerToFrom(H, sifWord.BodyNode);  //Require H
-
   //Create system function "word"
-  setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, AstTree.typNull, decNone);  //Parameter NULL, allows any type.
   //sifWord :=
-  AddSIFtoUnit('dword', typDWord, srcPosNull, pars);
-  //AddCallerToFrom(H, sifWord.BodyNode);  //Require H
+  AddSIFtoUnit('dword', SFI_DWORD,  typDWord, srcPosNull, pars1null);
 
   {*** Revisar esto luego
 

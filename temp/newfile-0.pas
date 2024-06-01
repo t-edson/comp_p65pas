@@ -1,16 +1,15 @@
 var
   x: byte;
   y: byte;
-procedure proc1: byte;
+procedure proc1(x,y: byte): char;
 begin
   x := 1;
-  exit(1);
+  exit('1');
 end; 
 
 begin
-
-  x := x + 1;
-  
+  proc1(2,3);
+  x := 5+1;
 end. 
 
 

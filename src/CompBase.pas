@@ -48,7 +48,6 @@ TCompilerBase = class(TContexts)
 private
   function AddArrayTypeDecCC(typName: string; nELem: integer;
     itType: TAstTypeDec; const srcPos: TSrcPos): TAstTypeDec;
-  function MethodGetPtr(const OpType: TAstTypeDec): TAstFunDec;
   function proc_addr: TAstExpress;
 protected  //Parser routines
   ExprLevel  : Integer;  //Nivel de anidamiento de la rutina de evaluación de expresiones
@@ -104,7 +103,6 @@ protected //Element set
   procedure AddOffsetVariab(varExp: TAstExpress; offConst: TAstExpress);
 
 protected  //Containers
-  procedure RefreshAllElementLists;
   procedure RemoveUnusedFunc;
   procedure RemoveUnusedVars;
   procedure RemoveUnusedCons;
@@ -144,8 +142,6 @@ protected //Expressions
   function MethodFromBinOperator(const OpType: TAstTypeDec; Op: string;
     OpType2: TAstTypeDec): TAstFunDec;
   function MethodFromUnaOperator(const OpType: TAstTypeDec; Op: string
-    ): TAstFunDec;
-  function MethodGetItem(const OpType: TAstTypeDec; IdxType: TAstTypeDec
     ): TAstFunDec;
   function AddConstDeclarByte(decName: string; consVal: integer): TAstConsDec;
   function GetConstantArray(arrDelimt: char; itmType: TAstTypeDec): TAstExpress;
@@ -913,10 +909,6 @@ begin
   eleMeth.fundec := funSet;
 end;
 //Containers
-procedure TCompilerBase.RefreshAllElementLists;
-begin
-  TreeElems.RefreshAllUnits;   //Caso especial
-end;
 procedure TCompilerBase.RemoveUnusedFunc;
 {Explora las funciones, para quitarle las referencias de funciones no usadas.
 Para que esta función trabaje bien, debe haberse llamado a RefreshAllElementLists(). }
@@ -1156,7 +1148,7 @@ begin
     noUsedPrev := noUsed;   //valor anterior
     noUsed := RemoveUnusedTypReferences;
 //debugln('---noUsed=%d',[noUsed]);
-  until noUsed = noUsedPrev;   //Ya no se eliminan más constantes
+  until noUsed = noUsedPrev;   //Ya no se eliminan más tipos
 end;
 procedure TCompilerBase.UpdateCallersToUnits;
 {Explora recursivamente el arbol de sintaxis para encontrar (y agregar) las
@@ -1223,7 +1215,7 @@ begin
         exit;
       end;
       whoCalls := TAstBody(itCall.caller);
-      //Se agregan todas las llamadas (así sean al mismo porcedimiento) pero luego
+      //Se agregan todas las llamadas (así sean al mismo procedimiento) pero luego
       //AddCalled(), los filtra.
       whoCalls.Parent.AddCalled(fun);  //Agrega al procediminto
     end;
@@ -1539,48 +1531,6 @@ If not a matching method found, returns NIL.
       xfun := TAstFunBase(att).declar;
       if (xfun.oper = Op) and
          (length(xfun.pars) = 0) then begin  //Unary methods have 0 parameter.
-        exit(xfun);
-      end;
-    end;
-  end;
-  //Not found
-  exit(nil);
-end;
-function TCompilerBase.MethodGetItem(const OpType: TAstTypeDec;
-  IdxType: TAstTypeDec): TAstFunDec;
-{Find the method _getitem() in the class "OpType", whose unique parameter is of type
-"IdxType".
-If not a matching method found, returns NIL.
-}
-var
-  xfun: TAstFunDec;
-  att: TAstElement;
-begin
-  for att in OpType.elements do begin
-    if att.idClass in [eleFuncImp, eleFuncDec] then begin  //Only for methods
-      xfun := TAstFunBase(att).declar;
-      if (xfun.getset = gsGetInItem) and
-         CompatibleTypes(xfun.pars[1].typ, IdxType) {(xfun.pars[1].typ = IdxType)}
-      then begin  //Second parameter muts match IdxType
-        exit(xfun);
-      end;
-    end;
-  end;
-  //Not found
-  exit(nil);
-end;
-function TCompilerBase.MethodGetPtr(const OpType: TAstTypeDec): TAstFunDec;
-{Find the method _getptr() in the class "OpType".
-If not a matching method found, returns NIL.
-}
-var
-  xfun: TAstFunDec;
-  att: TAstElement;
-begin
-  for att in OpType.elements do begin
-    if att.idClass in [eleFuncImp, eleFuncDec] then begin  //Only for methods
-      xfun := TAstFunBase(att).declar;
-      if (xfun.getset = gsGetInPtr) then begin
         exit(xfun);
       end;
     end;
@@ -2246,6 +2196,7 @@ begin
   debugln(space(3*ExprLevel)+ txt );
 end;
 //Initialization
+
 constructor TCompilerBase.Create;
 begin
   inherited;
