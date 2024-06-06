@@ -32,8 +32,8 @@ type  //MIR base class
     mirType: TMirType;
     text   : String;  //Text representing the instruction.
   end;
-
-type  //MIR declarations
+type  //MIR Operand for expressions
+  //Classes used
   TMirConDec = class;
   TMirVarDec = class;
   TMirFunDec = class;
@@ -56,7 +56,7 @@ type  //MIR declarations
     ValBool : boolean;  //For values t_boolean
     ValStr  : string;   //For values t_string
   public  //Aditional information
-    consRef  : TMirConDec;  //Ref. to TAstConsDec when consType=ctConsRef *** ¿Se necesita además de "conDec"?
+    consRef  : TMirConDec;   //Ref. to TAstConsDec when consType=ctConsRef *** ¿Se necesita además de "conDec"?
     addrVar  : TMirVarDec;   //Ref. to TAstVarDec  when consType=ctVarAddr
     addrFun  : TMirFunDec;   //Ref. to TEleFun when consType=ctFunAddr
   public //Support for Arrays and Objects
@@ -75,107 +75,6 @@ type  //MIR declarations
     function valuesAsString: string;
   end;
 
-  { TMirVarDec }
-  TMirVarDec = Class(TMirElement)
-    typ      : TAstTypeDec; //Variable type.
-    vardec   : TAstVarDec;  //AST Declared variable, when it's associated to AST. If not it's NIL.
-    IsParameter: Boolean;   //Flag for variables that are parameters.
-    required : boolean;     {Indicates the variable is required to be allocated. Work
-                            for variables used as registers. *** ¿Es necesario?}
-  public   //Manejo de parámetros adicionales
-    inival   : TMirConsValue;  //Constant value
-    adicPar  : TAdicVarDec;  //Parámetros adicionales en la declaración de la variable.
-  public  //Campos para guardar las direcciones físicas asignadas en RAM.
-    allocated: boolean;    //Activated when variable is allocated (RAM or register).
-    storage  : TStorage;   //Depend on adicPar.hasAdic.
-    addr     : word;       //Base address.
-    function addrL: word; inline;  //Devuelve la dirección absoluta de la variable (LOW)
-    function addrH: word; inline;  //Devuelve la dirección absoluta de la variable (HIGH)
-    function addrE: word; inline;  //Devuelve la dirección absoluta de la variable (EXTRA)
-    function addrU: word; inline;  //Devuelve la dirección absoluta de la variable (ULTRA)
-    function AddrString: string;   //Devuelve la dirección física como cadena
-    procedure ResetAddress; //Limpia las direcciones físicas
-    function stoStr: string;
-  public
-    constructor Create; virtual;
-  end;
-
-  { TMirConDec }
-  TMirConDec = Class(TMirElement)
-  public
-    typ      : TAstTypeDec; //Constant type.
-    condec   : TAstConsDec;  //AST Declared variable.
-    value    : TConsValue;   //Constant value.
-    evaluated: boolean;
-  public
-    constructor Create; virtual;
-  end;
-
-  TMirParam = object
-//    name    : string;      //Parameter name
-//    typ     : TAstTypeDec; //Reference to type
-    vardec  : TMirVarDec;  //Reference to variable used for this parameter
-//    srcPos  : TSrcPos;     //Parameter location.
-//    adicVar : TAdicVarDec; //Aditional option for "vardec".
-  end;
-  TMirParamArray = array of TMirParam;
-
-  { TMirProgFrame }
-  {Base class for all porgram-like containers (functions and main program).}
-  TMirProgFrame = Class(TMirElement)
-    items    : TMirElements;   //Instruction list.
-    declars  : TMirElements;   //Direct reference to declaration list.
-    instrucs : TMirElements;   //Direct reference to instruction list.
-  private  //Insertion
-    insPoint: Integer;      //Insert point for instructions
-    procedure AddInstruction(itm: TMirElement; position: integer = 1);
-    procedure SetInsertMode(iPoint: integer); inline;
-    procedure ClearInsertMode; inline;
-    function InsertModeActive: Boolean; inline;
-  public   //Initialization
-    procedure Clear;
-    constructor Create;
-    destructor Destroy; override;
-  end;
-  { TMirFunDec }
-  TMirFunDec = Class(TMirProgFrame)
-    pars     : TMirParamArray; //Reference to paramenters.
-    astFunDec: TAstFunDec;     //AST function.
-    //binOper  : char;         //Binary operator when it's associated to an operator.
-    IsTerminal2: boolean;      //Flag. Indicates is function is terminal.
-    procedure ReadParamsFromAST(astFunDec0: TAstFunDec);
-  public  //Operator
-    operTyp    : TOperatorType; //Operand type
-    oper       : string;   //Operator associated to the function when it works as a method.
-  public  //Phisyscal
-    adrr   : integer;  //Physical address where function is compiled.
-    adrr2  : integer;  //Aditional physical address, for other entry point of the function.
-    srcSize: integer;  {Tamaño del código compilado. En la primera pasada, es referencial,
-                        porque el tamaño puede variar al reubicarse.}
-    coded : boolean;   //Indicates the function was compiled in memory.
-  public  //Initialization
-    constructor Create;
-  end;
-
-  { TMirDeclars }
-  {Container for Variable and Constant declarations.}
-  TMirDeclars = class(TMirElement)
-  public  //Initialization
-    items    : TMirElements;   //Instruction list.
-    constructor Create;
-    destructor Destroy; override;
-  end;
-
-  { TMirCode }
-  {Container for Variable and Constant declarations.}
-  TMirCode = class(TMirElement)
-  public  //Initialization
-    items    : TMirElements;   //Instruction list.
-    constructor Create;
-    destructor Destroy; override;
-  end;
-
-type  //MIR Operand for expressions
   { TMirOperand }
   TMirOperand = object
     Text    : string;        //Label for the operand.
@@ -232,7 +131,113 @@ type  //MIR Operand for expressions
     procedure Exchange(i1, i2: integer);
   end;
 
-type  //MIR instructions
+type  //Structural elements
+  { TMirProgFrame }
+  {Base class for all porgram-like containers (functions and main program).}
+  TMirProgFrame = Class(TMirElement)
+    //items    : TMirElements;   //Instruction list.
+    declars  : TMirElements;   //Declaration list.
+    instrucs : TMirElements;   //Instruction list.
+  private  //Insertion
+    insPoint: Integer;      //Insert point for instructions
+    procedure AddInstruction(itm: TMirElement; position: integer = 1);
+    procedure SetInsertMode(iPoint: integer); inline;
+    procedure ClearInsertMode; inline;
+    function InsertModeActive: Boolean; inline;
+  public   //Initialization
+    procedure Clear;
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+  { TMirDeclars }
+  {Container for Variable and Constant declarations.}
+  TMirDeclars = class(TMirElement)
+  public  //Initialization
+    items    : TMirElements;   //Instruction list.
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+  { TMirCode }
+  {Container for Variable and Constant declarations.}
+  TMirInstrucs = class(TMirElement)
+  public  //Initialization
+    items    : TMirElements;   //Instruction list.
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+type  //MIR declarations
+
+  { TMirVarDec }
+  TMirVarDec = Class(TMirElement)
+    typ      : TAstTypeDec; //Variable type.
+    vardec   : TAstVarDec;  //AST Declared variable, when it's associated to AST. If not it's NIL.
+    IsParameter: Boolean;   //Flag for variables that are parameters.
+    required : boolean;     {Indicates the variable is required to be allocated. Work
+                            for variables used as registers. *** ¿Es necesario?}
+  public   //Manejo de parámetros adicionales
+    inival   : TMirConsValue;  //Constant value
+    adicPar  : TAdicVarDec;  //Parámetros adicionales en la declaración de la variable.
+  public  //Campos para guardar las direcciones físicas asignadas en RAM.
+    allocated: boolean;    //Activated when variable is allocated (RAM or register).
+    storage  : TStorage;   //Depend on adicPar.hasAdic.
+    addr     : word;       //Base address.
+    function addrL: word; inline;  //Devuelve la dirección absoluta de la variable (LOW)
+    function addrH: word; inline;  //Devuelve la dirección absoluta de la variable (HIGH)
+    function addrE: word; inline;  //Devuelve la dirección absoluta de la variable (EXTRA)
+    function addrU: word; inline;  //Devuelve la dirección absoluta de la variable (ULTRA)
+    function AddrString: string;   //Devuelve la dirección física como cadena
+    procedure ResetAddress; //Limpia las direcciones físicas
+    function stoStr: string;
+  public
+    constructor Create; virtual;
+  end;
+
+  { TMirConDec }
+  TMirConDec = Class(TMirElement)
+  public
+    typ      : TAstTypeDec; //Constant type.
+    condec   : TAstConsDec;  //AST Declared variable.
+    value    : TConsValue;   //Constant value.  *** NO debería usarse. Debe salir de "inival".
+    inival   : TMirOperand;  //Initial value expression. Must always exist.
+    evaluated: boolean;
+  public
+    procedure UpdateText;    //Updates "Text" attribute.
+    constructor Create; virtual;
+  end;
+
+  TMirParam = object
+//    name    : string;      //Parameter name
+//    typ     : TAstTypeDec; //Reference to type
+    vardec  : TMirVarDec;  //Reference to variable used for this parameter
+//    srcPos  : TSrcPos;     //Parameter location.
+//    adicVar : TAdicVarDec; //Aditional option for "vardec".
+  end;
+  TMirParamArray = array of TMirParam;
+
+  { TMirFunDec }
+  TMirFunDec = class(TMirProgFrame)
+    pars     : TMirParamArray; //Reference to paramenters.
+    astFunDec: TAstFunDec;     //AST function.
+    //binOper  : char;         //Binary operator when it's associated to an operator.
+    IsTerminal2: boolean;      //Flag. Indicates is function is terminal.
+    procedure ReadParamsFromAST(astFunDec0: TAstFunDec);
+  public  //Operator
+    operTyp    : TOperatorType; //Operand type
+    oper       : string;   //Operator associated to the function when it works as a method.
+  public  //Phisyscal
+    adrr   : integer;  //Physical address where function is compiled.
+    adrr2  : integer;  //Aditional physical address, for other entry point of the function.
+    srcSize: integer;  {Tamaño del código compilado. En la primera pasada, es referencial,
+                        porque el tamaño puede variar al reubicarse.}
+    coded : boolean;   //Indicates the function was compiled in memory.
+  public  //Initialization
+    constructor Create;
+  end;
+
+type  //Innstructions elements
 
   { TMirFunCall }
   TMirFunCall = Class(TMirElement)
@@ -298,11 +303,7 @@ type  //Main Container
 //    function AddFunDecSNF(funcName0: TAstFunDec): TMirFunDec;
 //    function AddFunDecUNF(funcName0: TAstFunDec): TMirFunDec;
   public  //Adding instructions
-    procedure AddFunParamAssign(mcont: TMirProgFrame; var func: TMirOperand;
-      Op1: TAstExpress);
     function AddFunCall(mcont: TMirProgFrame; Op1: TAstExpress): TMirFunCall;
-    function AddAssign(mcont: TMirProgFrame; vardec: TMirVarDec; Op2: TAstExpress
-      ): TMirAssign;
     function AddGoto(mcont: TMirProgFrame; ilabel: integer = - 1): TMirGoto;
     function AddGoto(mcont: TMirProgFrame; mlabel: TMirLabel): TMirGoto;
     function AddLabel(mcont: TMirProgFrame): TMirLabel;
@@ -317,6 +318,10 @@ type  //Main Container
     destructor Destroy; override;
   end;
 
+  procedure AddFunParamAssign(mcont: TMirProgFrame;
+           var func: TMirOperand; Op1: TAstExpress);
+  function AddAssign(mcont: TMirProgFrame; vardec: TMirVarDec;
+           Op2: TAstExpress): TMirAssign;
   //Adding declarations
   function AddMirConDec(mcont: TMirProgFrame; conDec0: TAstConsDec): TMirConDec;
   function AddMirVarDec(mcont: TMirProgFrame; varDec0: TAstVarDec): TMirVarDec;
@@ -337,17 +342,13 @@ implementation
 //Insertion
 procedure TMirProgFrame.AddInstruction(
   itm: TMirElement; position: integer = 1);
-{Add an item to the Code section of the container "mcont".}
-var
-  code: TMirCode;
+{Add an item to the "instrucs" section of the container "mcont".}
 begin
-  if items.Count=0 then exit;   //Protection
-  code := TMirCode(items[items.Count-1]);  //Last node is Code container
   if insPoint<>-1 then begin
-    code.items.Insert(insPoint, itm);
+    instrucs.Insert(insPoint, itm);
     inc(insPoint);
   end else begin
-    code.items.Add(itm);
+    instrucs.Add(itm);
   end;
 end;
 procedure TMirProgFrame.SetInsertMode(iPoint: integer);
@@ -367,46 +368,34 @@ begin
 end;
 //Initialization
 procedure TMirProgFrame.Clear;
-var
-  declarations: TMirDeclars;
-  code: TMirCode;
 begin
-  items.Clear;
+  declars.Clear;
+  instrucs.Clear;
   insPoint := -1;     //Disable
-  //Add declaration container
-  declarations := TMirDeclars.Create;
-  declarations.text := 'Declarations';
-  items.Add(declarations);
-  declars := declarations.items;  //Keep reference
-  //Add code container
-  code := TMirCode.Create;
-  code.text := 'Code';
-  items.Add(code);
-  instrucs := code.items;         //Keep reference
 end;
 constructor TMirProgFrame.Create;
 begin
-  items:= TMirElements.Create(true);
+  declars := TMirElements.Create(true);
+  instrucs := TMirElements.Create(true);
 end;
 destructor TMirProgFrame.Destroy;
 begin
-  items.Destroy;
+  declars.Destroy;
+  instrucs.Destroy;
   inherited Destroy;
 end;
 { TMirCode }
-constructor TMirCode.Create;
+constructor TMirInstrucs.Create;
 begin
   inherited;
   mirType := mtyCode;
   items:= TMirElements.Create(true);
 end;
-
-destructor TMirCode.Destroy;
+destructor TMirInstrucs.Destroy;
 begin
   items.Destroy;
   inherited Destroy;
 end;
-
 { TMirDeclars }
 constructor TMirDeclars.Create;
 begin
@@ -414,13 +403,12 @@ begin
   mirType := mtyDeclars;
   items:= TMirElements.Create(true);
 end;
-
 destructor TMirDeclars.Destroy;
 begin
   items.Destroy;
   inherited Destroy;
 end;
-
+{ TMirConsValue }
 procedure TMirConsValue.InitItems;
 begin
   nItems := 0;
@@ -556,6 +544,15 @@ begin
   mirType := mtyVarDec;
 end;
 { TMirConDec }
+procedure TMirConDec.UpdateText;
+begin
+  {$IFDEF DEBUGMODE}  //Only needed to display MIR
+  if inival.opType = otFunct then
+    Text := Text + ' := ' + inival.FunCallText
+  else
+    Text := Text + ' := ' + inival.Text;
+  {$ENDIF}
+end;
 constructor TMirConDec.Create;
 begin
   mirType := mtyConDec;
@@ -574,28 +571,15 @@ begin
   end;
 end;
 constructor TMirFunDec.Create;
-var
-  declarations: TMirDeclars;
-  code: TMirCode;
 begin
   inherited;
   mirType := mtyFunDec;
-  //Add declaration container
-  declarations := TMirDeclars.Create;
-  declarations.text := 'Declarations';
-  items.Add(declarations);
-  //Add code container
-  code := TMirCode.Create;
-  code.text := 'Code';
-  items.Add(code);
 end;
-
+{ TMirOperand }
 function TMirOperand.StoAsStr: string;
 begin
   WriteStr(Result, Sto);
 end;
-
-{ TMirOperand }
 function TMirOperand.FunCallText: string;
 //Returns the function call in text.
 //Only works when "opType" is otFunc.
@@ -612,8 +596,8 @@ begin
           if i=0 then Result += elements[i].Text
           else        Result += ',' + elements[i].Text;
       end;
-      Result += ')';
   end;
+  Result += ')';
   {$ENDIF}
 end;
 procedure TMirOperand.SetParAsVar(i: Integer; vardec0: TMirVarDec);
@@ -795,6 +779,7 @@ end;
 
 { TMirFunCall }
 procedure TMirFunCall.UpdateText;
+{Actualiza el "Text" de la instrucción a partir del operando función.}
 begin
   Text := func.FunCallText;
 end;
@@ -817,7 +802,7 @@ procedure TMirAssign.UpdateText;
 {Set the "Text" attribute from the content of the instruction.}
 begin
   {$IFDEF DEBUGMODE}  //Only needed to display MIR
-  if isSimple then begin  //Simple assignment
+  if isSimple then begin  //Simple assignment  *** ¿Mo basta con leer opSrc.opType?
     Text := dest.Text + ' := ' + opSrc.Text;
   end else begin   //Assignment from function
     Text := dest.Text + ' := ' + opSrc.FunCallText;
@@ -866,71 +851,6 @@ constructor TMirIfGoto.Create;
 begin
   mirType := mtyIfJump;
 end;
-//Adding declarations
-function AddMirConDec(mcont: TMirProgFrame; conDec0: TAstConsDec): TMirConDec;
-var
-  decs: TMirDeclars;
-begin
-  Result := TMirConDec.Create;
-  Result.text       := conDec0.name;
-  Result.typ        := conDec0.typ;
-  Result.condec     := conDec0;
-  decs := TMirDeclars(mcont.items[0]);  //Declarations
-  decs.items.Add(Result);
-end;
-function AddMirVarDec(mcont: TMirProgFrame; varDec0: TAstVarDec): TMirVarDec;
-{Add a Variable  declaration}
-var
-  decs: TMirDeclars;
-begin
-  Result := TMirVarDec.Create;
-  Result.text       := varDec0.name;
-  Result.typ        := varDec0.typ;
-  Result.vardec     := varDec0;
-  Result.IsParameter:= varDec0.IsParameter;
-  Result.required   := varDec0.required;
-  Result.adicPar    := varDec0.adicPar;
-  decs := TMirDeclars(mcont.items[0]);  //Declarations
-  decs.items.Add(Result);
-end;
-function AddMirVarDec(mcont: TMirProgFrame; varName: string; eleTyp: TAstTypeDec
-  ): TMirVarDec;
-{Add a variable declaration to the container "fdest". The declaration is created
-after the last declaration.}
-var
-  n: Integer;
-  decs: TMirDeclars;
-begin
-  //Create unique name
-  n := mcont.items.Count;
-  if varName='' then varName := '#' + IntToStr(n);
-
-  Result := TMirVarDec.Create;
-  Result.text := varName;
-  Result.typ  := eleTyp;
-  decs := TMirDeclars(mcont.items[0]);  //Declarations
-  decs.items.Add(Result);
-end;
-function AddMirFunDecSNF(mcont: TMirProgFrame; funcName0: TAstFunDec): TMirFunDec;
-begin
-  Result := TMirFunDec.Create;
-  Result.text := funcName0.name;
-  Result.astFunDec := funcName0;
-  Result.IsTerminal2 := funcName0.IsTerminal2;
-  Result.operTyp := funcName0.operTyp;
-  Result.oper := funcName0.oper;
-  mcont.items.Add(Result);
-end;
-function AddMirFunDecUNF(mcont: TMirProgFrame; funcName0: TAstFunDec): TMirFunDec;
-{Add a User Normal Function to the MIR list.}
-begin
-  Result := TMirFunDec.Create;
-  Result.text := funcName0.name;
-  Result.astFunDec := funcName0;
-  Result.IsTerminal2 := funcName0.IsTerminal2;
-  Result.oper := funcName0.oper;
-  mcont.items.Add(Result);
-end;
 procedure GetMIROperandFromASTExpress(out MirOper: TMirOperand;
                                       const AstOper: TAstExpress);
 {Read data from a TAstExpress and set a TMirOperand}
@@ -961,9 +881,8 @@ begin
 //        MirOper.varDec := TMirVarDec(AstVarDec.mirVarDec);  //Must be set
 //      end;
 //      MirOper.funDec := nil;
-//    end else if AstOper.opType = otFunct then begin
-//      MirOper.varDec := nil;
-//      MirOper.funDec := TMirFunDec(AstOper.fundec.mirFunDec);
+    end else if AstOper.opType = otFunct then begin
+      MirOper.funDec := TMirFunDec(AstOper.fundec.mirFunDec);
     end;
     MirOper.astOperand := AstOper;
 //  end else if Typ.catType = tctArray then begin
@@ -973,9 +892,82 @@ begin
     debugln('Not implemented');
   end;
 end;
+//Adding declarations
+function AddMirConDec(mcont: TMirProgFrame; conDec0: TAstConsDec): TMirConDec;
+var
+  astInival: TAstExpress;
+begin
+  Result := TMirConDec.Create;
+  Result.text       := conDec0.name;
+  Result.typ        := conDec0.typ;
+  Result.condec     := conDec0;
+
+  //Set function operand
+  astInival := TAstExpress(conDec0.elements[0]);
+  GetMIROperandFromASTExpress(Result.inival, astInival);
+  //Set parameters
+  if astInival.opType = otFunct then begin
+    //Only functions should have parameters
+    AddFunParamAssign(mcont, Result.inival, astInival);
+  end;
+  Result.UpdateText;
+
+  //Add to declarations container
+  mcont.declars.Add(Result);
+end;
+function AddMirVarDec(mcont: TMirProgFrame; varDec0: TAstVarDec): TMirVarDec;
+{Add a Variable  declaration}
+begin
+  Result := TMirVarDec.Create;
+  Result.text       := varDec0.name;
+  Result.typ        := varDec0.typ;
+  Result.vardec     := varDec0;
+  Result.IsParameter:= varDec0.IsParameter;
+  Result.required   := varDec0.required;
+  Result.adicPar    := varDec0.adicPar;
+  //Add to declarations container
+  mcont.declars.Add(Result);
+end;
+function AddMirVarDec(mcont: TMirProgFrame; varName: string; eleTyp: TAstTypeDec
+  ): TMirVarDec;
+{Add a variable declaration to the container "fdest". The declaration is created
+after the last declaration.}
+var
+  n: Integer;
+begin
+  //Create unique name
+  n := mcont.declars.Count;
+  if varName='' then varName := '#' + IntToStr(n);
+
+  Result := TMirVarDec.Create;
+  Result.text := varName;
+  Result.typ  := eleTyp;
+  //Add to declarations container
+  mcont.declars.Add(Result);
+end;
+function AddMirFunDecSNF(mcont: TMirProgFrame; funcName0: TAstFunDec): TMirFunDec;
+begin
+  Result := TMirFunDec.Create;
+  Result.text := funcName0.name;
+  Result.astFunDec := funcName0;
+  Result.IsTerminal2 := funcName0.IsTerminal2;
+  Result.operTyp := funcName0.operTyp;
+  Result.oper := funcName0.oper;
+  mcont.declars.Add(Result);
+end;
+function AddMirFunDecUNF(mcont: TMirProgFrame; funcName0: TAstFunDec): TMirFunDec;
+{Add a User Normal Function to the MIR list.}
+begin
+  Result := TMirFunDec.Create;
+  Result.text := funcName0.name;
+  Result.astFunDec := funcName0;
+  Result.IsTerminal2 := funcName0.IsTerminal2;
+  Result.oper := funcName0.oper;
+  mcont.declars.Add(Result);
+end;
 { TMirList }
 //Adding instructions
-procedure TMirList.AddFunParamAssign(mcont: TMirProgFrame;
+procedure AddFunParamAssign(mcont: TMirProgFrame;
                                      var func: TMirOperand; Op1: TAstExpress);
 var
   astPar: TAstExpress;
@@ -1028,6 +1020,8 @@ begin
 end;
 function TMirList.AddFunCall(mcont: TMirProgFrame; Op1: TAstExpress
   ): TMirFunCall;
+{Convierte una expresión, de llamada a una función/procedimiento, a su su representación
+en el MIR.}
 begin
   Result:= TMirFunCall.Create;
   //Set function operand
@@ -1037,7 +1031,7 @@ begin
   //Add to list
   mcont.AddInstruction(Result);
 end;
-function TMirList.AddAssign(mcont: TMirProgFrame; vardec: TMirVarDec;
+function AddAssign(mcont: TMirProgFrame; vardec: TMirVarDec;
   Op2: TAstExpress): TMirAssign;
 {General function to add an assignment instruction to the MIR container "mcont".
  The assignment in created in TAC format. This is a recursive function.
@@ -1149,7 +1143,7 @@ end;
 procedure TMirList.Clear;
 var
   declarations: TMirDeclars;
-  code: TMirCode;
+  code: TMirInstrucs;
 begin
   root.Clear;
   ngotos := 0;

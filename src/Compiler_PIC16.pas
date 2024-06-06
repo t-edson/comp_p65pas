@@ -882,7 +882,7 @@ Parameters:
     exit(_setaux);
   end;
 }
-  function SplitSet(setMethod: TAstElement): boolean;
+  function SplitSet(setMethod: TAstExpress): boolean;
   {Process a set sentence. If a set expression has more than three operands
   it's splitted adding one or more aditional set sentences, at the beggining of
   "curContainer".
@@ -892,13 +892,12 @@ Parameters:
     vardec: TMirVarDec;
   begin
     Result := false;
-    if TAstExpress(setMethod).fundec.getset <> gsSetInSimple then exit;
     Op1 := TAstExpress(setMethod.elements[0]);  //Takes target.
     if Op1.opType <> otVariab then exit;
     //Split expressions in second operand of assignment.
     Op2 := TAstExpress(setMethod.elements[1]);  //Takes assignment source.
     vardec := TMirVarDec(Op1.vardec.mirVarDec);
-    mirRep.AddAssign(cntFunct, vardec, Op2);
+    AddAssign(cntFunct, vardec, Op2);
   end;
   function SplitExpress(expMethod: TAstExpress): boolean;
   {Verify if an expression has more than three operands. If so then
@@ -914,14 +913,6 @@ Parameters:
       otherwise we will move them to a separate assignment}
       mirRep.AddFunCall(cntFunct, expMethod);
     end;
-  end;
-  function SplitProcCall(expMethod: TAstExpress): boolean;
-  {Split a procedure (not INLINE) call instruction, inserting an assignment instruction
-  for each parameter.}
-  begin
-    Result := false;
-    if expMethod.opType <> otFunct then exit;   //Not a fucntion call
-    mirRep.AddFunCall(cntFunct, expMethod);
   end;
 //  procedure GotoToEnd;
 //  {Add a goto to the End of code is there is some aditional code after teh point we
@@ -1037,7 +1028,24 @@ begin
   //Prepare sentences
   for eleSen in sntBlock.elements do begin
     if eleSen.idClass = eleExpress then begin
-      SplitSet(eleSen)  //Might generate additional assignments sentences
+      Op1 := TAstExpress(eleSen);
+      if Op1.opType <> otFunct then begin
+        GenError('Expected function or procedure: %s', [eleSen.name], eleSen.srcDec);
+        exit;
+      end;
+      if Op1.fundec.getset = gsSetInSimple then begin
+        //Es una asignación.
+        {Una asignación es también, en la práctica, una llamada a una función, pero
+        se trata de forma diferente porque:
+         - Tiene una forma especial (siempre una variable por modificar como 1er parámetro)
+         - Los algoritmos de optimización del MIR necesitan a las asignaciones en su forma canónica.}
+        SplitSet(Op1)  //Might generate additional assignments sentences
+      end else begin
+        //Es una función cualquiera (del sistema o de usuario)
+        {Notar que todas las funciones (INLINE o normal) se representan igual en el
+        AST y el MIR}
+        mirRep.AddFunCall(cntFunct, Op1);
+      end;
     end else if eleSen.idClass = eleSenten then begin
 
     end else begin
@@ -1047,13 +1055,7 @@ begin
     end;
 //    //We have a sentence here.
 //    sen := TAstSentence(eleSen);
-//    if sen.sntType = sntAssign then begin  //Assignment
-//      _set := sen.elements[0];  //Takes the one _set method.
-//      SplitSet( _set)  //Might generate additional assignments sentences
-//    end else if sen.sntType = sntProcCal then begin  //Procedure call
-//      _proc := sen.elements[0];  //Takes the proc.
-//      SplitProcCall(TAstExpress(_proc))
-//    end else if sen.sntType = sntIF then begin
+//    if if sen.sntType = sntIF then begin
 //      ConvertIF(sen);
 //    end else if sen.sntType = sntWHILE then begin
 //      ConvertWHILE(sen);

@@ -129,12 +129,6 @@ type  //TAstElement class
   end;
 
 type  //Hardware dependent definitions
-  { TODO : Este tipo es muy dependiente del hardware y no debería estar aquí }
-  { TCpuRegister }
-  {Used to modelate an internal CPU register}
-  TCpuRegister = object
-    used    : boolean;   //Indica si está usado.
-  end;
 
   { TAdicDeclar }
   {Define aditional declaration settings for variable. Depends on target CPU architecture.}
@@ -781,7 +775,9 @@ type  //Declaration elements (functions)
                         porque el tamaño puede variar al reubicarse.}
     coded : boolean;   //Indicates the function was compiled in memory.
     procedure SetElementsUnused;
-public mirFunDec: TObject;  //Formalmente debe ser TMirFunDec, pero se pone TObject para no generar referencias circulares.
+public mirFunDec: TObject;  {Formalmente debe ser TMirFunDec, pero se pone TObject porque,
+                            por diseño, esta unidad no debe depender del MIR (en USES) y
+                            así se evitan también o generar referencias circulares.}
   public  //Declaration
     function HasImplem: boolean; inline;
   public  //Operator
