@@ -39,7 +39,7 @@ type
     procedure cbSetStatRAMCom(value: string);
     procedure Cod_EndProgram;
     procedure Cod_StartProgram;
-    procedure ConvertBody(cntFunct: TMirProgFrame; sntBlock: TAstCodeCont);
+    procedure ConvertBody(mcont: TMirContainer; sntBlock: TAstCodeCont);
     procedure CreateBooleanOperations;
     procedure CreateByteOperations;
     procedure CreateCharOperations;
@@ -831,7 +831,7 @@ begin
 end;
 
 //Reading from AST
-procedure TCompiler_PIC16.ConvertBody(cntFunct: TMirProgFrame; sntBlock: TAstCodeCont);
+procedure TCompiler_PIC16.ConvertBody(mcont: TMirContainer; sntBlock: TAstCodeCont);
 {Convert a ASTBody to instructions in MIR representation.
 Parameters:
   cntFunct  -> The function where MIR will be created, or the main program. This will
@@ -897,7 +897,7 @@ Parameters:
     //Split expressions in second operand of assignment.
     Op2 := TAstExpress(setMethod.elements[1]);  //Takes assignment source.
     vardec := TMirVarDec(Op1.vardec.mirVarDec);
-    AddAssign(cntFunct, vardec, Op2);
+    AddAssign(mcont, vardec, Op2);
   end;
   function SplitExpress(expMethod: TAstExpress): boolean;
   {Verify if an expression has more than three operands. If so then
@@ -911,7 +911,7 @@ Parameters:
     if (expMethod.opType = otFunct) then begin  //Neither variables nor constants.
       {We expect parameters should be simple operands (Constant or variables)
       otherwise we will move them to a separate assignment}
-      mirRep.AddFunCall(cntFunct, expMethod);
+      mirRep.AddFunCall(mcont, expMethod);
     end;
   end;
 //  procedure GotoToEnd;
@@ -974,27 +974,27 @@ Parameters:
     while ReadValidConditionBlock(sen, i, condit, _blk) do begin
       //if (condit.opType = otConst) and (condit.value.ValBool=true) then begin
       //  //True conditions (or ELSE) are the last to be executed.
-      //  ConvertBody(cntFunct, _blk);
+      //  ConvertBody(mcont, _blk);
       //  GotoToEnd;
       //  break;  //No more is executed.
       //end else begin      //It's function
       //  if nextCondit<>nil then begin  //There are more conditions.
           //We add IF negated because normal form is: IF NOT ... GOTO ...
-          ifgot := mirRep.AddIfGoto(cntFunct, condit, true);
-          ConvertBody(cntFunct, _blk);
+          ifgot := mirRep.AddIfGoto(mcont, condit, true);
+          ConvertBody(mcont, _blk);
           //Add goto to the end of IF structure (including ELSEIF ...).
           if gotToEnd=Nil then begin  //First Goto
-            gotToEnd := mirRep.AddGoto(cntFunct);
+            gotToEnd := mirRep.AddGoto(mcont);
             lblEndIf := gotToEnd.ilabel;
           end else begin
-            gotToEnd := mirRep.AddGoto(cntFunct, lblEndIf);
+            gotToEnd := mirRep.AddGoto(mcont, lblEndIf);
           end;
           //Add label
-          mirRep.EndIfGoto(cntFunct, ifgot);
+          mirRep.EndIfGoto(mcont, ifgot);
     end;
     if lblEndIf<>-1 then begin
       //There is al least one GOTO to the end of IF.
-      mirRep.EndGoto(cntFunct, lblEndIf);
+      mirRep.EndGoto(mcont, lblEndIf);
     end;
   end;
   procedure ConvertWHILE(sen: TAstSentence);
@@ -1011,13 +1011,13 @@ Parameters:
     if _blk.elements.Count=0 then exit;   //Empty block
     condit := TAstExpress(expBool.elements[0]);
     //Label to the beginning of the WHILE to test condition.
-    lblBegin := mirRep.AddLabel(cntFunct);
-    ifgot := mirRep.AddIfGoto(cntFunct, condit, true);
-    ConvertBody(cntFunct, _blk);
+    lblBegin := mirRep.AddLabel(mcont);
+    ifgot := mirRep.AddIfGoto(mcont, condit, true);
+    ConvertBody(mcont, _blk);
     //Add goto to the begin of IF structure (including ELSEIF ...).
-    mirRep.AddGoto(cntFunct, lblBegin);
+    mirRep.AddGoto(mcont, lblBegin);
     //Add label
-    mirRep.EndIfGoto(cntFunct, ifgot);
+    mirRep.EndIfGoto(mcont, ifgot);
   end;
 var
   sen: TAstSentence;
@@ -1044,7 +1044,7 @@ begin
         //Es una función cualquiera (del sistema o de usuario)
         {Notar que todas las funciones (INLINE o normal) se representan igual en el
         AST y el MIR}
-        mirRep.AddFunCall(cntFunct, Op1);
+        mirRep.AddFunCall(mcont, Op1);
       end;
     end else if eleSen.idClass = eleSenten then begin
 
@@ -1068,7 +1068,7 @@ begin
 //          SplitExpress(ele, expBool)
 //        end else if ele.idClass = eleBlock then begin   //Initialization or body
 //          _blk := TAstCodeCont(ele);  //The first item is a TAstExpress
-//          PrepareBody(cntFunct, _blk);
+//          PrepareBody(mcont, _blk);
 //          if _blk0 = nil then _blk0 := _blk;  //Get intialization block
 //        end;
 //      end;
@@ -1114,27 +1114,27 @@ begin
   for elem in TreeElems.main.elements do begin
     if (elem.idClass = eleConsDec) and (elem.nCalled>0) then begin
       astConDec := TAstConsDec(elem);
-      mirConDec := AddMirConDec(mirRep.root, astConDec);
+      mirConDec := AddMirConDec(mirRep.root.declars, astConDec);
     end else if (elem.idClass = eleVarDec) and (elem.nCalled>0) then begin
       astVardec := TAstVarDec(elem);
-      mirVarDec := AddMirVarDec(mirRep.root, astVardec); //Agrega declaración en el MIR
+      mirVarDec := AddMirVarDec(mirRep.root.declars, astVardec); //Agrega declaración en el MIR
       astVardec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.;
     end;
   end;
   for astFunDec in usedFuncs do begin
     if astFunDec.callType = ctUsrNormal then begin
       //Agrega al MIR y guarda referencia.
-      mirFunDec := AddMirFunDecUNF(mirRep.root, astFunDec);
+      mirFunDec := AddMirFunDecUNF(mirRep.root.declars, astFunDec);
       astFunDec.mirFunDec := mirFunDec;  //Guarda referencia al MIR.
       //Explora sus elementos internos.
       for elem In astFunDec.elemImplem do begin
           if elem.idClass = eleVarDec then begin
             astVarDec := TAstVarDec(elem);  //Guarda referencia
             //Agrega al MIR y guarda referencia.
-            mirVarDec := AddMirVarDec(mirFunDec, astVarDec);
+            mirVarDec := AddMirVarDec(mirFunDec.declars, astVarDec);
             astVarDec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.
           end else if elem.idClass = eleBody then begin
-            ConvertBody(mirFunDec, TAstBody(elem));
+            ConvertBody(mirFunDec.instrucs, TAstBody(elem));
             //if HayError then exit;   //Puede haber error
           end;
       end;
@@ -1142,13 +1142,13 @@ begin
       //internas AST (que incluye a los parámetros).
       mirFunDec.ReadParamsFromAST(astFunDec);
     end else if astFunDec.callType = ctSysNormal then begin
-      mirFunDec := AddMirFunDecSNF(mirRep.root, astFunDec);
+      mirFunDec := AddMirFunDecSNF(mirRep.root.declars, astFunDec);
       //System function doesn't have body.
     end;
   end;
   //Split body
   bod := TreeElems.BodyNode;  //lee Nodo del cuerpo principal
-  ConvertBody(mirRep.root, bod);
+  ConvertBody(mirRep.root.instrucs, bod);
 end;
 procedure TCompiler_PIC16.DoOptimize;
 {Usa la información del árbol de sintaxis, para optimizar su estructura con
@@ -1787,7 +1787,7 @@ begin
   pars[n].srcPos := srcPos;
   pars[n].typ  := typ0;  //Agrega referencia
   pars[n].adicVar.hasAdic := adicDec;
-  pars[n].adicVar.hasInit := false;
+  pars[n].adicVar.hasInit := nil;
   pars[n].isLocVar := false;
 end;
 function TCompiler_PIC16.CreateInUOMethod(
@@ -1974,25 +1974,25 @@ begin
   H := AddVarDecAndOpen('__H', typByte, srcPosNull);
   TreeElems.CloseElement;  { TODO : ¿No sería mejor evitar abrir el elemento para no tener que cerrarlo? }
   H.adicPar.hasAdic := decNone;
-  H.adicPar.hasInit := false;
+  H.adicPar.hasInit := nil;
   H.location := locInterface;  //make visible
   //Create register E as variable
   E := AddVarDecAndOpen('__E', typByte, srcPosNull);
   TreeElems.CloseElement;
   E.adicPar.hasAdic := decNone;
-  E.adicPar.hasInit := false;
+  E.adicPar.hasInit := nil;
   E.location := locInterface;  //make visible
   //Create register U as variable
   U := AddVarDecAndOpen('__U', typByte, srcPosNull);
   TreeElems.CloseElement;
   U.adicPar.hasAdic := decNone;
-  U.adicPar.hasInit := false;
+  U.adicPar.hasInit := nil;
   U.location := locInterface;  //make visible
   //Create register IX as variable
   IX := AddVarDecAndOpen('__IX', typWord, srcPosNull);
   TreeElems.CloseElement;
   IX.adicPar.hasAdic := decNone;
-  IX.adicPar.hasInit := false;
+  IX.adicPar.hasInit := nil;
   IX.location := locInterface;  //make visible
 end;
 procedure TCompiler_PIC16.CreateBooleanOperations;

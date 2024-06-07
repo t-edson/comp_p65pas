@@ -10,6 +10,21 @@ const
   NOM_PROG = 'P65Pas';   //Program name
   VER_PROG = '1.0.0-Beta';
 
+type
+  { TAdicDeclar }
+  {Define aditional declaration settings for variable. Depends on target CPU architecture.
+  Each compiler will support only what fit to its architecture.}
+  TAdicDeclar = (
+    decNone,   //Normal declaration. Will be mapped in RAM according compiler decision.
+    decAbsol,  //Mapped in ABSOLUTE address
+    decZeroP,  //Mapped in Zero page
+    decDatSec, //Mapped at the Data section (Normal)
+    decRegis,  //Mapped at Work Register (WR)
+    decRegisA, //Mapped at A register
+    decRegisX, //Mapped at X register
+    decRegisY  //Mapped at Y register
+  );
+
 type //Globals System functions identifiers
   TSysFunID = (
   SFI_BREAK,

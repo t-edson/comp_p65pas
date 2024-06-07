@@ -12,7 +12,7 @@ unit CompBase;
 interface
 uses
   Classes, SysUtils, Types, LazLogger, LexPas,
-  AstElemP65, AstTree, CompContexts, MirList;
+  AstElemP65, AstTree, CompContexts, MirList, CompGlobals;
 type
 //Expression type, according the position it appears.  ***¿Se usa?
 TPosExpres = (pexINDEP,  //Expresión independiente
@@ -699,7 +699,7 @@ begin
   xVar.name   := varName;
   xVar.typ    := eleTyp;
   xVar.adicPar.hasAdic := decNone;
-//  xVar.adicPar.hasInit := false;
+  xVar.adicPar.hasInit := nil;
 
   curNode := TreeElems.curNode;   //Save current location
   TreeElems.openElement(curCodCont.Parent);
@@ -1596,8 +1596,7 @@ begin
     _varaux := AddVarDecCC('', arrtyp, TreeElems.curCodCont);
     AddCallerToFromCurr(arrtyp);
     _varaux.adicPar.hasAdic  := decDatSec;  //To asure it can be initialized.
-    _varaux.adicPar.hasInit := true;   //
-    _varaux.adicPar.constDec := constArr;
+    _varaux.adicPar.hasInit := constArr;    //Activa
     //Move the constant array
     TreeElems.ChangeParentTo(_varaux, constArr);
     //Add constant Operand

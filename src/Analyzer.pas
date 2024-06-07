@@ -271,7 +271,7 @@ var
   consIni: TAstExpress;
 begin
   aditVar.hasAdic  := decNone;       //Bandera
-  aditVar.hasInit  := false;
+  aditVar.hasInit  := nil;
   aditVar.absVar   := nil;         //Por defecto
   tokL := lowercase(token);
   if (tokL = 'absolute') or (token = '@') then begin
@@ -312,23 +312,8 @@ begin
       end else if ele.idClass = eleVarDec then begin  //Is mapped to a variable
         xvar := TAstVarDec(ele);
         aditVar.absVar := xvar;  //Guarda referencia
-        aditVar.absOff := 0;
         //La dirección final se asignará al asignar RAM.
         Next;    //Pasa al siguiente.
-        //Se implementará una rutina muy simple para los casos .Low y .High.
-        if token='.' then begin
-          Next;
-          if UpCase(token) = 'LOW' then begin
-            Next;
-          end else if UpCase(token) = 'HIGH' then begin
-            aditVar.absOff := 1;
-            Next;
-          end else begin
-            GenError('Expected ".low" or ".high".');
-            Next;  //Pasa con o sin error, porque esta rutina es "Pasa siempre."
-            exit;
-          end;
-        end;
       end else begin
         GenError(ER_EXP_VAR_IDE);
         Next;  //Pasa con o sin error, porque esta rutina es "Pasa siempre."
@@ -371,13 +356,13 @@ begin
   //Puede seguir una sección de inicialización: var: char = 'A';
   ProcComments;
   if token = '=' then begin
-    aditVar.hasInit := true;
     Next;   //lo toma
     ProcComments;
     //Aquí debe seguir el valor inicial constante.
     consIni := GetConstValue(varTyp, mainTypCreated);  //Leemos como constante
     if HayError then exit;
     consTyp := consIni.Typ;
+    aditVar.hasInit := consIni;
     //Ya se tiene el valor constante para inicializar variable.
     if aditVar.hasAdic in [decRegis, decRegisA, decRegisX, decRegisY] then begin
       GenError('Cannot initialize REGISTER variables.');
@@ -397,13 +382,13 @@ begin
     end;
   end else begin
     //No hay asignación inicial.
-    aditVar.hasInit := false;
+    aditVar.hasInit := nil;
   end;
   //Validate initialization for dynamic arrays.
   if (varTyp.catType = tctArray) then begin
     if varTyp.isDynam then begin
       //Dynamic array
-      if not aditVar.hasInit then begin
+      if aditVar.hasInit = nil then begin
         //Es un arreglo dinámico. Debió inicializarse.
         GenError(ER_EQU_EXPECTD);
         exit;
@@ -424,10 +409,9 @@ begin
       //Both are arrays of the same item type.
 //      TreeElems.DeleteTypeNode(varTyp);  //We don't need this type *** Genera error en la síntesis si se elimina.
       varTyp := consTyp;  //Use the same array type declaration.
-      aditVar.constDec := consIni;
       exit;
     end;
-    if aditVar.hasInit then begin
+    if aditVar.hasInit<>nil then begin
       nItems := consTyp.consNitm.value^.ValInt;
       //Validation for category
       if consTyp.catType <> tctArray then begin
@@ -451,23 +435,19 @@ begin
         GenError('Expected type "%s". Got "%s".', [varTyp.name, consTyp.name]);
         exit;
       end;
-      //Assign constant init value.
-      aditVar.constDec := consIni;
     end;
   end else begin  //No array
-    if aditVar.hasInit then begin
+    if aditVar.hasInit<>nil then begin
       if consTyp <> varTyp then begin
         GenError('Cannot initialize. Expected type "%s". Got "%s".', [varTyp.name, consTyp.name]);
         exit;
       end;
-      //Assign constant init value.
-      aditVar.constDec := consIni;
     end;
   end;
   {Ya se validó la pertinencia de la inicialización y ya se tiene el operando de
   inicialización en "consIni". Ahora toca validar la compatibilidad de los tipos.}
   //Por ahora solo se permite inicializar arreglos.
-  if aditVar.hasInit then begin
+  if aditVar.hasInit<>nil then begin
     if (varTyp.catType = tctArray) then begin
     end else begin
     end;
@@ -489,7 +469,7 @@ begin
     GenError('Cannot define ABSOLUTE for more than one variable');
     exit;
   end;
-  if aditVar.hasInit then begin
+  if aditVar.hasInit<>nil then begin
     GenError('Cannot initialize more than one variable');
     exit;
   end;
@@ -555,7 +535,7 @@ en el procesamiento de unidades.}
 //        ///////////////////////////////////////////////
         ProcComments;
         GetAdicVarDeclar(typ, adicVarDec, typeCreated);
-        if adicVarDec.hasInit then begin
+        if adicVarDec.hasInit<>nil then begin
           //As we don't permit initialization, we won't have changes on "typ".
           GenError('Cannot initialize parameters.');
           exit;
@@ -867,7 +847,7 @@ If some problems happens, Error is generated and the NIL value is returned.
             varDec.typ := varTyp;
             //varDec.adicPar := adicVarDec;  //We don't worry for aditional declaraions because GetAdicVarDeclar2() has limited them.
             varDec.adicPar.hasAdic := decNone;
-            varDec.adicPar.hasInit := false;
+            varDec.adicPar.hasInit := nil;
             varDec.location := curLocation;
             //Close variable
             TreeElems.CloseElement;
@@ -1362,7 +1342,7 @@ begin
     //Hay que agregar un parámetro inicial
     setlength(pars, 1);
     adicVar.hasAdic := decNone;
-    adicVar.hasInit := false;
+    adicVar.hasInit := nil;
     SetParameter(pars[0], 'self', GetSrcPos, objContainer, adicVar);
   end else begin
     //Es una declaración normal

@@ -128,20 +128,7 @@ type  //TAstElement class
   TAstCodeCont = class(TAstElement)
   end;
 
-type  //Hardware dependent definitions
 
-  { TAdicDeclar }
-  {Define aditional declaration settings for variable. Depends on target CPU architecture.}
-  TAdicDeclar = (
-    decNone,   //Normal declaration. Will be mapped in RAM according compiler decision.
-    decAbsol,  //Mapped in ABSOLUTE address
-    decZeroP,  //Mapped in Zero page
-    decDatSec, //Mapped at the Data section (Normal)
-    decRegis,  //Mapped at Work Register (WR)
-    decRegisA, //Mapped at A register
-    decRegisX, //Mapped at X register
-    decRegisY  //Mapped at Y register
-  );
 const
   CONS_ITEM_BLOCK = 20;
 
@@ -191,19 +178,15 @@ type
 
   {Description for aditional information in variables declaration: ABSOLUTE ,
   REGISTER,  or initialization. }
-  TAdicVarDec = record
+  TAdicVarDec = record    //*** Estos campos deben estar también en TMirVarDec
     //Absolute or register information.
-    hasAdic  : TAdicDeclar; //Flag. Indicates when variable is register or absolute.
+    hasAdic  : TAdicDeclar;   //Flag. Indicates when variable is register or absolute.
     absVar   : TAstVarDec;    //Reference to variable, when is ABSOLUTE <variable>
     absAddr  : integer;       //ABSOLUTE address
-    absOff   : integer;       //Offset to variable when ABSOLUTE.
     //Initialization information.
-    hasInit  : boolean;       //Flag. Indicates if variable is initialized
-    constDec : TAstExpress;   //Reference to the const declaration for init value. *** Eliminar
-    {El campo "constDec" debería ser innecesario. Inclusive "hasInit" lo sería. Porque
-    la constante de incialización es ahora un nodo hijo de la declración de la variable,
-    pero se mantienen como una ayuda, más aún consdierando que GetExpression() puede
-    crear también tipos dentro de las declaracioens de variables.}
+    hasInit  : TAstExpress;   {Reference and Flag. When is not NIL, refers to the
+                              expression in the AST where is the initial value.
+                              Initial expression must be a child node.}
   end;
 type  //Type categories and declaration styles
   //Type categories

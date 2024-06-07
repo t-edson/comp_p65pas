@@ -31,8 +31,8 @@ var  //Absolute type declarations
   achar: char absolute vchar;
 	abyte: byte absolute vbyte;
   aword: word absolute vword;
-  byteL: byte absolute aword.low;
-  byteH: byte absolute aword.high;
+//  byteL: byte absolute aword.low;
+//  byteH: byte absolute aword.high;
 
 var //Register declarations
   vreg : byte register;

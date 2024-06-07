@@ -132,25 +132,26 @@ type  //MIR Operand for expressions
   end;
 
 type  //Structural elements
-  { TMirProgFrame }
-  {Base class for all porgram-like containers (functions and main program).}
-  TMirProgFrame = Class(TMirElement)
-    //items    : TMirElements;   //Instruction list.
-    declars  : TMirElements;   //Declaration list.
-    instrucs : TMirElements;   //Instruction list.
+
+
+  { TMirContainer }
+
+  TMirContainer = class(TMirElement)
+  public  //Initialization
+    items    : TMirElements;   //Instruction list.
   private  //Insertion
     insPoint: Integer;      //Insert point for instructions
     procedure AddInstruction(itm: TMirElement; position: integer = 1);
     procedure SetInsertMode(iPoint: integer); inline;
     procedure ClearInsertMode; inline;
     function InsertModeActive: Boolean; inline;
-  public   //Initialization
+  public //Inicialización
     procedure Clear;
     constructor Create;
     destructor Destroy; override;
   end;
 
-  { TMirDeclars }
+  { TMirDeclars *** NO USADO POR AHORA}
   {Container for Variable and Constant declarations.}
   TMirDeclars = class(TMirElement)
   public  //Initialization
@@ -158,12 +159,17 @@ type  //Structural elements
     constructor Create;
     destructor Destroy; override;
   end;
-
-  { TMirCode }
+  { TMirCode *** NO CREADO POR AHORA. BASTA CON TMirContainer}
   {Container for Variable and Constant declarations.}
-  TMirInstrucs = class(TMirElement)
-  public  //Initialization
-    items    : TMirElements;   //Instruction list.
+
+  { TMirProgFrame }
+  {Base class for all porgram-like containers (functions and main program).}
+  TMirProgFrame = Class(TMirElement)
+    //items    : TMirElements;   //Instruction list.
+    declars  : TMirContainer;   //Declaration list.
+    instrucs : TMirContainer;   //Instruction list.
+  public   //Initialization
+    procedure Clear;
     constructor Create;
     destructor Destroy; override;
   end;
@@ -174,11 +180,11 @@ type  //MIR declarations
   TMirVarDec = Class(TMirElement)
     typ      : TAstTypeDec; //Variable type.
     vardec   : TAstVarDec;  //AST Declared variable, when it's associated to AST. If not it's NIL.
+    inival   : TMirOperand;  //Initial value expression. Opctional.
     IsParameter: Boolean;   //Flag for variables that are parameters.
     required : boolean;     {Indicates the variable is required to be allocated. Work
                             for variables used as registers. *** ¿Es necesario?}
   public   //Manejo de parámetros adicionales
-    inival   : TMirConsValue;  //Constant value
     adicPar  : TAdicVarDec;  //Parámetros adicionales en la declaración de la variable.
   public  //Campos para guardar las direcciones físicas asignadas en RAM.
     allocated: boolean;    //Activated when variable is allocated (RAM or register).
@@ -296,39 +302,33 @@ type  //Main Container
 //    items   : TMirElements;
     root    : TMirProgFrame; //Root node.
     ngotos  : Integer;      //Number of gotos
-//  public  //Adding declarations
-//    function AddVarDec(mcont: TMirFunDec; varDec0: TAstVarDec): TMirVarDec;
-//    function AddVarDec(mcont: TMirFunDec; varName: string; eleTyp: TAstTypeDec
-//      ): TMirVarDec;
-//    function AddFunDecSNF(funcName0: TAstFunDec): TMirFunDec;
-//    function AddFunDecUNF(funcName0: TAstFunDec): TMirFunDec;
   public  //Adding instructions
-    function AddFunCall(mcont: TMirProgFrame; Op1: TAstExpress): TMirFunCall;
-    function AddGoto(mcont: TMirProgFrame; ilabel: integer = - 1): TMirGoto;
-    function AddGoto(mcont: TMirProgFrame; mlabel: TMirLabel): TMirGoto;
-    function AddLabel(mcont: TMirProgFrame): TMirLabel;
-    procedure EndGoto(mcont: TMirProgFrame; gotoInstr: TMirGoto);
-    procedure EndGoto(mcont: TMirProgFrame; ilabel: integer);
-    function AddIfGoto(mcont: TMirProgFrame; condition: TAstExpress;
+    function AddFunCall(mcont: TMirContainer; Op1: TAstExpress): TMirFunCall;
+    function AddGoto(mcont: TMirContainer; ilabel: integer = - 1): TMirGoto;
+    function AddGoto(mcont: TMirContainer; mlabel: TMirLabel): TMirGoto;
+    function AddLabel(mcont: TMirContainer): TMirLabel;
+    procedure EndGoto(mcont: TMirContainer; gotoInstr: TMirGoto);
+    procedure EndGoto(mcont: TMirContainer; ilabel: integer);
+    function AddIfGoto(mcont: TMirContainer; condition: TAstExpress;
       negated: boolean): TMirIfGoto;
-    procedure EndIfGoto(mcont: TMirProgFrame; ifInstruc: TMirIfGoto);
+    procedure EndIfGoto(mcont: TMirContainer; ifInstruc: TMirIfGoto);
   public  //Initialization
     procedure Clear;
     constructor Create; virtual;
     destructor Destroy; override;
   end;
 
-  procedure AddFunParamAssign(mcont: TMirProgFrame;
+  procedure AddFunParamAssign(mcont: TMirContainer;
            var func: TMirOperand; Op1: TAstExpress);
-  function AddAssign(mcont: TMirProgFrame; vardec: TMirVarDec;
+  function AddAssign(mcont: TMirContainer; vardec: TMirVarDec;
            Op2: TAstExpress): TMirAssign;
   //Adding declarations
-  function AddMirConDec(mcont: TMirProgFrame; conDec0: TAstConsDec): TMirConDec;
-  function AddMirVarDec(mcont: TMirProgFrame; varDec0: TAstVarDec): TMirVarDec;
-  function AddMirVarDec(mcont: TMirProgFrame;
-      varName: string; eleTyp: TAstTypeDec): TMirVarDec;
-  function AddMirFunDecSNF(mcont: TMirProgFrame; funcName0: TAstFunDec): TMirFunDec;
-  function AddMirFunDecUNF(mcont: TMirProgFrame; funcName0: TAstFunDec): TMirFunDec;
+  function AddMirConDec(mcont: TMirContainer; conDec0: TAstConsDec): TMirConDec;
+  function AddMirVarDec(mcont: TMirContainer; varDec0: TAstVarDec): TMirVarDec;
+  function AddMirVarDec(mcont: TMirContainer; varName: string;
+           eleTyp: TAstTypeDec): TMirVarDec;
+  function AddMirFunDecSNF(mcont: TMirContainer; funcName0: TAstFunDec): TMirFunDec;
+  function AddMirFunDecUNF(mcont: TMirContainer; funcName0: TAstFunDec): TMirFunDec;
 
 type  //Events for AST elements
   //This type will be used to cast the field TAstFunDec.codSysInline.
@@ -338,60 +338,47 @@ type  //Events for AST elements
 
 implementation
 
-{ TMirProgFrame }
+{ TMirContainer }
 //Insertion
-procedure TMirProgFrame.AddInstruction(
-  itm: TMirElement; position: integer = 1);
+procedure TMirContainer.AddInstruction(itm: TMirElement;
+         position: integer = 1);
 {Add an item to the "instrucs" section of the container "mcont".}
 begin
   if insPoint<>-1 then begin
-    instrucs.Insert(insPoint, itm);
+    items.Insert(insPoint, itm);
     inc(insPoint);
   end else begin
-    instrucs.Add(itm);
+    items.Add(itm);
   end;
 end;
-procedure TMirProgFrame.SetInsertMode(iPoint: integer);
+procedure TMirContainer.SetInsertMode(iPoint: integer);
 {Set the MIR List in mode "Insert".}
 begin
   insPoint := iPoint;
 end;
-procedure TMirProgFrame.ClearInsertMode;
+procedure TMirContainer.ClearInsertMode;
 {Leaves the mode "Insert".}
 begin
   insPoint := -1;
 end;
-function TMirProgFrame.InsertModeActive: Boolean;
+function TMirContainer.InsertModeActive: Boolean;
 {Indicates if the mode "Insert" is activated.}
 begin
   exit(insPoint <> -1);
 end;
-//Initialization
-procedure TMirProgFrame.Clear;
+procedure TMirContainer.Clear;
 begin
-  declars.Clear;
-  instrucs.Clear;
+  items.Clear;
   insPoint := -1;     //Disable
 end;
-constructor TMirProgFrame.Create;
-begin
-  declars := TMirElements.Create(true);
-  instrucs := TMirElements.Create(true);
-end;
-destructor TMirProgFrame.Destroy;
-begin
-  declars.Destroy;
-  instrucs.Destroy;
-  inherited Destroy;
-end;
-{ TMirCode }
-constructor TMirInstrucs.Create;
+//Initialization
+constructor TMirContainer.Create;
 begin
   inherited;
   mirType := mtyCode;
   items:= TMirElements.Create(true);
 end;
-destructor TMirInstrucs.Destroy;
+destructor TMirContainer.Destroy;
 begin
   items.Destroy;
   inherited Destroy;
@@ -406,6 +393,23 @@ end;
 destructor TMirDeclars.Destroy;
 begin
   items.Destroy;
+  inherited Destroy;
+end;
+{ TMirProgFrame }
+procedure TMirProgFrame.Clear;
+begin
+  declars.Clear;
+  instrucs.Clear;
+end;
+constructor TMirProgFrame.Create;
+begin
+  declars := TMirContainer.Create;
+  instrucs := TMirContainer.Create;
+end;
+destructor TMirProgFrame.Destroy;
+begin
+  declars.Destroy;
+  instrucs.Destroy;
   inherited Destroy;
 end;
 { TMirConsValue }
@@ -893,7 +897,7 @@ begin
   end;
 end;
 //Adding declarations
-function AddMirConDec(mcont: TMirProgFrame; conDec0: TAstConsDec): TMirConDec;
+function AddMirConDec(mcont: TMirContainer; conDec0: TAstConsDec): TMirConDec;
 var
   astInival: TAstExpress;
 begin
@@ -901,8 +905,7 @@ begin
   Result.text       := conDec0.name;
   Result.typ        := conDec0.typ;
   Result.condec     := conDec0;
-
-  //Set function operand
+  //Set initial value
   astInival := TAstExpress(conDec0.elements[0]);
   GetMIROperandFromASTExpress(Result.inival, astInival);
   //Set parameters
@@ -911,11 +914,10 @@ begin
     AddFunParamAssign(mcont, Result.inival, astInival);
   end;
   Result.UpdateText;
-
   //Add to declarations container
-  mcont.declars.Add(Result);
+  mcont.items.Add(Result);
 end;
-function AddMirVarDec(mcont: TMirProgFrame; varDec0: TAstVarDec): TMirVarDec;
+function AddMirVarDec(mcont: TMirContainer; varDec0: TAstVarDec): TMirVarDec;
 {Add a Variable  declaration}
 begin
   Result := TMirVarDec.Create;
@@ -925,27 +927,31 @@ begin
   Result.IsParameter:= varDec0.IsParameter;
   Result.required   := varDec0.required;
   Result.adicPar    := varDec0.adicPar;
+  //Set initial value
+  //astInival := TAstExpress(conDec0.elements[0]);
+  //GetMIROperandFromASTExpress(Result.inival, astInival);
+
   //Add to declarations container
-  mcont.declars.Add(Result);
+  mcont.items.Add(Result);
 end;
-function AddMirVarDec(mcont: TMirProgFrame; varName: string; eleTyp: TAstTypeDec
+function AddMirVarDec(mcont: TMirContainer; varName: string; eleTyp: TAstTypeDec
   ): TMirVarDec;
-{Add a variable declaration to the container "fdest". The declaration is created
+{Add a variable declaration to the container "mcont". The declaration is created
 after the last declaration.}
 var
   n: Integer;
 begin
   //Create unique name
-  n := mcont.declars.Count;
+  n := mcont.items.Count;
   if varName='' then varName := '#' + IntToStr(n);
 
   Result := TMirVarDec.Create;
   Result.text := varName;
   Result.typ  := eleTyp;
   //Add to declarations container
-  mcont.declars.Add(Result);
+  mcont.items.Add(Result);
 end;
-function AddMirFunDecSNF(mcont: TMirProgFrame; funcName0: TAstFunDec): TMirFunDec;
+function AddMirFunDecSNF(mcont: TMirContainer; funcName0: TAstFunDec): TMirFunDec;
 begin
   Result := TMirFunDec.Create;
   Result.text := funcName0.name;
@@ -953,9 +959,9 @@ begin
   Result.IsTerminal2 := funcName0.IsTerminal2;
   Result.operTyp := funcName0.operTyp;
   Result.oper := funcName0.oper;
-  mcont.declars.Add(Result);
+  mcont.items.Add(Result);
 end;
-function AddMirFunDecUNF(mcont: TMirProgFrame; funcName0: TAstFunDec): TMirFunDec;
+function AddMirFunDecUNF(mcont: TMirContainer; funcName0: TAstFunDec): TMirFunDec;
 {Add a User Normal Function to the MIR list.}
 begin
   Result := TMirFunDec.Create;
@@ -963,11 +969,11 @@ begin
   Result.astFunDec := funcName0;
   Result.IsTerminal2 := funcName0.IsTerminal2;
   Result.oper := funcName0.oper;
-  mcont.declars.Add(Result);
+  mcont.items.Add(Result);
 end;
 { TMirList }
 //Adding instructions
-procedure AddFunParamAssign(mcont: TMirProgFrame;
+procedure AddFunParamAssign(mcont: TMirContainer;
                                      var func: TMirOperand; Op1: TAstExpress);
 var
   astPar: TAstExpress;
@@ -1018,7 +1024,7 @@ begin
   end;
   end;
 end;
-function TMirList.AddFunCall(mcont: TMirProgFrame; Op1: TAstExpress
+function TMirList.AddFunCall(mcont: TMirContainer; Op1: TAstExpress
   ): TMirFunCall;
 {Convierte una expresión, de llamada a una función/procedimiento, a su su representación
 en el MIR.}
@@ -1031,7 +1037,7 @@ begin
   //Add to list
   mcont.AddInstruction(Result);
 end;
-function AddAssign(mcont: TMirProgFrame; vardec: TMirVarDec;
+function AddAssign(mcont: TMirContainer; vardec: TMirVarDec;
   Op2: TAstExpress): TMirAssign;
 {General function to add an assignment instruction to the MIR container "mcont".
  The assignment in created in TAC format. This is a recursive function.
@@ -1058,7 +1064,7 @@ begin
   //Add to list
   mcont.AddInstruction(Result);
 end;
-function TMirList.AddGoto(mcont: TMirProgFrame; ilabel: integer = -1): TMirGoto;
+function TMirList.AddGoto(mcont: TMirContainer; ilabel: integer = -1): TMirGoto;
 begin
   Result:= TMirGoto.Create;
   if ilabel=-1 then begin   //Generates the index label.
@@ -1071,7 +1077,7 @@ begin
   //Add to list
   mcont.AddInstruction(Result);
 end;
-function TMirList.AddGoto(mcont: TMirProgFrame; mlabel: TMirLabel): TMirGoto;
+function TMirList.AddGoto(mcont: TMirContainer; mlabel: TMirLabel): TMirGoto;
 begin
   Result:= TMirGoto.Create;
   Result.ilabel := mlabel.ilabel; //Update label
@@ -1079,7 +1085,7 @@ begin
   //Add to list
   mcont.AddInstruction(Result);
 end;
-function TMirList.AddLabel(mcont: TMirProgFrame): TMirLabel;
+function TMirList.AddLabel(mcont: TMirContainer): TMirLabel;
 var
   lblInstruct: TMirLabel;
 begin
@@ -1089,7 +1095,7 @@ begin
   Result.UpdateText;
   mcont.AddInstruction(Result);
 end;
-procedure TMirList.EndGoto(mcont: TMirProgFrame; gotoInstr: TMirGoto);
+procedure TMirList.EndGoto(mcont: TMirContainer; gotoInstr: TMirGoto);
 var
   lblInstruct: TMirLabel;
 begin
@@ -1098,7 +1104,7 @@ begin
   lblInstruct.UpdateText;
   mcont.AddInstruction(lblInstruct);
 end;
-procedure TMirList.EndGoto(mcont: TMirProgFrame; ilabel: integer);
+procedure TMirList.EndGoto(mcont: TMirContainer; ilabel: integer);
 var
   lblInstruct: TMirLabel;
 begin
@@ -1107,7 +1113,7 @@ begin
   lblInstruct.UpdateText;
   mcont.AddInstruction(lblInstruct);
 end;
-function TMirList.AddIfGoto(mcont: TMirProgFrame;
+function TMirList.AddIfGoto(mcont: TMirContainer;
   condition: TAstExpress; negated: boolean): TMirIfGoto;
 {General function to add an IF instruction to the MIR container "mcont".
 Parameters:
@@ -1129,7 +1135,7 @@ begin
   //Add to list
   mcont.AddInstruction(Result);
 end;
-procedure TMirList.EndIfGoto(mcont: TMirProgFrame; ifInstruc: TMirIfGoto);
+procedure TMirList.EndIfGoto(mcont: TMirContainer; ifInstruc: TMirIfGoto);
 {Finish the IF ... GOTO instruction.}
 var
   lblInstruct: TMirLabel;
@@ -1143,7 +1149,7 @@ end;
 procedure TMirList.Clear;
 var
   declarations: TMirDeclars;
-  code: TMirInstrucs;
+  code: TMirContainer;
 begin
   root.Clear;
   ngotos := 0;
