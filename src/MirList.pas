@@ -6,7 +6,7 @@ representación intermedia es lineal.
 {$Define DEBUGMODE}   //Enable MIR visualization
 interface
 uses
-  Classes, SysUtils, fgl, AstElemP65, LexPas, LazLogger;
+  Classes, SysUtils, fgl, AstElemP65, LexPas, CompGlobals, LazLogger;
 type  //MIR base class
   //MIR Element type
   TMirType = (
@@ -178,14 +178,17 @@ type  //MIR declarations
 
   { TMirVarDec }
   TMirVarDec = Class(TMirElement)
+    varname  : String;      //Declared variable name. Needed because "Text" contains the text to show in MIR.
     typ      : TAstTypeDec; //Variable type.
     vardec   : TAstVarDec;  //AST Declared variable, when it's associated to AST. If not it's NIL.
-    inival   : TMirOperand;  //Initial value expression. Opctional.
     IsParameter: Boolean;   //Flag for variables that are parameters.
     required : boolean;     {Indicates the variable is required to be allocated. Work
                             for variables used as registers. *** ¿Es necesario?}
-  public   //Manejo de parámetros adicionales
-    adicPar  : TAdicVarDec;  //Parámetros adicionales en la declaración de la variable.
+  public   //Manejo de parámetros adicionales. Equivalente al tipo "TAdicVarDec".
+    hasAdic  : TAdicDeclar;  //Flag. Indicates when variable is register or absolute.
+    absAddr  : TMirOperand;  //Absolute address when: hasAdic = decAbsol.
+    hasInit  : Boolean;      //Flag to indicates there is an initial value "inival".
+    inival   : TMirOperand;  //Initial value expression. Optional.
   public  //Campos para guardar las direcciones físicas asignadas en RAM.
     allocated: boolean;    //Activated when variable is allocated (RAM or register).
     storage  : TStorage;   //Depend on adicPar.hasAdic.
@@ -197,19 +200,20 @@ type  //MIR declarations
     function AddrString: string;   //Devuelve la dirección física como cadena
     procedure ResetAddress; //Limpia las direcciones físicas
     function stoStr: string;
-  public
+  public  //Initialization
+    procedure UpdateText;    //Updates "Text" attribute.
     constructor Create; virtual;
   end;
 
   { TMirConDec }
   TMirConDec = Class(TMirElement)
   public
-    typ      : TAstTypeDec; //Constant type.
+    typ      : TAstTypeDec;  //Constant type.
     condec   : TAstConsDec;  //AST Declared variable.
     value    : TConsValue;   //Constant value.  *** NO debería usarse. Debe salir de "inival".
     inival   : TMirOperand;  //Initial value expression. Must always exist.
     evaluated: boolean;
-  public
+  public  //Initialization
     procedure UpdateText;    //Updates "Text" attribute.
     constructor Create; virtual;
   end;
@@ -543,6 +547,35 @@ function TMirVarDec.stoStr: string;
 begin
   WriteStr(Result, storage);
 end;
+procedure TMirVarDec.UpdateText;
+var
+  tmp: String;
+begin
+  {$IFDEF DEBUGMODE}  //Only needed to display MIR
+  //Set indication for ABSOLUTE or REGISTER
+  case hasAdic of
+    decNone  : tmp := varname ;
+    decAbsol : tmp := varname + '['+ absAddr.Text +']';
+    decZeroP : tmp := varname + '(ZP)';
+    decDatSec: tmp := varname ;
+    decRegis : tmp := varname + '(R)';
+    decRegisA: tmp := varname + '(RA)';
+    decRegisX: tmp := varname + '(RX)';
+    decRegisY: tmp := varname + '(RY)';
+  else
+    tmp := varname;
+  end;
+  if hasInit then begin
+    if inival.opType = otFunct then
+      Text := tmp + ' := ' + inival.FunCallText
+    else
+      Text := tmp + ' := ' + inival.Text;
+  end else begin
+    Text := tmp;
+  end;
+  {$ENDIF}
+end;
+
 constructor TMirVarDec.Create;
 begin
   mirType := mtyVarDec;
@@ -771,7 +804,6 @@ var
 begin
   exit(astOperand.srcDec);
 end;
-
 procedure TMirOperand.Exchange(i1, i2: integer);
 var
   tmp: TMirOperand;
@@ -780,7 +812,6 @@ begin
   elements[i1] := elements[i2];
   elements[i2] := tmp;
 end;
-
 { TMirFunCall }
 procedure TMirFunCall.UpdateText;
 {Actualiza el "Text" de la instrucción a partir del operando función.}
@@ -797,7 +828,8 @@ procedure TMirAssign.SetDestFromVarDec(vardec: TMirVarDec);
 MIR Operand (from a MIR variable declaration) and set "dest" to that new operand.
 That's why this operand doesn't have an AST reference.}
 begin
-  dest.Text := vardec.text;
+  if vardec=nil then dest.Text := '(p)^'
+  else dest.Text := vardec.varname;
   dest.opType := otVariab;
   dest.SetVar_RamFix(vardec);
   dest.astOperand := nil;
@@ -807,9 +839,9 @@ procedure TMirAssign.UpdateText;
 begin
   {$IFDEF DEBUGMODE}  //Only needed to display MIR
   if isSimple then begin  //Simple assignment  *** ¿Mo basta con leer opSrc.opType?
-    Text := dest.Text + ' := ' + opSrc.Text;
+    Text := dest.name + ' := ' + opSrc.Text;
   end else begin   //Assignment from function
-    Text := dest.Text + ' := ' + opSrc.FunCallText;
+    Text := dest.name + ' := ' + opSrc.FunCallText;
   end;
   {$ENDIF}
 end;
@@ -919,18 +951,38 @@ begin
 end;
 function AddMirVarDec(mcont: TMirContainer; varDec0: TAstVarDec): TMirVarDec;
 {Add a Variable  declaration}
+var
+  astInival, astAbsAddr: TAstExpress;
 begin
   Result := TMirVarDec.Create;
-  Result.text       := varDec0.name;
+  Result.varname    := varDec0.name;
+  //Result.text       := varDec0.name;
   Result.typ        := varDec0.typ;
   Result.vardec     := varDec0;
   Result.IsParameter:= varDec0.IsParameter;
   Result.required   := varDec0.required;
-  Result.adicPar    := varDec0.adicPar;
-  //Set initial value
-  //astInival := TAstExpress(conDec0.elements[0]);
-  //GetMIROperandFromASTExpress(Result.inival, astInival);
 
+  //Read aditional declaration parameters
+  Result.hasAdic    := varDec0.adicPar.hasAdic;
+  if Result.hasAdic = decAbsol then begin
+    astAbsAddr := varDec0.adicPar.absAddr;
+    GetMIROperandFromASTExpress(Result.absAddr, astAbsAddr);
+
+  end;
+
+  //Read initial value if exist
+  Result.hasInit    := varDec0.adicPar.hasInit<>nil;
+  if Result.hasInit then begin  //Read "inival".
+    astInival := varDec0.adicPar.hasInit;
+    GetMIROperandFromASTExpress(Result.inival, astInival);
+    //Set parameters
+    if astInival.opType = otFunct then begin
+      //Only functions should have parameters
+      AddFunParamAssign(mcont, Result.inival, astInival);
+    end;
+  end;
+
+  Result.UpdateText;
   //Add to declarations container
   mcont.items.Add(Result);
 end;

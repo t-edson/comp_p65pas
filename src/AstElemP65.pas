@@ -4,8 +4,7 @@ XpresElemP65
 By Tito Hinostroza.
 
 Basic definitions for syntax elements used in the Abstract Syntax Tree.
-This unit includes some definitions (like variable storage) that are dependent for the
-hardware architecture}
+}
 unit AstElemP65;
 {$mode objfpc}{$H+}
 interface
@@ -178,15 +177,22 @@ type
 
   {Description for aditional information in variables declaration: ABSOLUTE ,
   REGISTER,  or initialization. }
-  TAdicVarDec = record    //*** Estos campos deben estar también en TMirVarDec
+  TAdicVarDec = record
     //Absolute or register information.
     hasAdic  : TAdicDeclar;   //Flag. Indicates when variable is register or absolute.
-    absVar   : TAstVarDec;    //Reference to variable, when is ABSOLUTE <variable>
-    absAddr  : integer;       //ABSOLUTE address
+//    absVar   : TAstVarDec;    //Reference to variable, when is ABSOLUTE <variable>
+    absAddr  : TAstExpress;   {Reference to the AST expression that returns the absolute
+                              address where the variable should be located. Only valid
+                              when: hasAdic = decAbsol.}
     //Initialization information.
     hasInit  : TAstExpress;   {Reference and Flag. When is not NIL, refers to the
                               expression in the AST where is the initial value.
                               Initial expression must be a child node.}
+    //*** También puede dejarse "hasInit" como boolean y crear otro campo "initVal".
+    {Although the "absolute address" and the "initial value" can be obtained from the
+    children nodes of the variable declaration, the quantity of nodes (1 or 2) and the
+    value of the first node (first can be "absolute address" or "initial value"), are not
+    fixed. That's why we have references to these nodes (absAddr and hasInit).}
   end;
 type  //Type categories and declaration styles
   //Type categories
@@ -438,8 +444,6 @@ type  //Expression elements
     function StoAsStr: string;  //Storage as string
     procedure StringToArrayOfChar(str: string);
     function ValueIsZero: boolean;
-  public  //Temporal variables required for evaluating expression.
-    tempVars: TAstVarDecs;
   public  //Fields used when opType is otFunct.
     fundec  : TAstFunDec;  //Reference to function declaration
     {When element is "otFunct", this flag indicates the function/method has been
@@ -470,24 +474,11 @@ type  //Expression elements
     procedure SetConstRef(cons0: TAstConsDec);
     procedure SetAddrVar(var0: TAstVarDec);
     procedure SetAddrFun(fun0: TAstFunDec);
-    procedure Evaluate();
   public //Fields used when opType is otVariab.
-    offs   : integer;     //Offset to address when storage is stRamVarOf. *** Only Temporal because this field will pass to MIR.
-//    dirVar: boolean;  //Flag that indicates the address should be read from "dirAdd".
-//    dirAdd: word;     //Physical address when this expression is not associated to a variable (vardec).
+//    offs   : integer;     //Offset to address when storage is stRamVarOf. *** Only Temporal because this field will pass to MIR.
     function IsCAvar: Boolean;  //Is Constant-Addressed variable.
     function IsCVAvar: Boolean; //Is Constant-Variable-addressed variable.
-  public
-//    {Reference to Variable declaration when this variable is CAvar and address is defined
-//    only for a variable declaration. This is the common. In this case we don't create a
-//    constant expression for the address.}
-//    vardec0: TAstVarDec;
     function vardec: TAstVarDec;  //Reference to Variable declaration.
-  public  //Fields used when variable is allocated.
-    function add: word;  {Base address.}
-    function addL: word;
-    function addH: word;
-    function allocated: boolean; //Activated when variable is allocated (RAM or register).
   public  //Initialization
     constructor Create; override;
     destructor Destroy; override;
@@ -540,15 +531,6 @@ type  //Structural elements
                            Solo importa el primero, porque después de este, ya no se
                            ejecutará ningún otro código.}
     procedure RegisterExitCall(exitSent: TAstExpress);
-    {**************************************************************
-    De momento, no se están usando estos campos de abajo. Con los de arriba es
-    suficiente por ahora. No se necesita crear una estructura de bloques de sintaxis
-    porque el AST ya lo incluye. Además para optimización del RTS, solo basta con
-    saber si hay al menos un exit() en código obligatorio, que por fuerza será el
-    último en ejecutarse}
-    //lstExitCalls: TExitCalls;
-    //procedure AddExitCall(srcPos: TSrcPos; codeBlk: TAstCodeCont);
-    //function ObligatoryExit: TExitCall;
   public //Inicialización
     procedure Clear; override;
     constructor Create; override;
@@ -588,10 +570,6 @@ type  //Instructions relative elements
   //Sentences categories
   TSentenceType = (
     sntNull,       //Default value
-//    sntAssign,     //Assignment
-//    sntProcCal,    //Procedure call
-//    sntAsmBlock,   //ASM block
-//    sntBeginEnd,   //BEGIN-END block
     sntIF,         //Conditional IF
     sntREPEAT,     //REPEAT Loop
     sntWHILE,      //WHILE Loop
@@ -1379,84 +1357,18 @@ begin
   consType := ctConsRef;
   consRef := cons0;  //Keep reference
   evaluated := false;  //To force evaluation
-  Evaluate;
 end;
 procedure TAstExpress.SetAddrVar(var0: TAstVarDec);
 begin
   consType := ctVarAddr;
   addrVar := var0;  //Keep reference
   evaluated := false;  //To force evaluation
-  Evaluate;
 end;
 procedure TAstExpress.SetAddrFun(fun0: TAstFunDec);
 begin
   consType := ctFunAddr;
   addrFun := fun0;  //Keep reference
   evaluated := false;  //To force evaluation
-  Evaluate;
-end;
-procedure TAstExpress.Evaluate();
-var
-  xfun: TAstFunDec;
-  ele: TAstElement;
-  itemExp: TAstExpress;
-  i: Integer;
-begin
-  if evaluated then exit;  //Already evaluated
-  case consType of
-  ctLiteral: begin  //Literal like $1234 or 123
-      //This shouldn't happens, because literal are always evaluated.
-      //Unless it's an array literal like [@var1, @var2]
-      i := 0;
-      if self.Typ.catType = tctArray then begin
-        //Constant array. Let's evaluate by items
-        evaluated := true;    //Defaule
-        for ele in elements do begin
-          itemExp := TAstExpress(ele);   //Recover type.
-          itemExp.Evaluate();
-          if not itemExp.evaluated then begin
-            evaluated := false;
-            break;
-          end;
-          value.items[i] := itemExp.value;
-          inc(i);
-        end;
-      end;
-  end;
-  ctConsRef: begin  //Reference to a constant declared like "CONST1"
-      //Could be evaluated using "consRef"
-      if consRef.evaluated then begin
-        value := consRef.value^;
-        evaluated := true;
-      end else begin
-        //Constant not yet evaluated.
-      end;
-  end;
-  ctVarAddr: begin  //Constant expression like addr(<variable>)
-      if addrVar.allocated then begin
-        value.ValInt := addrVar.addr;
-        evaluated := true;
-      end else begin
-        //Variable not yet allocated
-      end;
-  end;
-  ctFunAddr: begin  //Constant expression like addr(<function>)
-      //Get  declaration
-      xfun := addrFun;
-      if xfun = nil then exit;  //Not implemented
-      //We have an implementation.
-      if xfun.coded then begin
-        value.ValInt := xfun.adrr;
-        evaluated := true;
-      end else begin
-        //Function not yet allocated
-//        if not pic.disableCodegen then begin  //Verify if we are in mode no-code-generation.
-//          xfun.AddAddresPend(pic.iRam-2);  //Register the address to complete later
-//        end;
-//        AddrUndef := true;
-      end;
-  end;
-  end;
 end;
 function TAstExpress.IsCAvar: Boolean;
 {Indicates if this Expression is a variable addressed by a constant address.
@@ -1490,50 +1402,14 @@ begin
     exit(Nil);
   end;
 end;
-function TAstExpress.add: word;
-begin
-  //By now we obtain it from vardec (when allocated)
-//  if dirVar then begin
-//    //The address is stored in dirAdd
-//    exit(dirAdd);
-//  end else begin
-//    //The address is the same of "vardec"
-//    exit(vardec.addr);
-//  end;
-  exit(0);
-end;
-
-//Access to variable addres
-function TAstExpress.addL: word; inline;
-begin
-  Result := add;
-end;
-function TAstExpress.addH: word; inline;
-begin
-  Result := add+1;
-end;
-function TAstExpress.allocated: boolean;
-begin
-  //This should work only for stRamFix.
-//  if dirVar then begin
-//    //We assume if "dirVar" is set, "dirAdd" should be set too.
-//    exit(true);
-//  end else begin
-//    exit(vardec.allocated);
-//  end;
-  exit(false);
-end;
-
 //Initialization
 constructor TAstExpress.Create;
 begin
   inherited Create;
   idClass := eleExpress;
-  tempVars := TAstVarDecs.Create(true);
 end;
 destructor TAstExpress.Destroy;
 begin
-  tempVars.Destroy;
   inherited Destroy;
 end;
 { TAstSentence }

@@ -12,6 +12,7 @@ type
     function PICName: string; virtual; abstract;
     function RAMmax: integer; virtual; abstract;
   private
+    procedure AnalyzeExpression;
     procedure AnalyzeFOR;
     procedure AnalyzeFORFirstAsign(out idx, valIni: TAstExpress);
     procedure GetAdicVarDeclar2(varTyp: TAstTypeDec; out aditVar: TAdicVarDec;
@@ -272,58 +273,15 @@ var
 begin
   aditVar.hasAdic  := decNone;       //Bandera
   aditVar.hasInit  := nil;
-  aditVar.absVar   := nil;         //Por defecto
   tokL := lowercase(token);
   if (tokL = 'absolute') or (token = '@') then begin
     // Hay especificación de dirección absoluta ////
     aditVar.hasAdic := decAbsol;    //marca bandera
     Next;
     ProcComments;
-    if tokType = tkLitNumber then begin
-      if (token[1]<>'$') and ((pos('e', token)<>0) or (pos('E', token)<>0)) then begin
-        //La notación exponencial, no es válida.
-        GenError(ER_INV_MEMADDR);
-        exit;
-      end;
-      n := pos('.', token);   //no debe fallar
-      if n=0 then begin
-        //Número entero sin parte decimal
-        aditVar.absAddr := ReadAddres(token);
-        Next;  //Pasa con o sin error, porque esta rutina es "Pasa siempre."
-      end else begin
-        //Puede ser el formato <dirección>.<bit>, en un solo token, que no es válido.
-        GenError('Syntax error.');
-        exit;
-      end;
-    end else if tokType = tkIdentifier then begin
-      //Should be variable or constant
-      ele := TreeElems.FindFirst(token);  //Identify element
-      if ele = nil then begin
-        //Unidentified element.
-        GenError(ER_UNKNOWN_IDE_, [token]);
-        Next;  //Pasa con o sin error, porque esta rutina es "Pasa siempre."
-        exit;
-      end;
-      if ele.idClass = eleConsDec then begin  //Is constant
-        xcon := TAstConsDec(ele);
-        AddCallerToFromCurr(ele);
-        aditVar.absAddr := xcon.value^.ValInt; { TODO : Faltaría verificar que "xcon" sea de tipo numérico }
-        Next;    //Pasa al siguiente
-      end else if ele.idClass = eleVarDec then begin  //Is mapped to a variable
-        xvar := TAstVarDec(ele);
-        aditVar.absVar := xvar;  //Guarda referencia
-        //La dirección final se asignará al asignar RAM.
-        Next;    //Pasa al siguiente.
-      end else begin
-        GenError(ER_EXP_VAR_IDE);
-        Next;  //Pasa con o sin error, porque esta rutina es "Pasa siempre."
-        exit;
-      end;
-    end else begin   //error
-      GenError(ER_NUM_ADD_EXP);
-      Next;    //pasa siempre
-      exit;
-    end;
+    aditVar.absAddr := GetConstValue(varTyp, mainTypCreated);  //Leemos como constante
+    if HayError then exit;
+
   end else if tokL = 'register' then begin    //Register type
     aditVar.hasAdic := decRegis;    //marca bandera
     Next;
@@ -1935,6 +1893,43 @@ begin
     MoveInternalTypes(ele, declarSec, declarPos);
   end;
 end;
+procedure TAnalyzer.AnalyzeExpression;
+var
+  ele, ex: TAstExpress;
+  declarSec: TAstElement;
+  declarPos: Integer;
+begin
+  //Could be: Assigment sentence, Procedure call or Function call.
+  ele := GetExpression(0);        //Parse expression
+  //Validate expression
+  if HayError then  exit;
+  //Check for possible types generated to move to the declaration section.
+  declarSec := TreeElems.curCodCont.Parent;  //Declaration section.
+  declarPos := TreeElems.curCodCont.Index;  //Position before of the body.
+  MoveInternalTypes(TreeElems.curNode, declarSec, declarPos);
+  //We expected one expression element.
+  if ele.idClass = eleExpress then begin
+    //The expected element
+    ex := TAstExpress(ele);
+    if ex.opType = otFunct then begin
+      //Should be a procedure or function call.
+      if ex.fcallOp then begin   //It comes from an operator
+        //Validate if expression is allowed here.
+        if ex.fundec.retType <> typNull then begin  //Return a type. Like "x + y".
+           GenError('Expressions are not allowed here.', ex.srcDec);
+        end;
+      end else begin             //Should be a function call, like inc(x);
+        //Validates EXIT sentence.
+        if ex.fundec.sfi in [SFI_EXIT0, SFI_EXIT1] then AnalyzeEXIT(ex);
+      end;
+    end else begin
+      //Returns a type. Should be an expression
+      GenError('Invalid sentence.', ex.srcDec);
+    end;
+  end else begin  //Maybe a simple operand.
+    GenError('Expression expected.');
+  end;
+end;
 procedure TAnalyzer.AnalyzeSentence;
 {Analyze one Pascal sentence. One sentence can be:
  1. Assigment sentence.
@@ -1949,9 +1944,6 @@ procedure TAnalyzer.AnalyzeSentence;
  }
 var
   tokUp: String;
-  ele, declarSec: TAstElement;
-  ex: TAstExpress;
-  declarPos: Integer;
 begin
   if not (TreeElems.curNode.idClass in [eleBody, eleBlock]) then begin
     //No debería pasar, porque las instrucciones solo pueden estar en eleBody
@@ -2019,49 +2011,10 @@ begin
       //end;
       //Next;
     end else begin
-      //Could be Assigment sentence, Procedure call or Function operand.
-//      snt := TreeElems.AddElementSentAndOpen(GetSrcPos, sntAssign); //Open sentence
-      //Parse expression
-      ele := GetExpression(0);
-      //Validate expression
-      if HayError then begin
-        exit;
-      end;
-      //Check for possible types generated to move to the declaration section.
-      declarSec := TreeElems.curCodCont.Parent;  //Declaration section.
-      declarPos := TreeElems.curCodCont.Index;  //Position before of the body.
-      MoveInternalTypes(TreeElems.curNode, declarSec, declarPos);
-      //We expected one expression element.
-      if ele.idClass = eleExpress then begin
-        //The expected element
-        ex := TAstExpress(ele);
-        if ex.opType = otFunct then begin
-          //Should be a procedure or function call.
-          if ex.fcallOp then begin   //It comes from an operator
-            //Validate if expression is allowed here.
-            if ex.fundec.retType <> typNull then begin  //Return a type. Like "x + y".
-               GenError('Expressions are not allowed here.', ex.srcDec);
-            end;
-//            //Set sentence type
-//            if ex.fundec.getset in [gsSetInItem,gsSetInPtr,gsSetInSimple] then begin
-//              //Only assignment ':=' is considered as an Assignment
-//            end else begin
-//              //Operands like '+=' ,'-=', ... are not.
-//              snt.sntType := sntProcCal;   //Update type.
-//            end;
-          end else begin             //Should be a function call, like inc(x);
-//            snt.sntType := sntProcCal;   //Update type.
-            //Validates EXIT sentence.
-            if ex.fundec.sfi in [SFI_EXIT0, SFI_EXIT1] then AnalyzeEXIT(ex);
-          end;
-        end else begin
-          //Returns a type. Should be an expression
-          GenError('Invalid sentence.', ex.srcDec);
-        end;
-      end else begin  //Maybe a simple operand.
-        GenError('Expression expected.');
-      end;
+      AnalyzeExpression;
     end;
+  end else if token = '(' then begin
+    AnalyzeExpression;
   end else begin
     //Any other thing.
     GenError('Syntax error.');

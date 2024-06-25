@@ -1,24 +1,26 @@
-const
-  consName = 1+2; 
 var
-  x: byte=3+1;
-  y: [3]char = 'ABC';
-  z: byte absolute x;
-  zz: byte absolute x;
-procedure proc1(xpar: byte): char;
-begin
-  x := 1;
-  exit('1');
-end; 
+//  x: byte = 1;
+  objeto: object
+            a: byte;
+          end;
+  p: ^byte;
+  w: word;
+//  z: byte absolute x+1;
+//procedure proc1(xpar: byte): char;
+//var x: byte;
+//begin
+//  x := 1;
+//  exit('1');
+//end; 
 
 begin
-  inc(x);
+  w := @p;
+//  objeto.a := 1;
+  (p+3)^ := 3;
+//  inc(x);
 //  proc1(2+1);
-  y := 'zzz';
-  x := consName+1;
+//  y := 'zzz';
+//  x := consName+1;
+//  x := 1+2;
+//  z := 12;
 end. 
-
-
-
-
-

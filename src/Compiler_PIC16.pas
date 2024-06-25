@@ -889,15 +889,22 @@ Parameters:
   If at least one new set sentence is added, returns TRUE.}
   var
     Op2, Op1: TAstExpress;
-    vardec: TMirVarDec;
+    mirvardec: TMirVarDec;
+    astvardec: TAstVarDec;
   begin
     Result := false;
     Op1 := TAstExpress(setMethod.elements[0]);  //Takes target.
     if Op1.opType <> otVariab then exit;
     //Split expressions in second operand of assignment.
     Op2 := TAstExpress(setMethod.elements[1]);  //Takes assignment source.
-    vardec := TMirVarDec(Op1.vardec.mirVarDec);
-    AddAssign(mcont, vardec, Op2);
+    astvardec := Op1.vardec;
+    if astvardec = nil then begin
+      //No variable declaration. Maybe a variable like: pointer^ := ...
+      mirvardec := nil;
+    end else begin
+      mirvardec := TMirVarDec(astvardec.mirVarDec);
+    end;
+    AddAssign(mcont, mirvardec, Op2);
   end;
   function SplitExpress(expMethod: TAstExpress): boolean;
   {Verify if an expression has more than three operands. If so then
