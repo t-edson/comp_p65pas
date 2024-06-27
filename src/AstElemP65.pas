@@ -127,45 +127,7 @@ type  //TAstElement class
   TAstCodeCont = class(TAstElement)
   end;
 
-
-const
-  CONS_ITEM_BLOCK = 20;
-
 type
-  //Groups of data types.
-  TTypeGroup=(
-    t_integer,  //Signed integer numbers
-    t_uinteger, //Unsigned integer numbers
-    t_float,    //Float numbers
-    t_boolean,  //Booleans
-    t_string,   //String of chars
-    t_enum  ,   //Enumerated. { TODO : Check if needed }
-    t_object    //Object (contain fields)
-  );
-  { TConsValue }
-  {Structure to store all the possible values for a constant.
-  Must have fields for all basic types defined in "TTypeGroup" and for composed
-  values}
-  TConsValue = object
-  public
-    ValInt  : Int64;    //For values t_integer y t_uinteger
-    ValFloat: extended; //For values t_float
-    ValBool : boolean;  //For values t_boolean
-    ValStr  : string;   //For values t_string
-  public //Arrays   *** Deberíamn eliminarse estas propied. porque en el AST, se deben crear como ramas.
-    items   : array of TConsValue;  //Ítems list
-    nItems  : integer;  //Number of items
-    curSize : integer;
-    procedure InitItems;
-    procedure AddConsItem(const c: TConsValue);
-    procedure CloseItems;
-  public  //Access to ValInt
-    function LByte: byte; inline;  //Returns low byte of integer value.
-    function HByte: byte; inline;  //Returns high byte of integer value.
-    function EByte: byte; inline;
-    function UByte: byte; inline;
-    function valuesAsString: string;
-  end;
 
   TProcDefineVar = procedure(const varName, varInitVal: string) of object;
 
@@ -268,7 +230,7 @@ type  //Declaration elements
     If evaluated = true  -> The constant value can be read in "value".
     If evaluated = false -> The constant is not yet evaluated. It has been defined as an
                             expression, not yet evaluated.}
-    evaluated: boolean;
+//    evaluated: boolean;
     //Constant value
     value    : ^TConsValue;
     //Este campo debería usarse para acceder al elementeo en el MIR
@@ -709,13 +671,6 @@ public mirFunDec: TObject;  {Formalmente debe ser TMirFunDec, pero se pone TObje
     function nLocalVars: integer;
     function IsTerminal: boolean;
     function IsTerminal2: boolean;
-  private //Manage of pending calls
-    curSize: integer;
-  public  //Manage of pending calls
-    {Address of pending calls (JSR) made when the function was not still implemented }
-    nAddresPend : integer;
-    addrsPend   : array of word;
-    procedure AddAddresPend(ad: word);
   public //Initialization
     {Reference to the elements list where is the body. It is:
       - TAstFunDec.elements, when there isn't a function implementation.
@@ -1136,47 +1091,6 @@ begin
   Operations[n].value := value;
 end;
 
-{ TConsValue }
-procedure TConsValue.InitItems;
-begin
-  nItems := 0;
-  curSize := CONS_ITEM_BLOCK;   //Block size
-  setlength(items, curSize);  //initial size
-end;
-procedure TConsValue.AddConsItem(const c: TConsValue);
-begin
-  items[nItems] := c;
-  inc(nItems);
-  if nItems >= curSize then begin
-    curSize += CONS_ITEM_BLOCK;   //Increase size by block
-    setlength(items, curSize);  //make space
-  end;
-end;
-procedure TConsValue.CloseItems;
-begin
-  setlength(items, nItems);
-end;
-function TConsValue.LByte: byte;
-begin
-  Result := LO(word(valInt));
-end;
-function TConsValue.HByte: byte;
-begin
-  Result := HI(word(valInt));
-end;
-function TConsValue.EByte: byte;
-begin
-  Result := (valInt >> 16) and $FF;
-end;
-function TConsValue.UByte: byte;
-begin
-  Result := (valInt >> 24) and $FF;
-end;
-function TConsValue.valuesAsString: string;
-{Returns a string containing the abstract of values stored.}
-begin
-  Result := 'int=' + IntToStr(ValInt) + ',bool=' + IfThen(ValBool,'T','F');
-end;
 { TAstBlock }
 constructor TAstBlock.Create;
 begin
@@ -1651,16 +1565,6 @@ begin
     elem.ClearCallers;
   end;
 end;
-procedure TAstFunDec.AddAddresPend(ad: word);
-{Add a pending address to the function to be completed later.}
-begin
-  addrsPend[nAddresPend] := ad;
-  inc(nAddresPend);
-  if nAddresPend > curSize then begin
-    curSize += CONS_ITEM_BLOCK;   //Increase size by block
-    setlength(addrsPend, curSize);  //make space
-  end;
-end;
 function TAstFunDec.nCalled: integer;
 begin
   if IsInterrupt then exit(1);   //Los INTERRUPT son llamados implícitamente
@@ -1716,10 +1620,6 @@ constructor TAstFunDec.Create;
 begin
   inherited Create;
   idClass := eleFuncDec;
-  //Init addrsPend[]
-  nAddresPend := 0;
-  curSize := CONS_ITEM_BLOCK;   //Block size
-  setlength(addrsPend, curSize);  //initial size
   declar := Self;
   //By default, we assume this is a declaration and implementation.
   elemImplem := elements;

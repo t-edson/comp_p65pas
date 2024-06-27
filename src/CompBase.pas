@@ -1295,7 +1295,6 @@ begin
     expr := AddExpressionConstByte('n', consVal, GetSrcPos);
   end;
   consDec.value := @expr.value;
-  consDec.evaluated := true;
   TreeElems.CloseElement;  //Close constant.
   exit(consDec);
 end;

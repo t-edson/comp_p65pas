@@ -47,6 +47,8 @@ type  //MIR Operand for expressions
                  the attribute "catType".
   }
   TMirConsValue = object
+  const
+    CONS_ITEM_BLOCK = 20;
   public  //Status
     consType : TConsType;   //Constant type for the atomic type.
     function evaluated(typ: TAstTypeDec): Boolean;

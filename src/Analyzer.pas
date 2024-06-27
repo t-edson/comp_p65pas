@@ -649,7 +649,6 @@ If some problems happens, Error is generated and the NIL value is returned.
       consDec.typ := sizExp.Typ;
       if sizExp.Sto = stConst then begin
         consDec.value := @sizExp.value;
-        consDec.evaluated := sizExp.evaluated;  //Could be constant, not evaluated yet.
       end else begin
         GenError(ER_CON_EXP_EXP);
         exit;
@@ -1070,9 +1069,7 @@ begin
     if consIni.Sto = stConst then begin
       //A simple value. We can initialize the constant.
       consDec.value := @consIni.value;
-      consDec.evaluated := consIni.evaluated;
     end;
-    //Other types (no otConst) will be evaluated later.
 
     TreeElems.CloseElement;  //Close constant declaration.
 
