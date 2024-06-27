@@ -174,71 +174,6 @@ end;
 //    //end;
 //  end;
 //end;
-//procedure TCompiler_PIC16.EvaluateConstantDeclare;
-//{Calculates final values from constant declared in CONST sections of program and
-//functions. Constants could be expressions:
-//  const
-//    C1 = 123;
-//    C2 = C1 and $FF;
-//}
-//var
-//  cons: TAstConsDec;
-//  vard: TAstVarDec;
-//  consExpres: TAstExpress;
-//begin
-//  //Calculate values in CONST sections
-//  for cons in TreeElems.AllCons do begin
-//    {For optimization we should evaluate only used Constant, but we evaluate alls
-//    because constants like the field "length" of arrays, needs to be evaluated in order
-//    to get the size defined, before assign RAM. }
-//    //if vard.nCalled = 0 then continue; //Skip unused variable.
-//     TreeElems.OpenElement(cons);  //To resolve properly identifiers
-//     if not cons.evaluated then begin
-//       //If it isn't evaluated, must be an expression.
-//       consExpres := TAstExpress(cons.elements[0]);  //Takes the expression node.
-//       //Should be an expression. Need to be calculated.
-//       ConstantFoldExpr(consExpres);
-//       if HayError then exit;
-//       if consExpres.opType<>otConst then begin
-//         //The expression returned a not-constant value.
-//         GenError('Expected constant expression.', consExpres.srcDec);
-//         exit;
-//       end;
-//       if not consExpres.evaluated then begin
-//         GenError('Constant not evaluated.', consExpres.srcDec);
-//         exit;
-//       end;
-//       //Copy the value.
-//       cons.value := @consExpres.value;
-//       cons.evaluated := true;
-//     end;
-//  end;
-//  //Calculate values in VAR sections
-//  for vard in TreeElems.AllVars do begin
-//    if vard.nCalled = 0 then continue; //Skip unused variable.
-//    if vard.elements.Count = 0 then continue;  //Skip vars with no initialization.
-//    TreeElems.OpenElement(vard);  //To resolve properly identifiers
-//    consExpres := TAstExpress(vard.elements[0]);  //Takes the expression node.
-//    if not consExpres.evaluated then begin
-//      //If it isn't evaluated, must be an expression.
-//      //Should be an expression. Need to be calculated.
-//      ConstantFoldExpr(consExpres);
-//      if HayError then exit;
-//      if consExpres.opType<>otConst then begin
-//        //The expression returned a not-constant value.
-//        GenError('Expected constant expression.', consExpres.srcDec);
-//        exit;
-//      end;
-//      if not consExpres.evaluated then begin
-//        GenError('Constant not evaluated.', consExpres.srcDec);
-//        exit;
-//      end;
-//      //Copy the value.
-//      consExpres.value := consExpres.value;
-//      consExpres.evaluated := true;
-//    end;
-//  end;
-//end;
 //procedure TCompiler_PIC16.ConstantFolding;
 //{Do a fold constant optimization and evaluate constant expresions. }
 //  procedure ConstantFoldBody(body: TAstBody);
@@ -839,49 +774,6 @@ Parameters:
   sntBlock  -> Block of code where are the sentences to need be prepared. It's the
                same of "cntFunct" except when "block" is nested like in a condiitonal.
 }
-{  function MoveParamToAssign(curContainer: TAstElement; Op: TAstExpress;
-                             parvar: TAstVarDec): TAstExpress;
-  {Mueve el nodo especificado "Op", que representa a un parámetro de la función, a una
-  nueva instruccion de asignación (que es creada al inicio del bloque "curContainer") y
-  reemplaza el nodo faltante por una variable temporal que es la que se crea en la
-  instrucción de asignación.
-  Es similar a MoveNodeToAssign() pero no reemplaza el nodo movido y no crea una variable
-  auxiliar, sino que usa "parvar".
-  Retorna la instrucción de asignación creada.
-  }
-  var
-    _setaux: TAstExpress;
-    Op1aux: TAstExpress;
-    funSet: TAstFunBase;
-  begin
-    //Create the new _set() expression.
-    _setaux := CreateExpression('_set', typNull, otFunct, Op.srcDec);
-    funSet := MethodFromBinOperator(Op.Typ, ':=', Op.Typ);
-    if funSet = nil then begin   //Operator not found
-      GenError('Undefined operation: %s %s %s', [Op.Typ.name, ':=', Op.Typ.name], Op.srcDec);
-      _setaux.Destroy;    //We destroy because it hasn't been included in the AST.
-      exit(nil);
-    end;
-    _setaux.rfun := funSet;
-
-    //Add the new assigment before the main
-    TreeElems.openElement(curContainer);
-    TreeElems.AddElement(_setaux, 0);    //Add a new assigmente before
-    _setaux.elements := TxpElements.Create(true);  //Create list
-    TreeElems.openElement(_setaux);
-
-    //Add first operand (variable) of the assignment.
-    Op1aux := CreateExpression(parvar.name, parvar.typ, otVariab, Op.srcDec);
-    Op1aux.SetVariab(parvar);
-    TreeElems.addElement(Op1aux);
-    AddCallerToFromCurr(parvar); //Add reference to auxiliar variable.
-
-    //Move the second operand to the previous _set created
-    TreeElems.ChangeParentTo(_setaux, Op);
-
-    exit(_setaux);
-  end;
-}
   function SplitSet(setMethod: TAstExpress): boolean;
   {Process a set sentence. If a set expression has more than three operands
   it's splitted adding one or more aditional set sentences, at the beggining of
@@ -1097,17 +989,18 @@ begin
 //    end;
   end;
 end;
-
 procedure TCompiler_PIC16.GenerateMIR;
 var
-  astFunDec : TAstFunDec;
-  astVardec: TAstVarDec;
   bod : TAstBody;
   elem : TAstElement;
+  astFunDec: TAstFunDec;
+  astVardec: TAstVarDec;
+  astTypdec: TAstTypeDec;
   mirFunDec: TMirFunDec;
   mirVarDec: TMirVarDec;
   astConDec: TAstConsDec;
   mirConDec: TMirConDec;
+  mirTypDec: TMirTypDec;
 begin
   //Agrega variables globales
 //  for astVardec in TreeElems.AllVars do begin
@@ -1119,13 +1012,18 @@ begin
 //    end;
 //  end;
   for elem in TreeElems.main.elements do begin
-    if (elem.idClass = eleConsDec) and (elem.nCalled>0) then begin
+    if elem.nCalled=0 then Continue;  //No usado.
+    if elem.idClass = eleConsDec then begin
       astConDec := TAstConsDec(elem);
       mirConDec := AddMirConDec(mirRep.root.declars, astConDec);
-    end else if (elem.idClass = eleVarDec) and (elem.nCalled>0) then begin
+    end else if elem.idClass = eleVarDec then begin
       astVardec := TAstVarDec(elem);
       mirVarDec := AddMirVarDec(mirRep.root.declars, astVardec); //Agrega declaración en el MIR
       astVardec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.;
+    end else if elem.idClass = eleTypeDec then begin
+      astTypdec := TAstTypeDec(elem);
+      mirTypDec := AddMirTypDec(mirRep.root.declars, astTypdec); //Agrega declaración en el MIR
+      astTypdec.mirTypDec := mirTypDec;  //Guarda referencia al MIR.
     end;
   end;
   for astFunDec in usedFuncs do begin

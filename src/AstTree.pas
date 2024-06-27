@@ -11,7 +11,7 @@ unit AstTree;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fgl, LazLogger, AstElemP65, LexPas;
+  Classes, SysUtils, fgl, LazLogger, AstElemP65, LexPas, CompGlobals;
 type  //Abstract Syntax Tree
   {Represent the state of a search with FindFirst-FindNext}
   TAstFindState = object

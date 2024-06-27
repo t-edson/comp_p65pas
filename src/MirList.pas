@@ -14,6 +14,7 @@ type  //MIR base class
      mtyDeclars     //Folder for Variable and Constant declaration
     ,mtyVarDec      //Variable declaration
     ,mtyConDec      //Constant declaration
+    ,mtyTypDec      //Type Declaration
     ,mtyFunDec      //Function declaration
     //Instructions
     ,mtyCode        //Folder for Instructions
@@ -176,10 +177,45 @@ type  //Structural elements
 
 type  //MIR declarations
 
+  { TMirTypDec }
+
+  TMirTypDec = Class(TMirELement)
+  private
+    fSize: word;
+    function getSize: word;
+    procedure setSize(AValue: word);
+  public   //Identification
+    copyOf  : TMirTypDec;  //Indicates this type is copy of other
+    catType : TCatType;   //Categoría del tipo
+    property size: word read getSize write setSize;   //Tamaño en bytes del tipo
+  public   //Fields when type is Array or pointer
+    consNitm: TAstConsDec;  //Reference to constant defining the number of items.
+    itmType : TMirTypDec;  {Reference to the item type when it's array.
+                                TArr = array[255] of byte;  //itemType = byte
+                            }
+    isDynam : boolean;      //Indicates the size is dynamic. No current supported except when initialized.
+    ptrType : TMirTypDec;  {Reference to the type pointed, when it's pointer.
+                                TPtr = ^integer;       //ptrType = integer
+                           }
+    function nItems: integer;  //Number of items, when is tctArray (-1 if it's dynamic.)
+  public   //Fields when type is Object
+    objSize : integer;
+  public   //Information
+    function IsByteSize: boolean;
+    function IsWordSize: boolean;
+    function IsDWordSize: boolean;
+    function IsArrayOf(itTyp: TMirTypDec; numIt: integer): boolean;
+    function IsPointerTo(ptTyp: TMirTypDec): boolean;
+    function IsEquivalent(typ: TMirTypDec): boolean;
+  public  //Initialization
+    procedure UpdateText;    //Updates "Text" attribute.
+    constructor Create; virtual;
+  end;
+
   { TMirVarDec }
   TMirVarDec = Class(TMirElement)
     varname  : String;      //Declared variable name. Needed because "Text" contains the text to show in MIR.
-    typ      : TAstTypeDec; //Variable type.
+    typ      : TAstTypeDec; //Variable type. ******* Debe ser "TMirTypDec"
     vardec   : TAstVarDec;  //AST Declared variable, when it's associated to AST. If not it's NIL.
     IsParameter: Boolean;   //Flag for variables that are parameters.
     required : boolean;     {Indicates the variable is required to be allocated. Work
@@ -331,6 +367,7 @@ type  //Main Container
   function AddMirVarDec(mcont: TMirContainer; varDec0: TAstVarDec): TMirVarDec;
   function AddMirVarDec(mcont: TMirContainer; varName: string;
            eleTyp: TAstTypeDec): TMirVarDec;
+  function AddMirTypDec(mcont: TMirContainer; typDec0: TAstTypeDec): TMirTypDec;
   function AddMirFunDecSNF(mcont: TMirContainer; funcName0: TAstFunDec): TMirFunDec;
   function AddMirFunDecUNF(mcont: TMirContainer; funcName0: TAstFunDec): TMirFunDec;
 
@@ -342,6 +379,93 @@ type  //Events for AST elements
 
 implementation
 
+{ TMirTypDec }
+function TMirTypDec.getSize: word;
+var
+  nItms: integer;
+begin
+  if catType = tctArray then begin
+    //Array size is calculated
+    if nItems= -1 then exit(0) else exit(itmType.size * nItems);
+  end else if catType = tctPointer then begin
+    exit(2);  //Pointer are like words
+  end else if catType = tctObject then begin
+    exit(objSize);
+    exit(0);
+  end else begin
+    exit(fSize)
+  end;
+end;
+procedure TMirTypDec.setSize(AValue: word);
+begin
+  fSize := AValue;
+end;
+function TMirTypDec.nItems: integer;
+begin
+  if copyOf<>nil then begin
+    exit(copyOf.consNitm.value^.ValInt)
+  end else begin
+    exit(consNitm.value^.ValInt)
+  end;
+end;
+function TMirTypDec.IsByteSize: boolean;
+{Indica si el tipo, tiene 1 byte de tamaño}
+begin
+//  if copyOf<>nil then exit(copyOf.IsByteSize);  //verifica
+  Result := size = 1;
+end;
+function TMirTypDec.IsWordSize: boolean;
+{Indica si el tipo, tiene 2 bytes de tamaño}
+begin
+//  if copyOf<>nil then exit(copyOf.IsWordSize);  //verifica
+  Result := size = 2;
+end;
+function TMirTypDec.IsDWordSize: boolean;
+{Indica si el tipo, tiene 4 bytes de tamaño}
+begin
+//  if copyOf<>nil then exit(copyOf.IsDWordSize);  //verifica
+  Result := size = 4;
+end;
+function TMirTypDec.IsArrayOf(itTyp: TMirTypDec; numIt: integer): boolean;
+{Indicates if this type is an array of the specified type and with the specified
+number of elements.}
+begin
+  if catType <> tctArray then exit(false);
+  //I'm an array
+//  debugln('Buscando arreglo en: ' + self.name);
+  if consNitm = nil then exit(false);  //Not yet set the size.
+  exit( (nItems = numIt) and itmType.IsEquivalent(itTyp) );
+end;
+function TMirTypDec.IsPointerTo(ptTyp: TMirTypDec): boolean;
+begin
+  exit( (catType = tctPointer) and ptrType.IsEquivalent(ptTyp) );
+end;
+function TMirTypDec.IsEquivalent(typ: TMirTypDec): boolean;
+{Indicates if the type is the same type as the specified or has the same definition.}
+begin
+  if self = typ then exit(true);
+  if catType <> typ.catType then exit(false);
+  //Have the same category
+  if (self.copyOf = typ) or (typ.copyOf = self) then exit(true);
+  if (self.copyOf<>nil) and (self.copyOf = typ.copyOf) then exit(true);
+  if catType = tctArray then begin
+    //Equivalence for arrays
+    if (self.nItems = typ.nItems) and itmType.IsEquivalent(typ.itmType) then exit(true);
+  end else if catType = tctPointer then begin
+    //Equivalence for pointers
+    if (self.ptrType.IsEquivalent(typ.ptrType)) then exit(true);
+  end;
+  exit(false);
+end;
+//Initialization
+procedure TMirTypDec.UpdateText;
+begin
+
+end;
+constructor TMirTypDec.Create;
+begin
+  mirType := mtyTypDec;
+end;
 { TMirContainer }
 //Insertion
 procedure TMirContainer.AddInstruction(itm: TMirElement;
@@ -529,11 +653,11 @@ end;
 function TMirVarDec.AddrString: string;
 {Devuelve una cadena, que representa a la dirección física.}
 begin
-  if vardec.typ.IsByteSize then begin
+  if typ.IsByteSize then begin
     Result := '$' + IntToHex(addr, 3);
-  end else if vardec.typ.IsWordSize then begin
+  end else if typ.IsWordSize then begin
     Result := '$' + IntToHex(addr, 3);
-  end else if vardec.typ.IsDWordSize then begin
+  end else if typ.IsDWordSize then begin
     Result := '$' + IntToHex(addr, 3);
   end else begin
     Result := '';   //Error
@@ -575,7 +699,6 @@ begin
   end;
   {$ENDIF}
 end;
-
 constructor TMirVarDec.Create;
 begin
   mirType := mtyVarDec;
@@ -1000,6 +1123,21 @@ begin
   Result := TMirVarDec.Create;
   Result.text := varName;
   Result.typ  := eleTyp;
+  //Add to declarations container
+  mcont.items.Add(Result);
+end;
+function AddMirTypDec(mcont: TMirContainer; typDec0: TAstTypeDec): TMirTypDec;
+{Add a type declaration to the container "mcont". The declaration is created
+after the last declaration.}
+begin
+  Result := TMirTypDec.Create;
+  //Result.typname    := typDec0.name;
+  Result.text       := typDec0.name;
+  Result.setSize(typDec0.size);
+  //Result.copyOf :=;
+  Result.catType := typDec0.catType;
+
+  Result.UpdateText;
   //Add to declarations container
   mcont.items.Add(Result);
 end;

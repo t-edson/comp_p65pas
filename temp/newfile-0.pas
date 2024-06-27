@@ -1,8 +1,12 @@
+const
+  CON = 3;
+  TAM3 = 3+CON;
 var
 //  x: byte = 1;
-  objeto: object
-            a: byte;
-          end;
+//  objeto: object
+//            a: byte;
+//          end;
+  a3: array[TAM3] of char = '';
   p: ^byte;
   w: word;
 //  z: byte absolute x+1;
@@ -16,7 +20,7 @@ var
 begin
   w := @p;
 //  objeto.a := 1;
-  (p+3)^ := 3;
+//  (p+3)^ := 3;
 //  inc(x);
 //  proc1(2+1);
 //  y := 'zzz';

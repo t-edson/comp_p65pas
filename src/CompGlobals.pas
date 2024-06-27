@@ -53,6 +53,63 @@ type //Globals System functions identifiers
   SFI_DWORD
   );
 
+type  //Type categories and declaration styles
+  //Type categories
+  TCatType = (
+    tctAtomic,  //Basic types as Byte, Word or Char.
+    tctArray,   //Array of some other type.
+    tctPointer, //Pointer to other type.
+    tctObject   //Record with several fields
+  );
+  {Types categories define the way a type is structured.
+
+  ==== ATOMIC ====
+  We say a type is atomic, when it cannot be expressed as a construction of other type.
+  For example: CHAR or BYTE types. WORD type should be atomic too. Although a WORD can be
+  expressed as an OBJECT. Here in P65Pas we define WORD as atomic.
+  Declaraction for atomic types are:
+  TYPE
+    mytype = byte;
+    mytype2 = char;
+    mytype3 = mytype;  //Because "mytype" is tomic too.
+
+  ==== ARRAY ====
+  Array of some other type (atomic or not).
+  Declaration for array types are:
+  TYPE
+    artype = ARRAY[10] OF byte;
+    otherarray = artype;  //Because artype is array
+    alsoarray = ARRAY OF noAtomicType;
+
+  As an alternative notation we can use is:
+  TYPE
+    artype = [10]byte;
+
+  ==== POINTER ====
+  Pointer to some other type (atomic or not).
+  Declaration for pointer types are:
+  TYPE
+    ptrtype = POINTER TO byte;
+    otherptr = ptrtype;  //Because ptrtype is pointer
+    alsoptr = POINTER TO noAtomicType;
+
+  As an alternative notation we can use is:
+  TYPE
+    artype = ^byte;
+
+  }
+
+  //Type declaration style.
+  TTypDeclarStyle = (
+    ttdDirect,  {Like:
+                      TYPE mytype = byte;
+                      TYPE mytype2 = mytype;  //"mytype" could be ARRAY/POINTER/OBJECT
+                }
+    ttdDeclar   {Like:
+                      TYPE mytype = ARRAY[30] OF char;
+                      TYPE refchar = POINTER TO char; }
+  );
+
 
 var
   //Esta propiedad tal vez deba estar junto a las demás opciones del compilador.
