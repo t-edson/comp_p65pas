@@ -233,7 +233,7 @@ type  //Declaration elements
 //    evaluated: boolean;
     //Constant value
     value    : ^TConsValue;
-    //Este campo debería usarse para acceder al elementeo en el MIR
+    //Este campo debería usarse para acceder al elemento en el MIR.
     mirConDec: TObject;  //Formalmente debe ser TMirConDec, pero se pone TObject para no generar referencias circulares.
     constructor Create; override;
   end;
@@ -336,10 +336,15 @@ type  //Expression elements
 
   //Constant types
   TConsType = (
+    //tctAtomic, tctPointer
     ctLiteral,  //Literal like $1234 or 123
     ctConsRef,  //Reference to a constant declared like "CONST1"
     ctVarAddr,  //Constant expression like addr(<variable>)
     ctFunAddr   //Constant expression like addr(<function>)
+    //tctArray
+
+    //tctObject
+
   );
   { TAstExpress }
   {Represents an expression/operand. }
@@ -349,7 +354,6 @@ type  //Expression elements
     Sto     : TStorage;     //Storage of the value (memory, register, value)
     Typ     : TAstTypeDec;  //Data type for the operand.
     function opTypeAsStr: string; //"opType" as string
-    function StoAsStr: string;  //Storage as string
     procedure StringToArrayOfChar(str: string);
     function ValueIsZero: boolean;
   public  //Fields used when opType is otFunct.
@@ -364,10 +368,10 @@ type  //Expression elements
     evaluated: boolean;     //Activated when constant is evaluated.
     consType : TConsType;   //Constant type
     //Fields used according to "consType" value.
-    value    : TConsValue;  //Constant value, when consType=ctLiteral
-    consRef  : TAstConsDec;  //Ref. to TAstConsDec when consType=ctConsRef
-    addrVar  : TAstVarDec;   //Ref. to TAstVarDec  when consType=ctVarAddr
-    addrFun  : TAstFunDec;   //Ref. to TAstFun when consType=ctFunAddr
+    value    : TConsValue;  //Constant value, when consType=ctLiteral (meither array nor object)
+    consRef  : TAstConsDec; //Ref. to TAstConsDec when consType=ctConsRef
+    addrVar  : TAstVarDec;  //Ref. to TAstVarDec  when consType=ctVarAddr
+    addrFun  : TAstFunDec;  //Ref. to TAstFun when consType=ctFunAddr
     public
     //Functions to read values.
     function val: dword;
@@ -1105,11 +1109,6 @@ end;
 function TAstExpress.opTypeAsStr: string;
 begin
   WriteStr(Result, opType);
-end;
-function TAstExpress.StoAsStr: string;
-//Resturns storage as string.
-begin
-  WriteStr(Result, Sto);
 end;
 procedure TAstExpress.StringToArrayOfChar(str: string);
 {Init the constant value as array of char from a string.}

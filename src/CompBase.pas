@@ -1745,8 +1745,8 @@ begin
   SkipWhites;
   upTok := UpCase(token);
   if tokType = tkLitNumber then begin
-    TipDefecNumber(typ, valInt, token); //encuentra tipo de número, tamaño y valor
-    if HayError then exit(nil);  //verifica
+    TipDefecNumber(typ, valInt, token); //Encuentra tipo de número, tamaño y valor
+    if HayError then exit(nil);         //Verifica
     Op1 := AddExpressAndOpen(token, typ, otConst, GetSrcPos);
     Op1.SetLiteraltIntConst(valInt);
     Next;    //Pasa al siguiente

@@ -217,7 +217,7 @@ type  //MIR declarations
   { TMirVarDec }
   TMirVarDec = Class(TMirElement)
     varname  : String;      //Declared variable name. Needed because "Text" contains the text to show in MIR.
-    typ      : TAstTypeDec; //Variable type. ******* Debe ser "TMirTypDec"
+    typ      : TMirTypDec;  //Variable type.
     vardec   : TAstVarDec;  //AST Declared variable, when it's associated to AST. If not it's NIL.
     IsParameter: Boolean;   //Flag for variables that are parameters.
     required : boolean;     {Indicates the variable is required to be allocated. Work
@@ -1082,7 +1082,7 @@ begin
   Result := TMirVarDec.Create;
   Result.varname    := varDec0.name;
   //Result.text       := varDec0.name;
-  Result.typ        := varDec0.typ;
+  Result.typ        := TMirTypDec(varDec0.typ.mirTypDec);
   Result.vardec     := varDec0;
   Result.IsParameter:= varDec0.IsParameter;
   Result.required   := varDec0.required;
@@ -1124,7 +1124,7 @@ begin
 
   Result := TMirVarDec.Create;
   Result.text := varName;
-  Result.typ  := eleTyp;
+  Result.typ  := TMirTypDec(eleTyp.mirTypDec);
   //Add to declarations container
   mcont.items.Add(Result);
 end;
@@ -1135,7 +1135,7 @@ begin
   Result := TMirTypDec.Create;
   //Result.typname    := typDec0.name;
   Result.text       := typDec0.name;
-  Result.setSize(typDec0.size);
+  //Result.setSize(typDec0.size);
   //Result.copyOf :=;
   Result.catType := typDec0.catType;
 

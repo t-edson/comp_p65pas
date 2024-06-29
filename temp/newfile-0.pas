@@ -1,30 +1,14 @@
-const
-  CON = 3;
-  TAM3 = 3+CON;
+
+
+program muestra;
 var
-//  x: byte = 1;
-//  objeto: object
-//            a: byte;
-//          end;
-  a3: array[TAM3] of char = '';
-  p: ^byte;
-  w: word;
-//  z: byte absolute x+1;
-//procedure proc1(xpar: byte): char;
-//var x: byte;
-//begin
-//  x := 1;
-//  exit('1');
-//end; 
+  x: byte;
 
 begin
-  w := @p;
-//  objeto.a := 1;
-//  (p+3)^ := 3;
-//  inc(x);
-//  proc1(2+1);
-//  y := 'zzz';
-//  x := consName+1;
-//  x := 1+2;
-//  z := 12;
+
+  x := 123; 
+
 end. 
+
+
+

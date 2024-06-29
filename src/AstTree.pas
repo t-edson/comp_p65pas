@@ -319,7 +319,7 @@ begin
   Result := TAstTypeDec.Create;
   Result.name    := tname;
   Result.srcDec  := srcPos;
-  Result.size    := tsize;
+//  Result.size    := tsize;
   Result.catType := catType;
   Result.group   := group;
   curNode.codCont := curCodCont;  //Save before change
@@ -692,7 +692,7 @@ procedure TAstTree.print();
     for ele in nod.elements do begin
       if ele.idClass = eleExpress then begin
         expr := TAstExpress(ele);
-        debugln(Space(level*2)+'ele='+expr.Name + '('+expr.StoAsStr+')');
+        debugln(Space(level*2)+'ele='+expr.Name + '('+expr.Typ.name+')');
       end else begin
         debugln(Space(level*2)+'ele='+ele.Name {+ '('+ele.Sto+')'});
       end;
