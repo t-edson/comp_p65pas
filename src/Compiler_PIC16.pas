@@ -5,9 +5,9 @@ unit Compiler_PIC16;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, LazLogger, P65C02utils, CPUCore, CompBase, ParserDirec,
-  CompGlobals, AstElemP65, AstTree, ParserASM_6502,
-  MirList, LexPas, SIF_P65pas, StrUtils;
+  Classes, SysUtils, fgl, LazLogger, P65C02utils, CPUCore, CompBase,
+  ParserDirec, CompGlobals, AstElemP65, AstTree, ParserASM_6502, MirList,
+  LexPas, SIF_P65pas, StrUtils;
 type
   { TCompiler_PIC16 }
   TCompiler_PIC16 = class(TParserDirecBase)
@@ -1333,7 +1333,7 @@ begin
   //Calcula STACK
 //  nes := TreeElems.main.UpdateCalledAll;   //Debe haberse llenado TreeElems.main.lstCalled
   //No considera el anidamiento por interrupciones
-  stkUse := TreeElems.main.maxNesting/STACK_SIZE;
+  stkUse := TreeElems.maxNesting/STACK_SIZE;
 end;
 procedure TCompiler_PIC16.GenerateListReport(lins: TStrings);
 {Genera un reporte detallado de la compilación}
@@ -1347,6 +1347,8 @@ var
   fun: TAstFunDec;
   caller : TAstEleCaller;
   called : TAstElement;
+  curNesting, maxNesting: Integer;
+  lstCalledAll: TAstListCalled;
   //exitCall: TExitCall;
 begin
   ////////////////////////////////////////////////////////////
@@ -1441,10 +1443,11 @@ begin
       lins.Add('');
 
       lins.Add('  All Called Procedures:');
-      if fun.lstCalledAll.Count = 0 then begin
+      lstCalledAll := ReadCalledAll(fun, curNesting, maxNesting);
+      if lstCalledAll.Count = 0 then begin
         lins.Add('    <none>');
       end else begin
-        for called in fun.lstCalledAll do begin
+        for called in lstCalledAll do begin
           lins.Add('    - ' + called.name);
         end;
       end;
@@ -1478,7 +1481,7 @@ begin
   end;
   lins.Add('');
   //Muestra el máximo nivel de anidamiento.
-  lins.Add('Max. Nesting = ' + IntToSTr(TreeElems.main.maxNesting));
+  lins.Add('Max. Nesting = ' + IntToSTr(TreeElems.maxNesting));
 
 end;
 //Interfaz for IDE

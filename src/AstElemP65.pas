@@ -87,15 +87,10 @@ type  //TAstElement class
     procedure ClearCallers;  //limpia lista de llamantes
 //    function ExistsIn(list: TAstElements): boolean;
   public  //Gestión de los elementos llamados
-    curNesting: Integer;   //Nested level for calls
-    maxNesting: Integer;   //Max nested level for calls
-    //Lista de funciones que son llamadas directamente (Se llena en el enlazado)
+    //Lista de funciones que son llamadas directamente
     lstCalled : TAstListCalled;
-    //Lista de funciones que son llamadas dirceta o indirectamente (Se llena en el enlazado)
-    lstCalledAll: TAstListCalled;
     //Métodos para el llemado
     procedure AddCalled(elem: TAstElement);
-    function UpdateCalledAll: integer;
   public
     Parent  : TAstElement;  //Reference to parent element
     idClass : TAstIDClass;  //To avoid use RTTI
@@ -671,10 +666,10 @@ public mirFunDec: TObject;  {Formalmente debe ser TMirFunDec, pero se pone TObje
     //Callback to SNF Routine when callType is ctSysNormal.
     codSysNormal: TCodSysNormal;
   public  //References information
+    IsTerminal2: boolean;
     function nCalled: integer; override; //número de llamadas
     function nLocalVars: integer;
     function IsTerminal: boolean;
-    function IsTerminal2: boolean;
   public //Initialization
     {Reference to the elements list where is the body. It is:
       - TAstFunDec.elements, when there isn't a function implementation.
@@ -706,8 +701,141 @@ public mirFunDec: TObject;  {Formalmente debe ser TMirFunDec, pero se pone TObje
 
   function GenArrayTypeName(itTypeName: string; nItems: integer): string; inline;
   function GenPointerTypeName(refTypeName: string): string; inline;
+  function ReadCalledAll(eleAst: TAstElement; out curNesting, maxNesting: Integer):
+           TAstListCalled;
+  procedure UpdateIsTerminal2(funAst: TAstFunDec);
 
 implementation
+
+var
+  //Lista de funciones que son llamadas directa o indirectamente.
+  {"lstCalledAll" se actualiza con UpdateCalledAll(). Esta lista solo es usada para
+  generar el reporte "Listing" cuando es requerido (Ver GenerateListReport).}
+  lstCalledAll: TAstListCalled;
+function ReadCalledAll(eleAst: TAstElement; out curNesting, maxNesting: Integer):
+         TAstListCalled;
+{Update the list "lstCalledAll" where is stored all elements called.
+ Returns a reference to "lstCalledAll" .
+ Parameters:
+ -eleAst    : Element to analyze.
+ -curNesting: Returns the nested level for calls.
+              If "curNesting" <0, an error happens (If found recursion).
+ -maxNesting: Returns the max. nested level for calls.
+ This funcion is used to:
+ - Updates "lstCalledAll" to generate Listing Report (See GenerateListReport).
+ - Check recursion error or stak overflow error and prepare a call to UpdateIsTerminal2
+   (See UpdateFunLstCalled).
+}
+  function AddCalledAll(elem: TAstElement): boolean;
+  {Add reference to lstCalledAll. That is, indicates some element is called from this
+  element.
+  If reference already exists, retunr FALSE.}
+  begin
+    //Solo agrega una vez el elemento
+    if lstCalledAll.IndexOf(elem) = -1 then begin
+      lstCalledAll.Add(elem);
+      exit(true);
+    end else begin
+      exit(false);
+    end;
+  end;
+  procedure AddCalledAll_FromList(lstCalled0: TAstListCalled);
+  {Add the call references (to lstCalledAll) of all elements of the list lstCalled0,
+  including its called too (recursive). Updates "curNesting".}
+  var
+    elem: TAstElement;
+  begin
+    inc(curNesting);    //incrementa el anidamiento
+    if curNesting>maxNesting then maxNesting := curNesting;
+
+    if lstCalled0.Count = 0 then exit;
+    for elem in lstCalled0 do begin
+//      debugln('Call to ' + elem.name + ' from ' + self.name);
+//      if elem = self then begin
+//        {This is some way to detect circular references like:
+//        procedure proc2;
+//        begin
+//          proc1;
+//        end;
+//        procedure proc1;
+//        begin
+//          proc2;
+//        end;
+//        But fails when this element is not part of the circualr reference like
+//        procedure proc2;   <-- We are proc2
+//        begin
+//          proc1;
+//        end;
+//        procedure proc1; <-- Here is the recursion
+//        begin
+//          proc1;
+//        end;
+//        In this case, several call to proc1() will be adding.
+//        }
+//        if curNesting = 1 then begin
+//          exit(-1);
+//        end else begin
+//          exit(-2);
+//        end;
+//      end;
+      //Add element reference
+      if not AddCalledAll(elem) then begin
+        //This is better way to detect circle references, because lstCalled, doesn't
+        //contain duplicated calls.
+        //exit(-1);  *** Commented in version 0.7.8 because a flase recursion detected
+      end;
+      if curNesting > 100 then begin
+        //This is a secure way (but less elegant) for checking recursion. (If curNesting
+        //grows too much). I don't expect this happens, unless exists some case I haven't
+        //considered.
+        curNesting := -1;
+        exit;
+      end;
+      //Verify if this element have other calls to add too.
+      if elem.lstCalled.Count <> 0 then begin
+        AddCalledAll_FromList(elem.lstCalled);
+        if curNesting<0 then exit;
+      end;
+    end;
+    dec(curNesting);    //incrementa el anidamiento
+  end;
+begin
+//debugln('UpdateCalledAll' + IntToStr(lstCalledAll.Count));
+  lstCalledAll.Clear;  //By security
+  curNesting := 0;
+  maxNesting := 0;
+  AddCalledAll_FromList(eleAst.lstCalled);
+  exit(lstCalledAll);
+end;
+procedure UpdateIsTerminal2(funAst: TAstFunDec);
+{Indica si la función "funAst" es Terminal, en el sentido que cumple:
+- Tiene variables locales.
+- No llama a otras funciones o las funciones a las que llama no tienen variables locales.
+Donde, "variables locales", se refiere también a parámetros del procedimiento.
+Para usar esta función, debe haberse actualizado previamente a "lstCalledAll".}
+var
+  called   : TAstElement;
+  nCallesFuncWithLocals: Integer;
+begin
+  if funAst.nLocalVars = 0 then begin
+     funAst.IsTerminal2 := false;
+     exit;
+  end;
+  //Tiene variables locales. Verifica llamada a funciones.
+  nCallesFuncWithLocals := 0;
+  for called in lstCalledAll do begin
+    if called.idClass = eleFuncDec then begin
+      if TAstFunDec(called).nLocalVars > 0 then inc(nCallesFuncWithLocals);
+    end;
+  end;
+  if nCallesFuncWithLocals = 0 then begin
+    //Todas las funciones a las que llama, no tiene variables locales
+    funAst.IsTerminal2 := true;
+  end else begin
+    funAst.IsTerminal2 := false;
+  end;
+end;
+
 {Functions to Generates standard names for dinamyc types creation. Have standard
 names is important to let the compiler:
  * Reuse types definitions.
@@ -878,93 +1006,6 @@ begin
     lstCalled.Add(elem);
   end;
 end;
-function TAstElement.UpdateCalledAll: integer;
-{Update list "lstCalledAll", using AddCalledAll_FromList().
-  The return value is:
-  * curNesting -> if not error happens.
-  * <0  ->  If found recursion.
-}
-  function AddCalledAll(elem: TAstElement): boolean;
-  {Add reference to lstCalledAll. That is, indicates some element is called from this
-  element.
-  If reference already exists, retunr FALSE.}
-  begin
-    //Solo agrega una vez el elemento
-    if lstCalledAll.IndexOf(elem) = -1 then begin
-      lstCalledAll.Add(elem);
-      exit(true);
-    end else begin
-      exit(false);
-    end;
-  end;
-  function AddCalledAll_FromList(lstCalled0: TAstListCalled): integer;
-  {Add the call references (to lstCalledAll) of all elements of the list lstCalled0,
-  including its called too (recursive).}
-  var
-    elem: TAstElement;
-    err: Integer;
-  begin
-    inc(curNesting);    //incrementa el anidamiento
-    if curNesting>maxNesting then maxNesting := curNesting;
-
-    if lstCalled0.Count = 0 then exit;
-    for elem in lstCalled0 do begin
-//      debugln('Call to ' + elem.name + ' from ' + self.name);
-//      if elem = self then begin
-//        {This is some way to detect circular references like:
-//        procedure proc2;
-//        begin
-//          proc1;
-//        end;
-//        procedure proc1;
-//        begin
-//          proc2;
-//        end;
-//        But fails when this element is not part of the circualr reference like
-//        procedure proc2;   <-- We are proc2
-//        begin
-//          proc1;
-//        end;
-//        procedure proc1; <-- Here is the recursion
-//        begin
-//          proc1;
-//        end;
-//        In this case, several call to proc1() will be adding.
-//        }
-//        if curNesting = 1 then begin
-//          exit(-1);
-//        end else begin
-//          exit(-2);
-//        end;
-//      end;
-      //Add element reference
-      if not AddCalledAll(elem) then begin
-        //This is better way to detect circle references, because lstCalled, doesn't
-        //contain duplicated calls.
-        //exit(-1);  *** Commented in version 0.7.8 because a flase recursion detected
-      end;
-      if curNesting > 100 then begin
-        //This is a secure way (but less elegant) for checking recursion. (If curNesting
-        //grows too much). I don't expect this happens, unless exists some case I haven't
-        //considered.
-        exit(-1);
-      end;
-      //Verify if this element have other calls to add too.
-      if elem.lstCalled.Count <> 0 then begin
-        err := AddCalledAll_FromList(elem.lstCalled);
-        if err<0 then exit(err);
-      end;
-    end;
-    dec(curNesting);    //incrementa el anidamiento
-    exit(curNesting);
-  end;
-begin
-//debugln('UpdateCalledAll' + IntToStr(lstCalledAll.Count));
-  lstCalledAll.Clear;  //By security
-  curNesting := 0;
-  maxNesting := 0;
-  Result := AddCalledAll_FromList(lstCalled);
-end;
 function TAstElement.Path: string;
 {Devuelve una cadena, que indica la ruta del elemento, dentro del árbol de sintaxis.}
 var
@@ -1061,7 +1102,6 @@ begin
   elements.Clear;
   lstCallers.Clear;
   lstCalled.Clear;
-  lstCalledAll.Clear;
 end;
 constructor TAstElement.Create;
 begin
@@ -1069,11 +1109,9 @@ begin
   elements := TAstElements.Create(true);   //Main container
   lstCallers:= TAstListCallers.Create(true);
   lstCalled := TAstListCalled.Create(false);  //solo guarda referencias
-  lstCalledAll:= TAstListCalled.Create(false);
 end;
 destructor TAstElement.Destroy;
 begin
-  lstCalledAll.Destroy;
   lstCalled.Destroy;
   lstCallers.Destroy;
   elements.Destroy;
@@ -1585,31 +1623,6 @@ llenado primero, "lstCalled".}
 begin
   Result := (lstCalled.Count = 0);
 end;
-function TAstFunDec.IsTerminal2: boolean;
-{Indica si la función es Terminal, en el sentido que cumple:
-- Tiene variables locales.
-- No llama a otras funciones o las funciones a las que llama no tienen variables locales.
-Donde "Variables" locales, se refiere también a parámetros del procedimiento.}
-var
-  called   : TAstElement;
-  nCallesFuncWithLocals: Integer;
-begin
-  if nLocalVars = 0 then exit(false);
-  //Tiene variables locales
-  //Verifica llamada a funciones
-  nCallesFuncWithLocals := 0;
-  for called in lstCalledAll do begin
-    if called.idClass = eleFuncDec then begin
-      if TAstFunDec(called).nLocalVars > 0 then inc(nCallesFuncWithLocals);
-    end;
-  end;
-  if nCallesFuncWithLocals = 0 then begin
-    //Todas las funciones a las que llama, no tiene variables locales
-    exit(true);
-  end else begin
-    exit(false);
-  end;
-end;
 function TAstFunDec.HasImplem: boolean;
 {Indica si la declaración tiene implementación separada.}
 begin
@@ -1682,6 +1695,12 @@ destructor TAstFinal.Destroy;
 begin
   inherited Destroy;
 end;
+
+initialization
+  lstCalledAll:= TAstListCalled.Create(false);
+
+finalization
+  lstCalledAll.Destroy;
 
 end.
 //2067

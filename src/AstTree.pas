@@ -90,8 +90,9 @@ type  //Abstract Syntax Tree
     function FunctionExistInCur(funName: string; const pars: TAstParamArray
       ): boolean;
   public  //Debug
+    maxNesting: Integer; //Máximo nivel de anidamiento desde el cuerpo del programa
     procedure print();  //Show the AST
-  public  //Constructor and destructror
+  public  //Constructor and destructor
     constructor Create; virtual;
     destructor Destroy; override;
   end;

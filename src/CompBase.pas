@@ -1195,14 +1195,16 @@ begin
   ScanUnits(TreeElems.main);
 end;
 procedure TCompilerBase.UpdateFunLstCalled;
-{Actualiza la lista lstCalled de las funciones, para saber, a qué fúnciones llama
- cada función.}
+{Actualiza la lista lstCalled de las funciones, para saber, a qué funciones llama
+ cada función.
+ También hace una verificación de recursividad o desborde de pila.}
 var
   fun    : TAstFunDec;
   itCall : TAstEleCaller;
   whoCalls: TAstBody;
-  n: Integer;
+  curNest, maxNest: Integer;
 begin
+  //Actualiza la lista fun.lstCalled
   for fun in TreeElems.AllFuncs do begin
     if fun.nCalled = 0 then continue;  //No usada
     //Procesa las llamadas hechas desde otras funciones, para llenar
@@ -1223,15 +1225,17 @@ begin
   {Actualizar la lista fun.lstCalledAll con la totalidad de llamadas a todas
    las funciones, sean de forma directa o indirectamente.}
   for fun in TreeElems.AllFuncs do begin
-    n := fun.UpdateCalledAll;
-    if n<0 then begin
+    ReadCalledAll(fun, curNest, maxNest);
+    UpdateIsTerminal2(fun);  //Aprovechamos para actualizar "fun.IsTerminal2"
+    if curNest<0 then begin
       GenError('Recursive call or circular recursion in %s', [fun.name], fun.srcDec);
     end;
   end;
   if HayError then exit;
   //Actualiza el programa principal
-  TreeElems.main.UpdateCalledAll;  //No debería dar error de recursividad, porque ya se verificaron las funciones
-  if TreeElems.main.maxNesting>128 then begin
+  ReadCalledAll(TreeElems.main, curNest, maxNest);  //No debería dar error de recursividad, porque ya se verificaron las funciones
+  TreeElems.maxNesting := maxNest;         //Guarda información
+  if maxNest>128 then begin
     {Stack is 256 bytes size, and it could contain 128 max. JSR calls, without
     considering stack instructions.}
     GenError('Not enough stack.');
