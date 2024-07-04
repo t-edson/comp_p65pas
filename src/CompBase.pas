@@ -1204,9 +1204,9 @@ var
   whoCalls: TAstBody;
   curNest, maxNest: Integer;
 begin
-  //Actualiza la lista fun.lstCalled
+  //Actualiza la lista "lstCalled" de todos los elementos que llaman a algo.
   for fun in TreeElems.AllFuncs do begin
-    if fun.nCalled = 0 then continue;  //No usada
+    if fun.nCalled = 0 then continue;  //No usada. Nadie llama a esta función.
     //Procesa las llamadas hechas desde otras funciones, para llenar
     //su lista "lstCalled", y así saber a quienes llama.
     for itCall in fun.lstCallers do begin
@@ -1219,13 +1219,13 @@ begin
       whoCalls := TAstBody(itCall.caller);
       //Se agregan todas las llamadas (así sean al mismo procedimiento) pero luego
       //AddCalled(), los filtra.
-      whoCalls.Parent.AddCalled(fun);  //Agrega al procediminto
+      whoCalls.Parent.AddCalled(fun);  //Agrega al procedimiento
     end;
   end;
   {Actualizar la lista fun.lstCalledAll con la totalidad de llamadas a todas
    las funciones, sean de forma directa o indirectamente.}
   for fun in TreeElems.AllFuncs do begin
-    ReadCalledAll(fun, curNest, maxNest);
+    ReadCalledAll(fun, curNest, maxNest);  //***¿No bastaría hacerlo solo para las funciones usadas?
     UpdateIsTerminal2(fun);  //Aprovechamos para actualizar "fun.IsTerminal2"
     if curNest<0 then begin
       GenError('Recursive call or circular recursion in %s', [fun.name], fun.srcDec);
