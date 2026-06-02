@@ -13,7 +13,14 @@ var
 var 
   xbyte : byte;
   location, ptr: ^byte;
-
+procedure proc3;
+begin
+  
+end; 
+procedure proc2;
+begin
+  proc3;
+end; 
 procedure proc1(m: byte);
 var
    b: Byte;
@@ -21,6 +28,7 @@ begin
    for b:= 0 to 9 do 
       xx[b]:= b;
    end;
+   proc2;
 end;
 
 begin

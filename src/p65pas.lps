@@ -9,10 +9,10 @@
         <Filename Value="p65pas.lpr"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="49"/>
-        <CursorPos X="6" Y="73"/>
+        <TopLine Value="31"/>
+        <CursorPos X="21" Y="70"/>
         <FoldState Value=" T3U2H012417"/>
-        <UsageCount Value="91"/>
+        <UsageCount Value="92"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -21,7 +21,7 @@
         <EditorIndex Value="5"/>
         <TopLine Value="2216"/>
         <CursorPos X="17" Y="2232"/>
-        <UsageCount Value="60"/>
+        <UsageCount Value="61"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -30,7 +30,7 @@
         <EditorIndex Value="6"/>
         <TopLine Value="433"/>
         <CursorPos Y="451"/>
-        <UsageCount Value="57"/>
+        <UsageCount Value="58"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -39,13 +39,13 @@
         <EditorIndex Value="-1"/>
         <TopLine Value="226"/>
         <CursorPos X="13" Y="244"/>
-        <UsageCount Value="50"/>
+        <UsageCount Value="51"/>
       </Unit>
       <Unit>
         <Filename Value="CompBase.pas"/>
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="7"/>
-        <UsageCount Value="60"/>
+        <UsageCount Value="61"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -53,7 +53,7 @@
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="8"/>
         <CursorPos X="33" Y="7"/>
-        <UsageCount Value="60"/>
+        <UsageCount Value="61"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -61,7 +61,7 @@
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="-1"/>
         <CursorPos X="13" Y="23"/>
-        <UsageCount Value="60"/>
+        <UsageCount Value="61"/>
       </Unit>
       <Unit>
         <Filename Value="GenCod_PIC16.pas"/>
@@ -69,7 +69,7 @@
         <EditorIndex Value="-1"/>
         <TopLine Value="4526"/>
         <CursorPos X="33" Y="4518"/>
-        <UsageCount Value="50"/>
+        <UsageCount Value="51"/>
       </Unit>
       <Unit>
         <Filename Value="MirList.pas"/>
@@ -77,25 +77,25 @@
         <EditorIndex Value="1"/>
         <TopLine Value="470"/>
         <CursorPos X="5" Y="488"/>
-        <UsageCount Value="50"/>
+        <UsageCount Value="51"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="Analyzer.pas"/>
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="2"/>
-        <TopLine Value="2600"/>
-        <CursorPos X="3" Y="2619"/>
-        <UsageCount Value="50"/>
+        <TopLine Value="2380"/>
+        <CursorPos Y="2379"/>
+        <UsageCount Value="51"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="AstElemP65.pas"/>
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="3"/>
-        <TopLine Value="1830"/>
-        <CursorPos X="5" Y="1849"/>
-        <UsageCount Value="50"/>
+        <TopLine Value="1707"/>
+        <CursorPos X="5" Y="1706"/>
+        <UsageCount Value="51"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -103,7 +103,7 @@
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="4"/>
         <CursorPos X="24" Y="8"/>
-        <UsageCount Value="50"/>
+        <UsageCount Value="51"/>
         <Loaded Value="True"/>
       </Unit>
       <Unit>
@@ -113,7 +113,7 @@
         <WindowIndex Value="-1"/>
         <TopLine Value="-1"/>
         <CursorPos X="-1" Y="-1"/>
-        <UsageCount Value="50"/>
+        <UsageCount Value="51"/>
       </Unit>
       <Unit>
         <Filename Value="ParserASM_6502.pas"/>
@@ -122,7 +122,7 @@
         <WindowIndex Value="-1"/>
         <TopLine Value="-1"/>
         <CursorPos X="-1" Y="-1"/>
-        <UsageCount Value="50"/>
+        <UsageCount Value="51"/>
       </Unit>
       <Unit>
         <Filename Value="XpresElemP65.pas"/>
@@ -165,11 +165,7 @@
         <UsageCount Value="7"/>
       </Unit>
     </Units>
-    <JumpHistory HistoryIndex="29">
-      <Position>
-        <Filename Value="Analyzer.pas"/>
-        <Caret Line="1251" Column="7" TopLine="1233"/>
-      </Position>
+    <JumpHistory HistoryIndex="28">
       <Position>
         <Filename Value="Analyzer.pas"/>
         <Caret Line="1503" Column="9" TopLine="1486"/>
