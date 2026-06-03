@@ -61,7 +61,7 @@
           </Target>
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
-            <OtherUnitFiles Value="_libraries\P65Utils-0.5;_libraries\epiktimer"/>
+            <OtherUnitFiles Value="_libraries\alexia_lib;_libraries\P65Utils-0.5;_libraries\epiktimer"/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <CodeGeneration>
@@ -102,14 +102,6 @@
         <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
-        <Filename Value="CompContexts.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="LexPas.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
         <Filename Value="CompBase.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit>
@@ -119,10 +111,6 @@
       </Unit>
       <Unit>
         <Filename Value="CompGlobals.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="GenCod_PIC16.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
@@ -139,10 +127,6 @@
       </Unit>
       <Unit>
         <Filename Value="AstTree.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
-        <Filename Value="GenCodBas_PIC16.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>

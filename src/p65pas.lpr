@@ -1,7 +1,7 @@
 program p65pas;
 {$mode objfpc}{$H+}
 uses
-  Classes, Compiler_PIC16, LexPas, CompGlobals, CompBase, CompContexts, MirList,
+  Classes, Compiler_PIC16, CompGlobals, CompBase, MirList, LexPas,
   ParserDirec, AstElemP65;
 type
   { TProg }

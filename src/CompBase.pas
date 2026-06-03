@@ -1,7 +1,6 @@
 {Parser
 
-Esta sería la versión de XpresParser (definida en el framework t-Xpres), orientada
-a trabajar con la CPU6502.
+Clase base para la creación de un compilador como el P65Pas.
 La idea es tener aquí todas las rutinas que en lo posible sean independientes del
 lenguaje y del modelo de CPU.
 Para mayor información sobre el uso del framework Xpres, consultar la documentación
