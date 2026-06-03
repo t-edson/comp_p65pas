@@ -5,7 +5,7 @@ unit ParserDirec;
 interface
 uses
   Classes, SysUtils, fgl, math, CompBase,
-  LexPas, CompGlobals, Analyzer, LazLogger, FileUtil;
+  alexiaLex, CompGlobals, Analyzer, LazLogger, FileUtil;
 type  //Tipos para manejo de expresiones
   TDirDatType = (ddtNumber, ddtString);
 

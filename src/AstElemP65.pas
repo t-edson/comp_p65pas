@@ -9,7 +9,7 @@ unit AstElemP65;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fgl, TypInfo, LexPas, CompGlobals, LazLogger, StrUtils;
+  Classes, SysUtils, fgl, TypInfo, alexiaLex, CompGlobals, LazLogger, StrUtils;
 const
   ADRR_ERROR = $FFFF;
 const //Prefixes used to name anonym type declarations

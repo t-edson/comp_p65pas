@@ -3,7 +3,7 @@ unit Analyzer;
 interface
 uses
   Classes, SysUtils, Types, CompBase, AstElemP65,
-  LexPas, ParserASM_6502, CompGlobals, AstTree;
+  alexiaLex, ParserASM_6502, CompGlobals, AstTree;
 type
 
   { TAnalyzer }

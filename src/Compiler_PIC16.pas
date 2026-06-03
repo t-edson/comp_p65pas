@@ -7,7 +7,7 @@ interface
 uses
   Classes, SysUtils, fgl, LazLogger, P65C02utils, CPUCore, CompBase,
   ParserDirec, CompGlobals, AstElemP65, AstTree, ParserASM_6502, MirList,
-  LexPas, SIF_P65pas, StrUtils;
+  alexiaLex, SIF_P65pas, StrUtils;
 type
   { TCompiler_PIC16 }
   TCompiler_PIC16 = class(TParserDirecBase)
