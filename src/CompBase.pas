@@ -43,7 +43,7 @@ TBootloader = (
 {Clase base para crear a los objetos compiladores.
 Esta clase debe ser el ancestro común de todos los compialdores a usar en PicPas.
 Contiene métodos abstractos que deben ser impleemntados en las clases descendeintes.}
-TCompilerBase = class(TContexts)
+TCompilerBase = class(TAleLexer)
 private
   function AddArrayTypeDecCC(typName: string; nELem: integer;
     itType: TAstTypeDec; const srcPos: TSrcPos): TAstTypeDec;
