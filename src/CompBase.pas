@@ -11,7 +11,7 @@ unit CompBase;
 interface
 uses
   Classes, SysUtils, Types, LazLogger, alexiaLex,
-  AstElemP65, AstTree, CompContexts, MirList, CompGlobals;
+  AstElemP65, AstTree, MirList, CompGlobals;
 type
 //Expression type, according the position it appears.  ***¿Se usa?
 TPosExpres = (pexINDEP,  //Expresión independiente
