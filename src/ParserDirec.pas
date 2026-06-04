@@ -156,8 +156,8 @@ type
     OnReadORG: function: integer of object;
     OnSetORG: procedure(value: integer) of object;
     procedure skipWhites;
-    procedure GenErrorDir(msg: string);
-    procedure GenErrorDir(msg: string; const Args: array of const);
+    procedure GenErrorDir(txt: string);
+    procedure GenErrorDir(txt: string; const Args: array of const);
     procedure AddInstruction(instName: string; callProc: TDirEveCallProc);
     procedure AddSysVariableNumber(varName: string; ReadNum: TDirEveReadNum;
                                                     WriteNum: TDirEveWriteNum);
@@ -1566,22 +1566,22 @@ begin
     lexDir.Next;  //quita espacios
   end;
 end;
-procedure TParserDirecBase.GenErrorDir(msg: string);
+procedure TParserDirecBase.GenErrorDir(txt: string);
 {Genera un error corrigiendo la posición horizontal}
 var
   p: TSrcPos;
 begin
   p := GetSrcPos;
   p.col := tokIni + lexDir.col0;  //corrige columna
-  GenError(msg, [], p);
+  GenError(txt, [], p);
 end;
-procedure TParserDirecBase.GenErrorDir(msg: string; const Args: array of const);
+procedure TParserDirecBase.GenErrorDir(txt: string; const Args: array of const);
 var
   p: TSrcPos;
 begin
   p := GetSrcPos;
   p.col := tokIni + lexDir.col0;  //corrige columna
-  GenError(msg, Args, p);
+  GenError(txt, Args, p);
 end;
 procedure TParserDirecBase.AddSysVariableNumber(varName: string;
   ReadNum: TDirEveReadNum; WriteNum: TDirEveWriteNum);

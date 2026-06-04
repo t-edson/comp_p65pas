@@ -10,7 +10,7 @@ técnica.
 unit CompBase;
 interface
 uses
-  Classes, SysUtils, Types, LazLogger, alexiaLex,
+  Classes, SysUtils, Types, LazLogger, alexiaLex, alexiaMsg,
   AstElemP65, AstTree, MirList, CompGlobals;
 type
 //Expression type, according the position it appears.  ***¿Se usa?
@@ -49,21 +49,23 @@ private
     itType: TAstTypeDec; const srcPos: TSrcPos): TAstTypeDec;
   function proc_addr: TAstExpress;
 public  //Messages
+  msg: TMessageManager;    //Referencia al gestor de mensajes
+
   HayError: boolean;             //Flag for errors
   procedure ClearError;
   //Rutinas de generación de mensajes
-  procedure GenInfo(msg: string; const srcPos: TSrcPos);
-  procedure GenInfo(msg: string);
+  procedure GenInfo(txt: string; const srcPos: TSrcPos);
+  procedure GenInfo(txt: string);
   //Rutinas de generación de advertencias
-  procedure GenWarn(msg: string; const srcPos: TSrcPos);
-  procedure GenWarn(msg: string; const Args: array of const; const srcPos: TSrcPos);
-  procedure GenWarn(msg: string);
-  procedure GenWarn(msg: string; const Args: array of const);
+  procedure GenWarn(txt: string; const srcPos: TSrcPos);
+  procedure GenWarn(txt: string; const Args: array of const; const srcPos: TSrcPos);
+  procedure GenWarn(txt: string);
+  procedure GenWarn(txt: string; const Args: array of const);
   //Rutinas de generación de error
-  procedure GenError(msg: string; const srcPos: TSrcPos);
-  procedure GenError(msg: String; const Args: array of const; const srcPos: TSrcPos);
-  procedure GenError(msg: string);
-  procedure GenError(msg: String; const Args: array of const);
+  procedure GenError(txt: string; const srcPos: TSrcPos);
+  procedure GenError(txt: String; const Args: array of const; const srcPos: TSrcPos);
+  procedure GenError(txt: string);
+  procedure GenError(txt: String; const Args: array of const);
 
 protected  //Parser routines
   ExprLevel  : Integer;  //Nivel de anidamiento de la rutina de evaluación de expresiones
@@ -77,7 +79,7 @@ protected  //Parser routines
   function CaptureTok(ctok: string): boolean;
   function CaptureStr(cstr: string): boolean;
   procedure CaptureParams(out funPars: TAstParamArray);
-protected  //Elements creation
+protected //Elements creation
   nTypesCreated: integer;
   function NameExistsIn(eName: string; list: TAstElements): boolean;
 //  function CreateEleVarDec(varName: string; eleTyp: TAstTypeDec): TAstVarDec;
@@ -118,7 +120,7 @@ protected //Element set
     idxVar: TAstVarDec);
   procedure AddOffsetVariab(varExp: TAstExpress; offConst: TAstExpress);
 
-protected  //Containers
+protected //Containers
   procedure RemoveUnusedFunc;
   procedure RemoveUnusedVars;
   procedure RemoveUnusedCons;
@@ -126,7 +128,7 @@ protected  //Containers
   procedure UpdateCallersToUnits;
   procedure UpdateFunLstCalled;
   procedure SeparateUsedFunctions;
-public     //Containers
+public    //Containers
   TreeElems     : TAstTree;    //Abstract syntax tree.
   mirRep        : TMirList;     //Container for MIR representation
   usedFuncs     : TAstFunDecs; //Store only used functions
@@ -171,20 +173,20 @@ protected //Expressions
     ): TAstExpress;
   function AddExpressionConstBool(name: string; boolValue: Boolean; srcPos: TSrcPos
     ): TAstExpress;
-public     //Types to implement
+public    //Types to implement
   typByte : TAstTypeDec;
   typBool : TAstTypeDec;
   typChar : TAstTypeDec;
   typWord : TAstTypeDec;
   typDWord : TAstTypeDec;
   typTriplet: TAstTypeDec;
-public     //Public attributes of compiler
+public    //Public attributes of compiler
   ID        : integer;     //Identificador para el compilador.
   IsUnit    : boolean;     //Flag to identify a Unit
   //Variables públicas del compilador
   ejecProg  : boolean;     //Indicates the compiler is working
   stopEjec  : boolean;     //To stop compilation
-protected  //Command line options.
+protected //Command line options.
   mainFile    : string;    //Archivo inicial que se compila.
   hexFile     : string;    //Nombre de archivo de salida.
   comp_level  : TCompileLevel; //Compilation level.
@@ -192,7 +194,7 @@ protected  //Command line options.
 
   //  incDetComm  : boolean;   //Incluir Comentarios detallados.
   enabDirMsgs : boolean;   //Bandera para permitir generar mensajes desde las directivas.
-protected     //Compiling Options. Set by directives.
+protected //Compiling Options. Set by directives.
   syntaxMode  : (modPascal, modPicPas);
   bootloader  : TBootloader;  //Bootloader code for the compiled binary.
   loaderBytes : array of integer; //Custom Bootloader bytes.
@@ -259,96 +261,68 @@ error anterior.}
 begin
   HayError := false;
 end;
-procedure TCompilerBase.GenInfo(msg: string; const srcPos: TSrcPos);
+procedure TCompilerBase.GenInfo(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de Advertencia, en la posición indicada. }
 begin
-  if OnMessage <>nil then OnMessage(mkInfo, msg, srcPos);
+  if OnMessage <>nil then OnMessage(mkInfo, txt, srcPos);
 end;
-procedure TCompilerBase.GenInfo(msg: string);
+procedure TCompilerBase.GenInfo(txt: string);
 {Genera un mensaje de Información, en la posición actual del contexto. }
-var
-  srcPos: TSrcPos;
 begin
-  if curCtx = nil then begin
-    srcPos.row := -1;
-    srcPos.col := -1;
-    srcPos.idCtx := 0;
-    GenInfo(msg, srcPos);
-  end else begin
-    GenInfo(msg, GetSrcPos);
-  end;
+  GenInfo(txt, GetSrcPos);
 end;
-procedure TCompilerBase.GenWarn(msg: string; const srcPos: TSrcPos);
+procedure TCompilerBase.GenWarn(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de advertencia en la posición indicada.}
 begin
-  if OnMessage <>nil then OnMessage(mkWarning, msg, srcPos);
+  if OnMessage <>nil then OnMessage(mkWarning, txt, srcPos);
 end;
-procedure TCompilerBase.GenWarn(msg: string; const Args: array of const; const srcPos: TSrcPos);
+procedure TCompilerBase.GenWarn(txt: string; const Args: array of const; const srcPos: TSrcPos);
 begin
-  GenWarn(Format(msg, Args), srcPos);
+  GenWarn(Format(txt, Args), srcPos);
 end;
-procedure TCompilerBase.GenWarn(msg: string);
-{Genera un mensaje de Advertencia, en la posición actual del contexto. }
-var
-  srcPos: TSrcPos;
-begin
-  if curCtx = nil then begin
-    srcPos.row := -1;
-    srcPos.col := -1;
-    srcPos.idCtx := 0;
-    GenWarn(msg, srcPos);
-  end else begin
-    GenWarn(msg, GetSrcPos);
-  end;
-end;
-procedure TCompilerBase.GenWarn(msg: string; const Args: array of const);
+procedure TCompilerBase.GenWarn(txt: string);
 {Genera un mensaje de Advertencia, en la posición actual del contexto. }
 begin
-  GenWarn(Format(msg, Args));
+  GenWarn(txt, GetSrcPos);
 end;
-procedure TCompilerBase.GenError(msg: string; const srcPos: TSrcPos);
+procedure TCompilerBase.GenWarn(txt: string; const Args: array of const);
+{Genera un mensaje de Advertencia, en la posición actual del contexto. }
+begin
+  GenWarn(Format(txt, Args));
+end;
+procedure TCompilerBase.GenError(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de error en la posición indicada.}
 begin
   //Protección
-  if curCtx = nil then begin
-    HayError := true;
-    if OnMessage <>nil then OnMessage(mkError, msg, srcPosNull);
-    exit;
-  end;
-  if curCtx.FixErrPos then begin
-    //El contexto actual, tiene configurado una posición fija para los errores
-    msg := curCtx.PreErrorMsg + msg;  //completa mensaje
-    if OnMessage <>nil then OnMessage(mkError, msg, curCtx.PreErrPosit);
-
-  end else begin
-    if OnMessage <>nil then OnMessage(mkError, msg, srcPos);
-  end;
   HayError := true;
+  if curCtx = nil then begin
+    if OnMessage <>nil then OnMessage(mkError, txt, srcPosNull);
+  end else begin
+    if curCtx.FixErrPos then begin
+      //El contexto actual, tiene configurado una posición fija para los errores
+      txt := curCtx.PreErrorMsg + txt;  //completa mensaje
+      if OnMessage <>nil then OnMessage(mkError, txt, curCtx.PreErrPosit);
+
+    end else begin
+      if OnMessage <>nil then OnMessage(mkError, txt, srcPos);
+    end;
+  end;
 end;
-procedure TCompilerBase.GenError(msg: String; const Args: array of const; const srcPos: TSrcPos);
+procedure TCompilerBase.GenError(txt: String; const Args: array of const; const srcPos: TSrcPos);
 {Versión con parámetros de GenError.}
 begin
-  GenError(Format(msg, Args), srcPos);
+  GenError(Format(txt, Args), srcPos);
 end;
-procedure TCompilerBase.GenError(msg: string);
+procedure TCompilerBase.GenError(txt: string);
 {Función de acceso rápido para Perr.GenError(). Pasa como posición a la posición
 del contexto actual. Realiza la traducción del mensaje también.}
-var
-  srcPos: TSrcPos;
 begin
-  if curCtx = nil then begin
-    srcPos.row := -1;
-    srcPos.col := -1;
-    srcPos.idCtx := 0;
-    GenError(msg, srcPos);
-  end else begin
-    GenError(msg, GetSrcPos);
-  end;
+  GenError(txt, GetSrcPos);
 end;
-procedure TCompilerBase.GenError(msg: String; const Args: array of const);
+procedure TCompilerBase.GenError(txt: String; const Args: array of const);
 {Genera un mensaje de error en la posición actual del contexto.}
 begin
-  GenError(Format(msg, Args));
+  GenError(Format(txt, Args));
 end;
 
 function TCompilerBase.EOExpres: boolean; inline;
