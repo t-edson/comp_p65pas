@@ -359,16 +359,16 @@ begin
 end;
 procedure TMessageManager.info(const txt: string; const Pos: TMsgInfo);
 begin
-  emit(mkInfo, txt, Pos);
+  if Assigned(OnMessage) then OnMessage(mkInfo, txt, Pos);
 end;
 procedure TMessageManager.warn(const txt: string; const Pos: TMsgInfo);
 begin
-  emit(mkWarning, txt, Pos);
+  if Assigned(OnMessage) then OnMessage(mkWarning, txt, Pos);
 end;
 procedure TMessageManager.error(const txt: string; const Pos: TMsgInfo);
 begin
   inc(nErrors);
-  emit(mkError, txt, Pos);
+  if Assigned(OnMessage) then OnMessage(mkError, txt, Pos);
 end;
 procedure TMessageManager.msgbox(const txt: string);
 {Muestra un diñalogo con un mensaje normal}
