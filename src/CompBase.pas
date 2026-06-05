@@ -291,7 +291,7 @@ begin
   msgInfo.row := srcPos.row;
   msgInfo.col := srcPos.col;
   msgInfo.fname := lex.ctxFile(srcPos.idCtx);
-  msg.warning(txt, msgInfo);
+  msg.warn(txt, msgInfo);
 end;
 procedure TCompilerBase.GenWarn(txt: string; const Args: array of const; const srcPos: TSrcPos);
 begin
@@ -319,7 +319,7 @@ begin
     msgInfo.row := -1;
     msgInfo.col := -1;
     msgInfo.fname := '';
-    msg.error2(txt, msgInfo);
+    msg.error(txt, msgInfo);
   end else begin
     if lex.curCtx.FixErrPos then begin
       //El contexto actual, tiene configurado una posición fija para los errores
@@ -328,12 +328,12 @@ begin
       msgInfo.row := lex.curCtx.PreErrPosit.row;
       msgInfo.col := lex.curCtx.PreErrPosit.col;
       msgInfo.fname := lex.ctxFile(lex.curCtx.PreErrPosit.idCtx);
-      msg.error2(txt, msgInfo);
+      msg.error(txt, msgInfo);
     end else begin
       msgInfo.row := srcPos.row;
       msgInfo.col := srcPos.col;
       msgInfo.fname := lex.ctxFile(srcPos.idCtx);
-      msg.error2(txt, msgInfo);
+      msg.error(txt, msgInfo);
     end;
   end;
 end;
