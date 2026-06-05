@@ -267,9 +267,15 @@ begin
   exit(msg.nErrors>0);
 end;
 procedure TCompilerBase.GenInfo(txt: string; const srcPos: TSrcPos);
-{Genera un mensaje de Advertencia, en la posición indicada. }
+{Genera un mensaje de Advertencia, en la posición indicada.}
+{ #todo : Considerar usar directamente un parámetro de tipo TMsgInfo}
+var
+  msgInfo: TMsgInfo;
 begin
-  msg.info(txt, srcPos);
+  msgInfo.row := srcPos.row;
+  msgInfo.col := srcPos.col;
+  msgInfo.fname := lex.ctxFile(srcPos.idCtx);
+  msg.info(txt, msgInfo);
 end;
 procedure TCompilerBase.GenInfo(txt: string);
 {Genera un mensaje de Información, en la posición actual del contexto. }
@@ -278,8 +284,14 @@ begin
 end;
 procedure TCompilerBase.GenWarn(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de advertencia en la posición indicada.}
+{ #todo : Considerar usar directamente un parámetro de tipo TMsgInfo}
+var
+  msgInfo: TMsgInfo;
 begin
-  msg.warning(txt, srcPos);
+  msgInfo.row := srcPos.row;
+  msgInfo.col := srcPos.col;
+  msgInfo.fname := lex.ctxFile(srcPos.idCtx);
+  msg.warning(txt, msgInfo);
 end;
 procedure TCompilerBase.GenWarn(txt: string; const Args: array of const; const srcPos: TSrcPos);
 begin
@@ -297,17 +309,31 @@ begin
 end;
 procedure TCompilerBase.GenError(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de error en la posición indicada.}
+{ #todo : Hay que trabajar mejor este proc. tratando de mover lógica  al gestor de
+mensajes o al lexer}
+var
+  msgInfo: TMsgInfo;
 begin
   //Protección
   if lex.curCtx = nil then begin
-    msg.error2(txt, srcPosNull);
+    msgInfo.row := -1;
+    msgInfo.col := -1;
+    msgInfo.fname := '';
+    msg.error2(txt, msgInfo);
   end else begin
     if lex.curCtx.FixErrPos then begin
       //El contexto actual, tiene configurado una posición fija para los errores
       txt := lex.curCtx.PreErrorMsg + txt;  //completa mensaje
-      msg.error2(txt, lex.curCtx.PreErrPosit);
+
+      msgInfo.row := lex.curCtx.PreErrPosit.row;
+      msgInfo.col := lex.curCtx.PreErrPosit.col;
+      msgInfo.fname := lex.ctxFile(lex.curCtx.PreErrPosit.idCtx);
+      msg.error2(txt, msgInfo);
     end else begin
-      msg.error2(txt, srcPos);
+      msgInfo.row := srcPos.row;
+      msgInfo.col := srcPos.col;
+      msgInfo.fname := lex.ctxFile(srcPos.idCtx);
+      msg.error2(txt, msgInfo);
     end;
   end;
 end;
