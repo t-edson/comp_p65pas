@@ -139,7 +139,6 @@ type
     function AsigVariable(VarName: string; const value: TDirOperand): TDirVar;
   public   //Public
     lexDir : TContext;  //lexer para analizar directivas
-    OnMessageBox: procedure(txt: string; mode: integer) of object;
     //Eventos para el generador de código
     OnSetGeneralORG: procedure(value: integer) of object;
     OnSetCpuMode: procedure(value: string) of object;
@@ -167,7 +166,7 @@ type
     function DecodeNext: boolean;
     procedure ClearMacros;
   public   //Initialization
-    constructor Create; override;
+    constructor Create(msg0: TMessageManager);
     destructor Destroy; override;
   end;
 var
@@ -758,24 +757,24 @@ var
   direc: string;
 begin
   //We use the general lexer to find the directive delimiter.
-  while not atEof do begin
+  while not lex.atEof do begin
 //    debugln(tok);
-    if tokType = tkDirective then begin
+    if lex.tokType = tkDirective then begin
       //Podría ser el delimitador buscado
-      direc := UpCase(token);
+      direc := UpCase(lex.token);
       if copy(direc,1,7) = '{$ENDIF' then begin
         //Encontró el delimitador
         tok0 := 'ENDIF';
-        Next;  //toma el token
+        lex.Next;  //toma el token
         exit(true);  //y continúa
       end else if copy(direc,1,6)='{$ELSE' then begin
         //Encontró el delimitador
         tok0 := 'ELSE';
-        Next;  //toma el token
+        lex.Next;  //toma el token
         exit(true);  //y continúa
       end;
     end;
-    Next;
+    lex.Next;
   end;
   //No encontró
   exit(false);
@@ -843,7 +842,7 @@ begin
       inc(WaitForEndIF);  //marca bandera para esperar
     end else begin
       //No está definido, no se debe compilar hasta un {$ENDIF} o un {$ELSE}
-      Next;  //toma token {$IDEF  }
+      lex.Next;  //toma token {$IDEF  }
       //Explora, sin compilar, hasta encontrar directiva delimitadora.
       if not ScanIFDEF(direc) then begin
         //Llegó al final del código fuente, sin encontrar el ENDIF
@@ -898,7 +897,7 @@ begin
     inc(WaitForEndIF);  //marca bandera para esperar
   end else begin
     //No es verdadero, no se debe compilar hasta un {$ENDIF} o un {$ELSE}
-    Next;  //toma token {$IDEF  }
+    lex.Next;  //toma token {$IDEF  }
     //Explora, sin compilar, hasta encontrar directiva delimitadora.
     if not ScanIFDEF(direc) then begin
       //Llegó al final del código fuente, sin encontrar el ENDIF
@@ -919,7 +918,7 @@ begin
   if WaitForEndIF>0 then begin
     {Estamos dentro de un IF, que se supone dio verdadero, de otra forma, no llegaría
     por aquí. De ser así, el ELSE debe ser falso.}
-    Next;  //toma token {$ELSE}
+    lex.Next;  //toma token {$ELSE}
     //Explora, sin compilar, hasta encontrar directiva delimitadora.
     if not ScanIFDEF(direc) then begin
       //Llegó al final del código fuente, sin encontrar el ENDIF
@@ -972,15 +971,15 @@ begin
   end;
   //Ya se tiene el archivo
   //Pasa la directiva, para que al retornar a este contexto se siga con la Sgte. instrucción.
-  Next;
+  lex.Next;
   //Abrimos el nuevo archivo y nos quedamos en ese contexto.
 //  NewContextFromFile(filPath, notFound);  //Pasa a explorar contenido del archivo
-  if not OpenContextFrom(filPath) then begin
+  if not lex.OpenContextFrom(filPath) then begin
     GenError('File no found: ' + filPath);
     exit;
   end;
 //ShowContexts;
-  curCtx.autoReturn := true;   //Para que retorne, al finalizar
+  lex.curCtx.autoReturn := true;   //Para que retorne, al finalizar
   ctxChanged := true;   //Marca bandera para indicar que se ha cambiado de contexto
 end;
 procedure TParserDirecBase.ProcBIN2CSV(lin: string; var ctxChanged: boolean);
@@ -1024,18 +1023,18 @@ begin
   end;
   //Ya se tiene el archivo
   //Pasa la directiva, para que al retornar a este contexto se siga con la Sgte. instrucción.
-  Next;
+  lex.Next;
   //Abrimos el nuevo archivo y nos quedamos en ese contexto.
   if FileSize(filPath)> 10240 then begin
     GenError('Too big file' + filPath);
     exit;
   end;
   if not binaryToCsv(filPath, csv) then exit;  //Convert
-  NewContextFromText(
+  lex.NewContextFromText(
     csv {'1,2,3'}, //Pasa a explorar valor de la variable como texto
     '' {Fija el archivo de definición.}
   );
-  curCtx.autoReturn := true;   //Para que retorne, al finalizar
+  lex.curCtx.autoReturn := true;   //Para que retorne, al finalizar
   ctxChanged := true;   //Marca bandera para indicar que se ha cambiado de contexto
   //ShowContexts;
 end;
@@ -1324,9 +1323,7 @@ begin
   txtMsg := GetDExpression(0).valStr;
   if HayError then Exit;
   //Solo muestra en compilación y en la primera pasada
-  if enabDirMsgs then begin
-    if OnMessageBox<>nil then OnMessageBox(txtMsg, 0);
-  end;
+  if enabDirMsgs then msg.msgbox(txtMsg);
   txtMsg := '';
 end;
 procedure TParserDirecBase.ProcMSGWAR;
@@ -1337,9 +1334,7 @@ begin
   txtMsg := GetDExpression(0).valStr;
   if HayError then Exit;
   //Solo muestra en compilación y en la primera pasada
-  if enabDirMsgs then begin
-    if OnMessageBox<>nil then OnMessageBox(txtMsg, 1);
-  end;
+  if enabDirMsgs then msg.msgwar(txtMsg);
 end;
 procedure TParserDirecBase.ProcMSGERR;
 var
@@ -1349,9 +1344,7 @@ begin
   txtMsg := GetDExpression(0).valStr;
   if HayError then Exit;
   //Solo muestra en compilación y en la primera pasada
-  if enabDirMsgs then begin
-    if OnMessageBox<>nil then OnMessageBox(txtMsg, 2);
-  end;
+  if enabDirMsgs then msg.msgerr(txtMsg);
 end;
 procedure TParserDirecBase.ProcMODE;
 var
@@ -1478,7 +1471,7 @@ begin
   mac.name := macName;
   mac.value := macValue;
   //Ubica la posición del contexto
-  mac.posDef := GetCtxState;
+  mac.posDef := lex.GetCtxState;
   macroList.Add(mac);
 end;
 function TParserDirecBase.DefinedMacro(macName: string): boolean;
@@ -1571,7 +1564,7 @@ procedure TParserDirecBase.GenErrorDir(txt: string);
 var
   p: TSrcPos;
 begin
-  p := GetSrcPos;
+  p := lex.GetSrcPos;
   p.col := tokIni + lexDir.col0;  //corrige columna
   GenError(txt, [], p);
 end;
@@ -1579,7 +1572,7 @@ procedure TParserDirecBase.GenErrorDir(txt: string; const Args: array of const);
 var
   p: TSrcPos;
 begin
-  p := GetSrcPos;
+  p := lex.GetSrcPos;
   p.col := tokIni + lexDir.col0;  //corrige columna
   GenError(txt, Args, p);
 end;
@@ -1627,7 +1620,7 @@ begin
   end else begin
     //Es un error, pero es salvable.
     //Ubicamos el error, "manualmente", porque aún no hemos explorado con el lexer.
-    p := GetSrcPos;
+    p := lex.GetSrcPos;
     p.col := tokIni + dlin + 1;  //columna al final
     GenError(ER_EXPECTED_BR, [], p);
   end;
@@ -1673,29 +1666,29 @@ begin
     if DefinedInstruc(lexDir.ReadToken, dins) then begin
       dins.OnCall();
     end else if DefinedMacro(lexDir.ReadToken, dmac) then begin
-      p := GetSrcPos;   //Guarda posición del token
-      Next;  //pasa la directiva
-      NewContextFromText(
+      p := lex.GetSrcPos;   //Guarda posición del token
+      lex.Next;  //pasa la directiva
+      lex.NewContextFromText(
         dmac.value, //Pasa a explorar contenido de la macro como cadena
-        ctxFile(dmac.posDef.idCtx) {Fija el archivo de definición de la macro.}
+        lex.ctxFile(dmac.posDef.idCtx) {Fija el archivo de definición de la macro.}
       );
-      curCtx.autoReturn := true;   //Para que se cierre, al finalizar
-      curCtx.FixErrPos := true;   //Para que se ignore la posición de los errores
-      curCtx.PreErrPosit := p;    //Posición a usar para ubicar el error
-      curCtx.PreErrorMsg := 'Macro '+dmac.name+': ';
+      lex.curCtx.autoReturn := true;   //Para que se cierre, al finalizar
+      lex.curCtx.FixErrPos := true;   //Para que se ignore la posición de los errores
+      lex.curCtx.PreErrPosit := p;    //Posición a usar para ubicar el error
+      lex.curCtx.PreErrorMsg := 'Macro '+dmac.name+': ';
       ctxChanged := true;  //Marca bandera para indicar que se ha cambiado de contexto
     end else if DefinedVar(lexDir.ReadToken, dvar) then begin
       //Es variable
-      p := GetSrcPos;   //Guarda posición del token
-      Next;  //pasa la directiva
-      NewContextFromText(
+      p := lex.GetSrcPos;   //Guarda posición del token
+      lex.Next;  //pasa la directiva
+      lex.NewContextFromText(
         dvar.valor.valStr, //Pasa a explorar valor de la variable como texto
         '' {Fija el archivo de definición.}
       );
-      curCtx.autoReturn := true;   //Para que se cierre, al finalizar
-      curCtx.FixErrPos := true;   //Para que se ignore la posición de los errores
-      curCtx.PreErrPosit := p;    //Posición a usar para ubicar el error
-      curCtx.PreErrorMsg := 'Variable '+dvar.nomb+': ';
+      lex.curCtx.autoReturn := true;   //Para que se cierre, al finalizar
+      lex.curCtx.FixErrPos := true;   //Para que se ignore la posición de los errores
+      lex.curCtx.PreErrPosit := p;    //Posición a usar para ubicar el error
+      lex.curCtx.PreErrorMsg := 'Variable '+dvar.nomb+': ';
       ctxChanged := true;  //Marca bandera para indciar que se ha cambiado de contexto
     end else begin
       GenErrorDir(ER_UNKNO_DIREC, [lexDir.ReadToken]);
@@ -1843,9 +1836,9 @@ begin
 //  AddSysVariableString('CURRBLOCK'   , @read_CURRBLOCK  , nil);
 end;
 //Initialization
-constructor TParserDirecBase.Create;
+constructor TParserDirecBase.Create(msg0: TMessageManager);
 begin
-  inherited Create;
+  inherited Create(msg0);
   //lexDir := TSynFacilSyn.Create(nil);  //crea lexer para analzar directivas
   //DefLexDirectiv;
   lexDir := TContext.Create();  //crea lexer para analizar directivas

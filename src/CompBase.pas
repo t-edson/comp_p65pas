@@ -10,7 +10,7 @@ técnica.
 unit CompBase;
 interface
 uses
-  Classes, SysUtils, Types, LazLogger, alexiaLex, alexiaMsg,
+  Classes, SysUtils, Types, LazLogger, alexiaLex,
   AstElemP65, AstTree, MirList, CompGlobals;
 type
 //Expression type, according the position it appears.  ***¿Se usa?
@@ -43,16 +43,17 @@ TBootloader = (
 {Clase base para crear a los objetos compiladores.
 Esta clase debe ser el ancestro común de todos los compialdores a usar en PicPas.
 Contiene métodos abstractos que deben ser impleemntados en las clases descendeintes.}
-TCompilerBase = class(TAleLexer)
+TCompilerBase = class
 private
   function AddArrayTypeDecCC(typName: string; nELem: integer;
     itType: TAstTypeDec; const srcPos: TSrcPos): TAstTypeDec;
   function proc_addr: TAstExpress;
 public  //Messages
+  lex: TAleLexer;
   msg: TMessageManager;    //Referencia al gestor de mensajes
 
-  HayError: boolean;             //Flag for errors
   procedure ClearError;
+  function HayError: boolean; inline;          //Flag for errors
   //Rutinas de generación de mensajes
   procedure GenInfo(txt: string; const srcPos: TSrcPos);
   procedure GenInfo(txt: string);
@@ -222,7 +223,7 @@ protected //Miscellaneous
     srcPosArray: TSrcPosArray): boolean;
   procedure LogExpLevel(txt: string);
 public    //Initialization
-  constructor Create; override;
+  constructor Create(msg0: TMessageManager);
   destructor Destroy; override;
 end;
 
@@ -256,25 +257,29 @@ procedure TCompilerBase.ClearError;
 procesamiento de errores. Limpiar errores en medio de la compilación, podría hacer que
 se pierda el rastro de errores anteriores, y que inclusive, la compilación termine sin
 error, aún cuando haya generado errores intermedios.
-Como norma, se podría decir que solo se debe usar, después de haber proecsado un posible
+Como norma, se podría decir que solo se debe usar, después de haber procesado un posible
 error anterior.}
 begin
-  HayError := false;
+  msg.nErrors := 0;
+end;
+function TCompilerBase.HayError: boolean;
+begin
+  exit(msg.nErrors>0);
 end;
 procedure TCompilerBase.GenInfo(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de Advertencia, en la posición indicada. }
 begin
-  if OnMessage <>nil then OnMessage(mkInfo, txt, srcPos);
+  msg.info(txt, srcPos);
 end;
 procedure TCompilerBase.GenInfo(txt: string);
 {Genera un mensaje de Información, en la posición actual del contexto. }
 begin
-  GenInfo(txt, GetSrcPos);
+  GenInfo(txt, lex.GetSrcPos);
 end;
 procedure TCompilerBase.GenWarn(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de advertencia en la posición indicada.}
 begin
-  if OnMessage <>nil then OnMessage(mkWarning, txt, srcPos);
+  msg.warning(txt, srcPos);
 end;
 procedure TCompilerBase.GenWarn(txt: string; const Args: array of const; const srcPos: TSrcPos);
 begin
@@ -283,7 +288,7 @@ end;
 procedure TCompilerBase.GenWarn(txt: string);
 {Genera un mensaje de Advertencia, en la posición actual del contexto. }
 begin
-  GenWarn(txt, GetSrcPos);
+  GenWarn(txt, lex.GetSrcPos);
 end;
 procedure TCompilerBase.GenWarn(txt: string; const Args: array of const);
 {Genera un mensaje de Advertencia, en la posición actual del contexto. }
@@ -294,17 +299,15 @@ procedure TCompilerBase.GenError(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de error en la posición indicada.}
 begin
   //Protección
-  HayError := true;
-  if curCtx = nil then begin
-    if OnMessage <>nil then OnMessage(mkError, txt, srcPosNull);
+  if lex.curCtx = nil then begin
+    msg.error2(txt, srcPosNull);
   end else begin
-    if curCtx.FixErrPos then begin
+    if lex.curCtx.FixErrPos then begin
       //El contexto actual, tiene configurado una posición fija para los errores
-      txt := curCtx.PreErrorMsg + txt;  //completa mensaje
-      if OnMessage <>nil then OnMessage(mkError, txt, curCtx.PreErrPosit);
-
+      txt := lex.curCtx.PreErrorMsg + txt;  //completa mensaje
+      msg.error2(txt, lex.curCtx.PreErrPosit);
     end else begin
-      if OnMessage <>nil then OnMessage(mkError, txt, srcPos);
+      msg.error2(txt, srcPos);
     end;
   end;
 end;
@@ -317,7 +320,7 @@ procedure TCompilerBase.GenError(txt: string);
 {Función de acceso rápido para Perr.GenError(). Pasa como posición a la posición
 del contexto actual. Realiza la traducción del mensaje también.}
 begin
-  GenError(txt, GetSrcPos);
+  GenError(txt, lex.GetSrcPos);
 end;
 procedure TCompilerBase.GenError(txt: String; const Args: array of const);
 {Genera un mensaje de error en la posición actual del contexto.}
@@ -328,7 +331,7 @@ end;
 function TCompilerBase.EOExpres: boolean; inline;
 //Indica si se ha llegado al final de una expresión.
 begin
-  Result := token = ';';  //en este caso de ejemplo, usamos punto y coma
+  Result := lex.token = ';';  //en este caso de ejemplo, usamos punto y coma
   {En la práctica, puede ser conveniente definir un tipo de token como "tkExpDelim", para
    mejorar el tiempo de respuesta del procesamiento, de modo que la condición sería:
      Result := tokType = tkExpDelim;
@@ -337,7 +340,7 @@ end;
 function TCompilerBase.EOBlock: boolean; inline;
 //Indica si se ha llegado el final de un bloque
 begin
-  Result := tokType = tkBlkDelim;
+  Result := lex.tokType = tkBlkDelim;
   {No está implementado aquí, pero en la práctica puede ser conveniente definir un tipo de token
    como "tnBlkDelim", para mejorar el tiempo de respuesta del procesamiento, de modo que la
    condición sería:
@@ -346,9 +349,9 @@ end;
 function TCompilerBase.CaptureDelExpres: boolean;
 //Verifica si sigue un delimitador de expresión. Si encuentra devuelve false.
 begin
-  SkipWhites;
+  lex.SkipWhites;
   if EOExpres then begin //encontró
-    Next;   //pasa al siguiente
+    lex.Next;   //pasa al siguiente
     exit(true);
   end else begin   //es un error
     GenError(ER_SEMIC_EXPEC);
@@ -363,13 +366,13 @@ pasa al siguiente token, aún cuando detecta errores. }
 var
   ctxChanged: Boolean;  //Manejamos variables locales para permitir recursividad
 begin
-  SkipWhites;
-  while (tokType = tkDirective) do begin
+  lex.SkipWhites;
+  while (lex.tokType = tkDirective) do begin
     //Es una directiva
-    callProcDIRline(token, ctxChanged);  //procesa línea
+    callProcDIRline(lex.token, ctxChanged);  //procesa línea
     if HayError then begin
-      Next;   //Pasa, porque es un error ya ubicado, y mejor buscamos otros
-      SkipWhites;
+      lex.Next;   //Pasa, porque es un error ya ubicado, y mejor buscamos otros
+      lex.SkipWhites;
       continue;
     end;
     if ctxChanged then begin
@@ -380,18 +383,18 @@ begin
       exit;
     end;
   //Pasa a siguiente
-    Next;
-    SkipWhites;  //limpia blancos
+    lex.Next;
+    lex.SkipWhites;  //limpia blancos
   end;
 end;
 procedure TCompilerBase.ProcCommentsNoExec;
 {Similar a ProcComments(), pero no ejecuta directivas o bloques ASM.}
 begin
-  SkipWhites;
-  while (tokType = tkDirective) do begin
+  lex.SkipWhites;
+  while (lex.tokType = tkDirective) do begin
     //Pasa a siguiente
-    Next;
-    SkipWhites;  //limpia blancos
+    lex.Next;
+    lex.SkipWhites;  //limpia blancos
   end;
 end;
 procedure TCompilerBase.TipDefecString(out typ: TAstTypeDec; out value: TConsValue; tokcad: string);
@@ -422,7 +425,7 @@ devuelve FALSE.}
       //Hay línea anterior
       repeat
         p.row := p.row - 1;
-        lin := curCtx.curLines[p.row - 1];
+        lin := lex.curCtx.curLines[p.row - 1];
       until (p.row<=1) or (trim(lin)<>'');
       //Encontró línea anterior no nula o llegó a la primera línea.
 //      xlex.ExploreLine(Point(length(lin), p.row), toks, CurTok );
@@ -440,19 +443,19 @@ var
   lin: String;
   p: TSrcPos;
 begin
-  if token<>ctok then begin
+  if lex.token<>ctok then begin
     //No se encontró el token. Muestra mensaje de error.
     {Pero el error, debe estar antes, así que hacemos la magia de explorar hacia atrás,
     hasta encontrar el token involucrado.}
-    p := GetSrcPos;   //posición actual
+    p := lex.GetSrcPos;   //posición actual
     x := p.col;   //lee posición actual
     if x>1 then begin
       //Hay algo antes del token. Tomamos la línea
-      if tokType = tkEol then begin
+      if lex.tokType = tkEol then begin
         //Ya estamos apuntando a la siguiente línea
-        lin := curCtx.curLines[curCtx.row-2];  //Leemos la anterior
+        lin := lex.curCtx.curLines[lex.curCtx.row-2];  //Leemos la anterior
       end else begin
-        lin := curCtx.CurLine;
+        lin := lex.curCtx.CurLine;
       end;
       repeat
         dec(x);
@@ -471,18 +474,18 @@ begin
     end;
     exit(false);
   end;
-  Next;
+  lex.Next;
   exit(true);
 end;
 function TCompilerBase.CaptureStr(cstr: string): boolean;
 //Similar a CaptureTok(), pero para cadenas. Se debe dar el texto en minúscula.
 begin
   //Debe haber parámetros
-  if UpCase(token)<>cstr then begin
+  if UpCase(lex.token)<>cstr then begin
     GenError(ER_STR_EXPECTED, [cstr]);
     exit(false);
   end;
-  Next;
+  lex.Next;
   exit(true);
 end;
 procedure TCompilerBase.CaptureParams(out funPars: TAstParamArray);
@@ -501,15 +504,15 @@ begin
     //no tiene parámetros
   end else begin
     //Debe haber parámetros
-    if token <> '(' then begin
+    if lex.token <> '(' then begin
       //Si no sigue '(', significa que no hay parámetros.
       exit;
     end;
-    Next;  //Toma paréntesis
-    SkipWhites;
-    if token = ')' then begin
+    lex.Next;  //Toma paréntesis
+    lex.SkipWhites;
+    if lex.token = ')' then begin
       //There is not parameter.
-      Next;
+      lex.Next;
       exit;
     end;
     //Debe haber parámetros. Prepara espacio para leer.
@@ -528,9 +531,9 @@ begin
         setlength(funPars, curSize);  //hace espacio en bloque
       end;
       //Busca delimitador
-      if token = ',' then begin
-        Next;   //toma separador
-        SkipWhites;
+      if lex.token = ',' then begin
+        lex.Next;   //toma separador
+        lex.SkipWhites;
       end else begin
         //No sigue separador de parámetros,
         //debe terminar la lista de parámetros
@@ -765,7 +768,7 @@ begin
     xtyp.itmType := itType;  //Actualiza tipo
     callDefineArray(xtyp);   //Define operations to array
     //Add location {******** ¿Es correcto hacer esto desde aquí? }
-    xtyp.location := curLocation;   //Ubicación del tipo (Interface/Implementation/...)
+    xtyp.location := lex.curLocation;   //Ubicación del tipo (Interface/Implementation/...)
   CloseTypeDec(xtyp);
   inc(nTypesCreated);   //Updates counter for types created
   exit(xtyp);
@@ -918,7 +921,6 @@ to the Syntax Tree in the current node. }
 var
   funimp: TAstFunImp;
   tmp: TAstListCallers;
-  i: Integer;
 begin
   funimp := CreateEleFunImp(funName, retTyp);
   funimp.srcDec := srcPos;       //Take position in code.
@@ -945,7 +947,7 @@ begin
   varExp.opType    := otVariab;
   varExp.elements.Clear;             //Remove all children
   //Add the Constant offset
-  constOffset := CreateExpression('@'+offVardec.name, typWord, otConst, GetSrcPos);
+  constOffset := CreateExpression('@'+offVardec.name, typWord, otConst, lex.GetSrcPos);
   constOffset.consType := ctVarAddr;
   constOffset.addrVar := offVardec;
   varExp.AddElement(constOffset);
@@ -961,7 +963,7 @@ begin
   varExp.Sto       := stRamFix;  //*** Eliminar a futuro
   varExp.elements.Clear;             //Remove all children
   //Add the Constant offset
-  constOffset := CreateExpression(IntToStr(offset), typWord, otConst, GetSrcPos);
+  constOffset := CreateExpression(IntToStr(offset), typWord, otConst, lex.GetSrcPos);
   constOffset.consType := ctLiteral;
   constOffset.value.ValInt := offset;
   varExp.AddElement(constOffset);
@@ -974,7 +976,7 @@ var
 begin
   SetVariabCA(varExp, offVardec);
   //Add the Index Expression
-  idxExpress := CreateExpression(idxVar.name, idxVar.typ, otVariab, GetSrcPos);
+  idxExpress := CreateExpression(idxVar.name, idxVar.typ, otVariab, lex.GetSrcPos);
   SetVariabCA(idxExpress,idxVar);
   varExp.AddElement(idxExpress);
 end;
@@ -989,13 +991,13 @@ var
   funSet: TAstFunDec;
 begin
   offset := TAstExpress(varExp.elements[0]);
-  eleMeth := CreateExpression('_add', typWord, otFunct, GetSrcPos);
+  eleMeth := CreateExpression('_add', typWord, otFunct, lex.GetSrcPos);
   TreeElems.InsertParentTo(eleMeth, offset);
   TreeElems.ChangeParentTo(eleMeth, offConst);
 //          TreeElems.OpenElement(eleMeth);  //Set parent to add parameter (item index).
   funSet := MethodFromBinOperator(offset.Typ, '+', typWord);
   if funSet = nil then begin   //Operator not found
-    GenError('Undefined operation: %s %s %s', [offset.Typ.name, '+', typWord.name], GetSrcPos);
+    GenError('Undefined operation: %s %s %s', [offset.Typ.name, '+', typWord.name], lex.GetSrcPos);
     //eleMeth.Destroy;    //We destroy because it hasn't been included in the AST.
     exit;
   end;
@@ -1383,13 +1385,13 @@ var
   expr: TAstExpress;
 begin
   if consVal>255 then begin
-    consDec := AddConsDecAndOpen(decName, typWord, GetSrcPos);
+    consDec := AddConsDecAndOpen(decName, typWord, lex.GetSrcPos);
     if HayError then exit(nil);  //Can be duplicated?
-    expr := AddExpressionConstWord('n', consVal, GetSrcPos);
+    expr := AddExpressionConstWord('n', consVal, lex.GetSrcPos);
   end else begin
-    consDec := AddConsDecAndOpen(decName, typByte, GetSrcPos);
+    consDec := AddConsDecAndOpen(decName, typByte, lex.GetSrcPos);
     if HayError then exit(nil);  //Can be duplicated?
-    expr := AddExpressionConstByte('n', consVal, GetSrcPos);
+    expr := AddExpressionConstByte('n', consVal, lex.GetSrcPos);
   end;
   consDec.value := @expr.value;
   TreeElems.CloseElement;  //Close constant.
@@ -1406,8 +1408,8 @@ Parameters:
   procedure getComma(var endWithComma: boolean);
   begin
     endWithComma := false;
-    if token = ',' then begin
-      Next;
+    if lex.token = ',' then begin
+      lex.Next;
       ProcComments;
       endWithComma := true;
     end;
@@ -1422,15 +1424,15 @@ var
   typName    : String;
   ele        : TAstElement;
 begin
-  srcpos := GetSrcPos;
-  Next;  //Get '['
+  srcpos := lex.GetSrcPos;
+  lex.Next;  //Get '['
   ProcComments;
   //Start reading the items
-  Op := AddExpressAndOpen(token, typNull, otConst, srcPos);
+  Op := AddExpressAndOpen(lex.token, typNull, otConst, srcPos);
   Op.value.InitItems;
   if itmType = nil then begin  //We must deduce the item type.
     ReadType := true;  //Set flag to read the item type
-    while not atEof and (token <> arrDelimt) do begin
+    while not lex.atEof and (lex.token <> arrDelimt) do begin
       //Must be an item
       Op1 := GetExpression(0);  //read item
       if HayError then begin
@@ -1463,7 +1465,7 @@ begin
     end;
   end else begin                   //We have to check the item type
     itmTypeRead :=  itmType;   //Get the expected type
-    while not atEof and (token <> arrDelimt) do begin
+    while not lex.atEof and (lex.token <> arrDelimt) do begin
       //Must be an item
       Op1 := GetExpression(0);  //read item
       if HayError then begin
@@ -1490,11 +1492,11 @@ begin
     GenError('Expected item.');
     exit(Op);
   end;
-  if token = arrDelimt then begin
+  if lex.token = arrDelimt then begin
     //Raise the end of array. Now we can create new type.
     Op.value.CloseItems;  //Resize
     //Now we can know the type of the item and of the array
-    Next;  //Take ']' or ')'.
+    lex.Next;  //Take ']' or ')'.
     nElem := Op.Value.nItems;
     if nElem = 0 then itmTypeRead := typNull;  //Something like []
     if not TreeElems.ExistsArrayType(itmTypeRead, nElem, xtyp) then begin
@@ -1504,7 +1506,7 @@ begin
     end;
     //Finally we set the operand type.
     Op.Typ := xtyp;
-  end else if atEof then begin
+  end else if lex.atEof then begin
     GenError('Unexpected end of file');
     exit(Op);
   end else begin  //Only happen when break loop (Error)
@@ -1536,22 +1538,22 @@ var
   str, typName: String;
   ascCode: Longint;
 begin
-  srcpos := GetSrcPos;
+  srcpos := lex.GetSrcPos;
   str := '';
   nElem := 0;
-  while tokType in [tkString, tkChar] do begin
-    if tokType = tkString then begin    //'Hello'
-      strsize := length(token) - 2;  //Don't consider quotes
-      str += copy(token, 2, strsize);
-      Next;    //Pasa al siguiente
+  while lex.tokType in [tkString, tkChar] do begin
+    if lex.tokType = tkString then begin    //'Hello'
+      strsize := length(lex.token) - 2;  //Don't consider quotes
+      str += copy(lex.token, 2, strsize);
+      lex.Next;    //Pasa al siguiente
       inc(nElem, strsize);
-    end else if tokType = tkChar  then begin  //#10#13
-      while tokType = tkChar do begin  //like #255
+    end else if lex.tokType = tkChar  then begin  //#10#13
+      while lex.tokType = tkChar do begin  //like #255
         //Concat the next char to simulate concat, considering there is not a
         //string type.
-        if TryStrToInt(Copy(token,2,3), ascCode) then begin
+        if TryStrToInt(Copy(lex.token,2,3), ascCode) then begin
           str += chr(ascCode and $FF);
-          Next;    //Pasa al siguiente
+          lex.Next;    //Pasa al siguiente
           inc(nElem);
         end else begin
           GenError(ER_IN_CHARACTER);   //Casi seguro que es el caracter "#" solo.
@@ -1646,12 +1648,12 @@ var
   xfun: TAstFunDec;
   arrtyp: TAstTypeDec;
 begin
-  Next;    //Pasa al siguiente
-  if toktype = tkIdentifier then begin
-    ele := TreeElems.FindFirst(token); //Identify element
+  lex.Next;    //Pasa al siguiente
+  if lex.toktype = tkIdentifier then begin
+    ele := TreeElems.FindFirst(lex.token); //Identify element
     if ele = nil then begin
       //Unidentified element.
-      GenError(ER_UNKNOWN_IDE_, [token]);
+      GenError(ER_UNKNOWN_IDE_, [lex.token]);
       exit;
     end;
     if ele.idClass = eleConsDec then begin  //Is constant
@@ -1659,31 +1661,31 @@ begin
     end else if ele.idClass = eleVarDec then begin  //Is variable
       xvar := TAstVarDec(ele);
       AddCallerToFromCurr(ele); //Add reference to variable, however final operand can be: <variable>.<fieldName>
-      Op1 := AddExpressAndOpen(ele.name, typWord, otConst, GetSrcPos);
+      Op1 := AddExpressAndOpen(ele.name, typWord, otConst, lex.GetSrcPos);
       Op1.SetAddrVar(xvar);
       TreeElems.CloseElement;
-      Next;    //Pasa al siguiente
+      lex.Next;    //Pasa al siguiente
     end else if ele.idClass = eleFuncDec then begin  //Is function
       {It's a function (or procedure), but we don't know what's the exact funtion because
 //      could be different overload versions.}
       xfun := TAstFunDec(ele);
       AddCallerToFromCurr(xfun);
-      Op1 := AddExpressAndOpen(ele.name, typWord, otConst, GetSrcPos);
+      Op1 := AddExpressAndOpen(ele.name, typWord, otConst, lex.GetSrcPos);
       Op1.SetAddrFun(xfun);
-      Next;               //Take identifier
+      lex.Next;               //Take identifier
     end else if ele.idClass = eleFuncImp then begin  //Is function
       {It's a function (or procedure), but we don't know what's the exact funtion because
 //      could be different overload versions.}
       xfun := TAstFunImp(ele).declar;  //Get the declaration
       AddCallerToFromCurr(xfun);
-      Op1 := AddExpressAndOpen(ele.name, typWord, otConst, GetSrcPos);
+      Op1 := AddExpressAndOpen(ele.name, typWord, otConst, lex.GetSrcPos);
       Op1.SetAddrFun(xfun);
-      Next;               //Take identifier
+      lex.Next;               //Take identifier
     end else begin
       GenError('Invalid parameter for "@" or "addr" function.');
       exit(nil);
     end;
-  end else if tokType in [tkString, tkChar] then begin
+  end else if lex.tokType in [tkString, tkChar] then begin
     curLoc := TreeElems.curNode;
     //Literal string generates a variable declared as arrays of char.
     constArr := GetConstantArrayStr(arrtyp);
@@ -1698,7 +1700,7 @@ begin
     //Add constant Operand
     TreeElems.openElement(curLoc);
     AddCallerToFromCurr(_varaux); //Add reference
-    Op1 := AddExpressAndOpen('ref', typWord, otConst, GetSrcPos);
+    Op1 := AddExpressAndOpen('ref', typWord, otConst, lex.GetSrcPos);
     Op1.SetAddrVar(_varaux);
   end else begin
     GenError('Invalid parameter for "@" or "addr" function.');
@@ -1817,7 +1819,7 @@ in this function.
   begin
     TreeElems.OpenElement(varOp);
     TreeElems.AddElement(idxVar);
-    constOff := CreateExpression('off', typByte, otConst, GetSrcPos);
+    constOff := CreateExpression('off', typByte, otConst, lex.GetSrcPos);
     constOff.Sto := stConst;
     constOff.SetLiteraltIntConst(offset);
     TreeElems.AddElement(constOff);
@@ -1839,48 +1841,48 @@ var
   opr1: TAstFunImp;
   valInt: Int64;
 begin
-  SkipWhites;
-  upTok := UpCase(token);
-  if tokType = tkLitNumber then begin
-    TipDefecNumber(typ, valInt, token); //Encuentra tipo de número, tamaño y valor
+  lex.SkipWhites;
+  upTok := UpCase(lex.token);
+  if lex.tokType = tkLitNumber then begin
+    TipDefecNumber(typ, valInt, lex.token); //Encuentra tipo de número, tamaño y valor
     if HayError then exit(nil);         //Verifica
-    Op1 := AddExpressAndOpen(token, typ, otConst, GetSrcPos);
+    Op1 := AddExpressAndOpen(lex.token, typ, otConst, lex.GetSrcPos);
     Op1.SetLiteraltIntConst(valInt);
-    Next;    //Pasa al siguiente
+    lex.Next;    //Pasa al siguiente
   end else if upTok = 'TRUE' then begin  //Constant boolean.
-    Op1 := AddExpressAndOpen('T', typBool, otConst, GetSrcPos);
+    Op1 := AddExpressAndOpen('T', typBool, otConst, lex.GetSrcPos);
     Op1.SetLiteralBoolConst(true);
-    Next;    //Pasa al siguiente
+    lex.Next;    //Pasa al siguiente
   end else if upTok = 'FALSE' then begin  //Constant boolean.
-    Op1 := AddExpressAndOpen('F', typBool, otConst, GetSrcPos);
+    Op1 := AddExpressAndOpen('F', typBool, otConst, lex.GetSrcPos);
     Op1.SetLiteralBoolConst(false);
-    Next;    //Pasa al siguiente
-  end else if toktype = tkIdentifier then begin
-    eleDec := TreeElems.FindFirst(token); //Identify element finding declaration.
+    lex.Next;    //Pasa al siguiente
+  end else if lex.toktype = tkIdentifier then begin
+    eleDec := TreeElems.FindFirst(lex.token); //Identify element finding declaration.
     findState := TreeElems.curFind;    //Save because can be altered with CaptureParams()
     if eleDec = nil then begin
       //Unidentified element.
-      GenError(ER_UNKNOWN_IDE_, [token]);
+      GenError(ER_UNKNOWN_IDE_, [lex.token]);
       exit(nil);
     end;
     if eleDec.idClass = eleConsDec then begin  //Is constant
       xcon := TAstConsDec(eleDec);
       AddCallerToFromCurr(eleDec);
-      Op1 := AddExpressAndOpen(eleDec.name, xcon.Typ, otConst, GetSrcPos);
+      Op1 := AddExpressAndOpen(eleDec.name, xcon.Typ, otConst, lex.GetSrcPos);
       Op1.SetConstRef(xcon);
-      Next;    //Pasa al siguiente
+      lex.Next;    //Pasa al siguiente
     end else if eleDec.idClass = eleVarDec then begin  //Is variable
       xvar := TAstVarDec(eleDec);
       AddCallerToFromCurr(eleDec); //Add reference to variable, however final operand can be: <variable>.<fieldName>
-      Op1 := AddExpressAndOpen(eleDec.name, xvar.Typ, otVariab, GetSrcPos);
+      Op1 := AddExpressAndOpen(eleDec.name, xvar.Typ, otVariab, lex.GetSrcPos);
       SetVariabCA(Op1, xvar);
-      Next;    //Pasa al siguiente
+      lex.Next;    //Pasa al siguiente
     end else if eleDec.idClass in [eleFuncImp, eleFuncDec] then begin  //Is function
       {It's a function (or procedure), but we don't know what's the exact funtion because
       could be different overload versions.}
-      posCall := GetSrcPos;  //Save position of the call.
-      Next;               //Take identifier
-      SkipWhites;         //Take spaces
+      posCall := lex.GetSrcPos;  //Save position of the call.
+      lex.Next;               //Take identifier
+      lex.SkipWhites;         //Take spaces
       if eleDec.idClass = eleFuncDec then xfun := TAstFunDec(eleDec)
       else xfun := TAstFunImp(eleDec).declar;  //Es implementación
       {We create the expression here because we're going to create parameters nodes
@@ -1899,9 +1901,9 @@ begin
       GenError(ER_OPERAN_EXPEC);
       exit(nil);
     end;
-  end else if tokType = tkChar then begin  //Constant character
+  end else if lex.tokType = tkChar then begin  //Constant character
     {$IFDEF LogExpres} Op.txt:= cIn.tok; {$ENDIF}   //toma el texto
-    if not TryStrToInt(copy(token, 2), cod) then begin
+    if not TryStrToInt(copy(lex.token, 2), cod) then begin
       GenError(ER_IN_CHARACTER);   //tal vez, sea muy grande
       exit(nil);
     end;
@@ -1909,23 +1911,23 @@ begin
       GenError(ER_INV_COD_CHAR);
       exit(nil);
     end;
-    Op1 := AddExpressAndOpen(token, typChar, otConst, GetSrcPos);
+    Op1 := AddExpressAndOpen(lex.token, typChar, otConst, lex.GetSrcPos);
     Op1.value.ValInt := cod;
     Op1.evaluated := true;
-    Next;
-  end else if tokType = tkString then begin  //Constant String
+    lex.Next;
+  end else if lex.tokType = tkString then begin  //Constant String
     Op1 := GetConstantArrayStr(arrtyp);
     if HayError then exit(nil);
-  end else if token = '(' then begin  // (...)
-    Next;
+  end else if lex.token = '(' then begin  // (...)
+    lex.Next;
     Op1 := GetExpression(0);
     if HayError then exit(nil);
-    if token <> ')' then begin
+    if lex.token <> ')' then begin
        GenError(ER_IN_EXPRESSI);
        exit(nil);
     end;
-    Next;
-  end else if token = '[' then begin  //Constant array
+    lex.Next;
+  end else if lex.token = '[' then begin  //Constant array
     //Here we only know the operand is an array
     Op1 := GetConstantArray(']', nil);
   end else begin
@@ -1936,19 +1938,19 @@ begin
   end;
   level := 1;   //Count the deeps of methods
   //Verify if has reference to fields with "."
-  while (length(token)=1) and (token[1] in ['.','[','^']) do begin
+  while (length(lex.token)=1) and (lex.token[1] in ['.','[','^']) do begin
     //There is a modifier
-    if token = '.' then begin
-      Next;    //Takes "."
-      if (tokType<>tkIdentifier) and (tokType<>tkLitNumber) then begin { TODO : No es necesario explorar ambos casos. SOlo hay que saber bien cual se usa en los tipos }
+    if lex.token = '.' then begin
+      lex.Next;    //Takes "."
+      if (lex.tokType<>tkIdentifier) and (lex.tokType<>tkLitNumber) then begin { TODO : No es necesario explorar ambos casos. SOlo hay que saber bien cual se usa en los tipos }
         GenError('Identifier expected.');
-        Next;    //Pasa siempre
+        lex.Next;    //Pasa siempre
         exit(nil);
       end;
       //There is an identifier. It should be a method or attribute. Let's find.
-      if not Op1.Typ.FindElemName(token, field) then begin
+      if not Op1.Typ.FindElemName(lex.token, field) then begin
         //There are not fields for this type
-        GenError(ER_UNKNOWN_IDE_, [token]);
+        GenError(ER_UNKNOWN_IDE_, [lex.token]);
         exit(nil);
       end;
       //Found the field. Create an expression node.
@@ -1961,7 +1963,7 @@ begin
         eleMeth.Sto    := stConst;
         eleMeth.Typ    := xcon.typ;
         eleMeth.SetConstRef(xcon);
-        Next;   //Take the identifier
+        lex.Next;   //Take the identifier
       end else if field.idClass = eleVarDec then begin
         //Must be a variable field.
         xvar := TAstVarDec(field);
@@ -1971,9 +1973,9 @@ begin
 //          xvar.addr := Op1.vardec.addr + xvar.addr;    //Fix address
 //          Op1.Typ := xvar.typ;
 //          Op1.vardec := xvar;
-          eleMeth := CreateExpression(token, xvar.typ, otVariab, GetSrcPos);
+          eleMeth := CreateExpression(lex.token, xvar.typ, otVariab, lex.GetSrcPos);
           TreeElems.InsertParentTo(eleMeth, Op1);
-          Next;   //Take the identifier
+          lex.Next;   //Take the identifier
           Op1 := eleMeth;
         end else begin
           GenError('Not supported this operand %s: ', [Op1.name + '.' + field.name]);
@@ -1982,9 +1984,9 @@ begin
       end else if field.idClass in [eleFuncDec, eleFuncImp] then begin
         {It's a method, but we don't know what's the exact method because could be
         different overload versions.}
-        posCall := GetSrcPos;   //Save position of the call.
-        Next;               //Take identifier
-        SkipWhites;         //Take spaces
+        posCall := lex.GetSrcPos;   //Save position of the call.
+        lex.Next;               //Take identifier
+        lex.SkipWhites;         //Take spaces
         xfun := TAstFunBase(field).declar;  //The ancestor of eleFuncImp and eleFuncDec
         eleMeth := CreateExpression(field.name, xfun.retType, otFunct, posCall);
         TreeElems.InsertParentTo(eleMeth, Op1);
@@ -1999,25 +2001,25 @@ begin
         Op1 := eleMeth;
       end else begin
         { TODO : Formally must be something like "Cannot use this here" }
-        GenError(ER_UNKNOWN_IDE_, [token]);
+        GenError(ER_UNKNOWN_IDE_, [lex.token]);
         exit(nil);
       end;
-    end else if token='^' then begin
-      Next;    //Takes "^".
+    end else if lex.token='^' then begin
+      lex.Next;    //Takes "^".
       //Validates if operand is pointer
       if Op1.Typ.catType <> tctPointer then begin
         GenError('Expression is not a pointer type.');
         exit(nil);
       end;
       //Put element as parent of Op1
-      eleMeth := CreateExpression('ptr^', Op1.Typ.ptrType, otVariab, GetSrcPos);
+      eleMeth := CreateExpression('ptr^', Op1.Typ.ptrType, otVariab, lex.GetSrcPos);
       eleMeth.fcallOp := true;  //Come from an operator.
       TreeElems.InsertParentTo(eleMeth, Op1);
       TreeElems.OpenElement(eleMeth);  //Set parent.
       Op1 := eleMeth;   //Set new operand 1
     end else begin  //Must be '['.
       //We have: array[something].
-      Next;    //Takes "[".
+      lex.Next;    //Takes "[".
       {If an index [] operation can be applied, Op1 is a variable, an array and its
       address is pointing to the beggining of the array.}
       //Add index address to Op1
@@ -2036,7 +2038,7 @@ begin
         end;
       end else begin     //It has already an Index expression
         //Include the new index adding to the previous
-        eleMeth := CreateExpression('', typWord, otFunct, GetSrcPos);
+        eleMeth := CreateExpression('', typWord, otFunct, lex.GetSrcPos);
         TreeElems.InsertParentTo(eleMeth, Op1);
         TreeElems.OpenElement(eleMeth);  //Set parent to add parameter (item index).
         //We get the index
@@ -2047,11 +2049,11 @@ begin
       //Set properties for Op1
       Op1.Typ := Op1.Typ.itmType;  //Take the type of item
       //Finish exploration
-      if token<>']' then begin
+      if lex.token<>']' then begin
         GenError('"]" expected.');
         exit(nil);
       end;
-      Next;   //Takes ']'.
+      lex.Next;   //Takes ']'.
     end;
     inc(level);
   end;
@@ -2075,25 +2077,25 @@ var
 begin
   ProcComments;
   //------------- Get first operand ---------------
-  if token = '@' then begin  //Address
+  if lex.token = '@' then begin  //Address
     //This an special SIF, not declared in System, because it's easier process it here.
     Op1 := proc_addr();
     if HayError then exit(nil);
-  end else if tokType = tkOperator then begin
+  end else if lex.tokType = tkOperator then begin
     //First token should be an pre-unary operator.
-    p := GetCtxState;     //In the case we need to go back.
-    oprPos := GetSrcPos;  //Save start position for operator.
-    oprTxt := token;      //Save operator text.
-    oprPre := curCtx.tokPrecU; //Read unary operator precedence.
-    Next;                 //Pass to the operand
+    p := lex.GetCtxState;     //In the case we need to go back.
+    oprPos := lex.GetSrcPos;  //Save start position for operator.
+    oprTxt := lex.token;      //Save operator text.
+    oprPre := lex.curCtx.tokPrecU; //Read unary operator precedence.
+    lex.Next;                 //Pass to the operand
     Op1 := GetExpression(oprPre);  //Takes the operand.
     if HayError then exit(nil);
     //Now we got the type. Now lets check if operator is a method of this type
     opr1 := MethodFromUnaOperator(Op1.Typ, oprTxt);
     if opr1 = nil then begin
       {Este tipo no permite este operador Unario (a lo mejor ni es unario)}
-      SetCtxState(p);
-      GenError(ER_UND_OPER_TY_, [token, Op1.Typ.name]);
+      lex.SetCtxState(p);
+      GenError(ER_UND_OPER_TY_, [lex.token, Op1.Typ.name]);
       exit(nil);
     end;
     //Put method as parent
@@ -2109,21 +2111,21 @@ begin
     if HayError then exit(nil);
   end;
   TreeElems.OpenElement(Op1.Parent);  //Returns to parent (sentence), in the case the expression have only one operand.
-  SkipWhites;
-  p := GetCtxState; //In the case we need to go back.  { TODO : ¿No debería ir dentro del WHILE? }
+  lex.SkipWhites;
+  p := lex.GetCtxState; //In the case we need to go back.  { TODO : ¿No debería ir dentro del WHILE? }
   //--------- Start loop: <Operator> <Operand> ----------
-  while tokType = tkOperator do begin
+  while lex.tokType = tkOperator do begin
     //Follows an operator. Checks if exist.
-    oprPos := GetSrcPos;   //Save start position for operator.
-    oprTxt := token;       //Save operator text.
-    oprPre := curCtx.tokPrec; //Read binary operator precedence.
+    oprPos := lex.GetSrcPos;   //Save start position for operator.
+    oprTxt := lex.token;       //Save operator text.
+    oprPre := lex.curCtx.tokPrec; //Read binary operator precedence.
     //Delimited by precedence?
     if oprPre <= prec Then begin  //Is lower than the following.
       Result := Op1;  //Solo devuelve el único operando que leyó
-      SetCtxState(p); //Returns to before reading the operator.
+      lex.SetCtxState(p); //Returns to before reading the operator.
       exit;
     end;
-    Next;  //Takes operator
+    lex.Next;  //Takes operator
     //Put element as parent of Op1
     eleMeth := CreateExpression('', typNull, otFunct, oprPos);  //Type will be updated later.
     eleMeth.fcallOp := true;  //Come from an operator.
@@ -2145,7 +2147,7 @@ begin
     //Prepare next operation.
     Op1 := eleMeth;   //Set new operand 1
     TreeElems.OpenElement(Op1.Parent);  //Returns to parent (sentence).
-    SkipWhites;  //Prepares for take next operator.
+    lex.SkipWhites;  //Prepares for take next operator.
   end;  //hasta que ya no siga un operador
   Result := Op1;  //aquí debe haber quedado el resultado
 end;
@@ -2208,7 +2210,7 @@ begin
   //Creates caller class.
   fc:= TAstEleCaller.Create;
   fc.caller := callerElem;
-  fc.curPos := GetSrcPos;  //Can be changed later if not apply.
+  fc.curPos := lex.GetSrcPos;  //Can be changed later if not apply.
   if toElem.idClass = eleFuncImp then begin
     //For implementation of functions, the caller are added directly.
     funimp := TAstFunImp(toElem);
@@ -2258,20 +2260,20 @@ begin
   repeat
     ProcComments;
     //ahora debe haber un identificador
-    if tokType <> tkIdentifier then begin
+    if lex.tokType <> tkIdentifier then begin
       GenError(ER_IDEN_EXPECT);
       setlength(itemList   , n);
       setlength(srcPosArray, n);
       exit(false);
     end;
     //hay un identificador
-    item := token;
+    item := lex.token;
     itemList[n] := item;  //agrega nombre
-    srcPosArray[n] := GetSrcPos;  //agrega ubicación de declaración
-    Next;  //Toma identificador despues, de guardar ubicación
+    srcPosArray[n] := lex.GetSrcPos;  //agrega ubicación de declaración
+    lex.Next;  //Toma identificador despues, de guardar ubicación
     ProcComments;
-    if token <> ',' then break; //sale
-    Next;  //Toma la coma
+    if lex.token <> ',' then break; //sale
+    lex.Next;  //Toma la coma
     //Hay otro ítem, verifica límite de arreglo
     inc(n);
     if n >= curSize then begin
@@ -2292,9 +2294,11 @@ begin
 end;
 //Initialization
 
-constructor TCompilerBase.Create;
+constructor TCompilerBase.Create(msg0: TMessageManager);
 begin
-  inherited;
+  //inherited;
+  lex := TAleLexer.Create(msg0);
+  msg := msg0;
   ClearError;   //inicia motor de errores
   //Crea arbol de elementos y listas
   TreeElems  := TAstTree.Create;
@@ -2310,6 +2314,7 @@ begin
   usedFuncs.Destroy;
   mirRep.Destroy;
   TreeElems.Destroy;
+  lex.Destroy;
   inherited Destroy;
 end;
 

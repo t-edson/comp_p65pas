@@ -79,7 +79,7 @@ type
     procedure Exec(srcFile, outFile: string; pars: string);
   public      //Inicialización
     procedure CreateSystemUnitInAST;
-    constructor Create; override;
+    constructor Create(msg0: TMessageManager);
     destructor Destroy; override;
   end;
 
@@ -1109,9 +1109,9 @@ begin
     ejecProg := true;  //marca bandera
     ClearError;
     //Genera instrucciones de inicio
-    ClearContexts;       //elimina todos los Contextos de entrada
+    lex.ClearContexts;       //elimina todos los Contextos de entrada
     //Compila el texto indicado
-    if not OpenContextFrom(mainFile) then begin
+    if not lex.OpenContextFrom(mainFile) then begin
       //No lo encuentra
       GenError(ER_FIL_NOFOUND, [mainFile]);
       exit;
@@ -1123,7 +1123,7 @@ begin
     TreeElems.main.name := ExtractFileName(mainFile);
     p := pos('.',TreeElems.main.name);
     if p <> 0 then TreeElems.main.name := copy(TreeElems.main.name, 1, p-1);
-    TreeElems.main.srcDec := GetSrcPos;
+    TreeElems.main.srcDec := lex.GetSrcPos;
     //Continúa con preparación
 //    EndCountElapsed('** Setup in: ');
 //    StartCountElapsed;  //Start timer
@@ -1406,7 +1406,7 @@ begin
 
       lins.Add( copy(fun.name + space(24) , 1, 24) + ' ' +
                 state + ' ' +
-                fun.srcDec.RowColString + ':' + ctxFile(fun.srcDec.idCtx)
+                fun.srcDec.RowColString + ':' + lex.ctxFile(fun.srcDec.idCtx)
       );
     end;
   end;
@@ -1595,10 +1595,10 @@ var
    funimp: TAstFunImp;
    tmpLoc: TElemLocation;
 begin
-  tmpLoc := curLocation;     //Save current location. We are going to change it.
+  tmpLoc := lex.curLocation;     //Save current location. We are going to change it.
   {Note that we add declaration e implementation at the interface section. This is not
   the normal but the compiler works OK}
-  curLocation := locInterface;
+  lex.curLocation := locInterface;
   Result := AddFunctionUNI(name, retType, srcPos, pars, false, true);
   Result.sfi := sfi;
   Result.callType := ctSysInline; //INLINE function
@@ -1609,7 +1609,7 @@ begin
   SetCodSysInline(Result);  //Set routine to generate code o SIF routine.
   TreeElems.CloseElement;  //Close body
   TreeElems.CloseElement;  //Close function implementation
-  curLocation := tmpLoc;   //Restore current location
+  lex.curLocation := tmpLoc;   //Restore current location
 end;
 function TCompiler_PIC16.AddSNFtoUnit(name: string; retType: TAstTypeDec; const srcPos: TSrcPos;
                var pars: TAstParamArray; codSys: TCodSysNormal): TAstFunDec;
@@ -1648,15 +1648,15 @@ var
    i: Integer;
 begin
   extract_local_vars();
-  tmpLoc := curLocation;     //Save current location. We are going to change it.
+  tmpLoc := lex.curLocation;     //Save current location. We are going to change it.
   //Add declaration
-  curLocation := locInterface;
+  lex.curLocation := locInterface;
   fundec := AddFunctionDEC(name, retType, srcPos, pars, false);
   fundec.callType := ctSysNormal;
   //Implementation
   {Note that implementation is added always after declarartion. It's not the usual
   in common units, where all declarations are first}
-  curLocation := locImplement;
+  lex.curLocation := locImplement;
   funimp := AddFunctionIMP(name, retType, srcPos, fundec, true);
   //Create local variables
   for i:=0 to high(local_vars) do begin
@@ -1674,7 +1674,7 @@ begin
   fundec.codSysNormal := codSys;  //Set routine to generate code SIF.
   TreeElems.CloseElement;  //Close body
   TreeElems.CloseElement;  //Close function implementation
-  curLocation := tmpLoc;   //Restore current location
+  lex.curLocation := tmpLoc;   //Restore current location
   //Add callers to local variables created. Must be done after creating the body.
   for i:=0 to high(local_vars) do begin
     locvar := local_vars[i].vardec;
@@ -2178,7 +2178,7 @@ begin
   uni := CreateEleUnit('System');  //System unit
   TreeElems.AddElementAndOpen(uni);  //Open Unit
   CreateSystemTypesAndVars;
-  curLocation := locInterface;   {Maybe not needed because element here are created directly.}
+  lex.curLocation := locInterface;   {Maybe not needed because element here are created directly.}
   //Creates operations
   CreateBooleanOperations;
   CreateByteOperations;
@@ -2363,9 +2363,9 @@ begin
   //Code('END');   //inicia la sección de código
 end;
 
-constructor TCompiler_PIC16.Create;
+constructor TCompiler_PIC16.Create(msg0: TMessageManager);
 begin
-  inherited Create;
+  inherited Create(msg0);
   //OnNewLine:=@cInNewLine;
   syntaxMode := modPicPas;   //Por defecto en sintaxis nueva
 

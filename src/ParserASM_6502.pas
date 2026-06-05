@@ -15,6 +15,8 @@ type
   TParserAsm_6502 = class
   private
     cpx     : TCompilerBase;   //Reference to compiler
+    lex     : TAleLexer;       //Reference to the compiler
+    msg     : TMessageManager;    //Referencia al gestor de mensajes
     labels  : TAstAsmInstrs;   //Lista de etiquetas
     curBlock: TAstAsmBlock;    //Bloque ASM actual.
     curInst : TAstAsmInstr;    //Instruction ASM actual.
@@ -89,9 +91,9 @@ end;
 function TParserAsm_6502.CaptureParenthes: boolean;
 {Captura el paréntesis ')'. Si no encuentra devuelve error}
 begin
-  cpx.SkipWhitesNoEOL;
-  if cpx.token = ')' then begin
-    cpx.Next;   //toma la coma
+  lex.SkipWhitesNoEOL;
+  if lex.token = ')' then begin
+    lex.Next;   //toma la coma
     exit(true);
   end else begin
     cpx.GenError(ER_EXPEC_PAREN);
@@ -124,70 +126,70 @@ If not operand eas found error is generated and returns FALSE.}
   var
     valueInt: Longint;
   begin
-    cpx.SkipWhitesNoEOL;
-    if (cpx.tokType = tkEol) or (cpx.token = ';') then begin
+    lex.SkipWhitesNoEOL;
+    if (lex.tokType = tkEol) or (lex.token = ';') then begin
       //End of line
       exit(false);
     end;
-    if cpx.token = '.' then begin
+    if lex.token = '.' then begin
       //Hay precisión de campo
-      cpx.Next;
-      if UpCase(cpx.token) = 'LOW' then begin
+      lex.Next;
+      if UpCase(lex.token) = 'LOW' then begin
         operation := aopSelByte;
         value := 0;
-        cpx.Next;
+        lex.Next;
         exit(true);
-      end else if UpCase(cpx.token) = 'HIGH' then begin
+      end else if UpCase(lex.token) = 'HIGH' then begin
         operation := aopSelByte;
         value := 1;
-        cpx.Next;
+        lex.Next;
         exit(true);
       end else begin
         cpx.GenError('Field expected after "."');
         exit(false);
       end;
-    end else if cpx.token = '@' then begin
-      cpx.Next;
-      if cpx.token = '0' then begin
+    end else if lex.token = '@' then begin
+      lex.Next;
+      if lex.token = '0' then begin
         operation := aopSelByte;
         value := 0;
-        cpx.Next;
+        lex.Next;
         exit(true);
-      end else if cpx.token = '1' then begin
+      end else if lex.token = '1' then begin
         operation := aopSelByte;
         value := 1;
-        cpx.Next;
+        lex.Next;
         exit(true);
-      end else if cpx.token = '2' then begin
+      end else if lex.token = '2' then begin
         operation := aopSelByte;
         value := 2;
-        cpx.Next;
+        lex.Next;
         exit(true);
-      end else if cpx.token = '3' then begin
+      end else if lex.token = '3' then begin
         operation := aopSelByte;
         value := 3;
-        cpx.Next;
+        lex.Next;
         exit(true);
       end else begin
         cpx.GenError('Field expected after "@"');
         exit(false);
       end;
-    end else if (cpx.token = '+') or (cpx.token = '-') then begin
-      if cpx.token='+' then operation := aopAddValue else operation := aopSubValue;
+    end else if (lex.token = '+') or (lex.token = '-') then begin
+      if lex.token='+' then operation := aopAddValue else operation := aopSubValue;
       //Get operand
-      cpx.Next;
-      cpx.SkipWhitesNoEOL;
-      if (cpx.tokType = tkEol) or (cpx.token = ';') then begin
+      lex.Next;
+      lex.SkipWhitesNoEOL;
+      if (lex.tokType = tkEol) or (lex.token = ';') then begin
         //End of line
         cpx.GenError('Operand expected');
         exit(false);
       end else begin
         //Follows something
-        if not TryStrToInt(cpx.token, valueInt) then begin
+        if not TryStrToInt(lex.token, valueInt) then begin
           cpx.GenError('Numeric operand expected');
           exit(false);
         end;
-        cpx.Next;
+        lex.Next;
         value := word(valueInt);
         exit(true);
       end;
@@ -221,11 +223,11 @@ If not operand eas found error is generated and returns FALSE.}
   {Test if a position operand ('>' or '<') exist. If so return the operator,
   otherwise returns ' '.}
   begin
-    if cpx.token = '>' then begin
-      cpx.Next;
+    if lex.token = '>' then begin
+      lex.Next;
       exit('>');
-    end else if cpx.token = '<' then begin
-      cpx.Next;
+    end else if lex.token = '<' then begin
+      lex.Next;
       exit('<');
     end else begin
       //Other
@@ -243,12 +245,12 @@ begin
   Result := false;
   operand.used := false;
   undefLabel := false;
-  cpx.SkipWhitesNoEOL;
+  lex.SkipWhitesNoEOL;
   positOper := TestForPositionOperand();  //Check for ">" or "<"
-  if cpx.token = '$' then begin
+  if lex.token = '$' then begin
     //Es una dirección relativa
-    cpx.Next;
-    cpx.SkipWhitesNoEOL;
+    lex.Next;
+    lex.SkipWhitesNoEOL;
     //Creates node "Operand".
     operand.Val := -2;  //To indicates it's $
     //Check for operations
@@ -256,34 +258,34 @@ begin
     if cpx.HayError then exit(false);
     operand.used := true;
     exit(true);
-  end else if cpx.tokType = tkLitNumber then begin
+  end else if lex.tokType = tkLitNumber then begin
     //Es una dirección numérica
-    operand.Val := StrToInt(cpx.token);  //Simple number
-    cpx.Next;
+    operand.Val := StrToInt(lex.token);  //Simple number
+    lex.Next;
     operand.used := true;
     exit(true);
-  end else if cpx.tokType = tkIdentifier  then begin
-    if IsLabelDeclared(cpx.token, lblEle) then begin
+  end else if lex.tokType = tkIdentifier  then begin
+    if IsLabelDeclared(lex.token, lblEle) then begin
       //Es un identificador de etiqueta
       operand.Val := -1;      //Indicates to use "operRef"
       operand.Ref := lblEle;  //Referencia a la etiqueta.
-      //cpx.AddCallerToFromCurr(lblEle);  //Agrega referencia
-      cpx.Next;
+      //lex.AddCallerToFromCurr(lblEle);  //Agrega referencia
+      lex.Next;
       //Check for operations
       ScanOperations(positOper);
       if cpx.HayError then exit(false);
       operand.used := true;
       exit(true);
     end;
-    ele := cpx.TreeElems.FindFirst(cpx.token);  //identifica elemento
+    ele := cpx.TreeElems.FindFirst(lex.token);  //identifica elemento
     if ele=nil then begin
       //Es un identificador no definido (como una etiqueta). Puede definirse luego.
       operand.Val := -1;        //Indicates to use "operRef"
       operand.Ref := nil;        //Will be later linked.
-      operand.Nam := UpCase(cpx.token);  //Keep name to find reference.
+      operand.Nam := UpCase(lex.token);  //Keep name to find reference.
       //Hay salto indefinido.
       undefLabel := true;
-      cpx.Next;
+      lex.Next;
       //Check for operations
       ScanOperations(positOper);
       if cpx.HayError then exit(false);
@@ -295,7 +297,7 @@ begin
         //Es un identificador de función del árbol de sintaxis
         xfun := TAstFunImp(ele);
         cpx.AddCallerToFromCurr(xfun);  //lleva la cuenta
-        cpx.Next;  //Take variable name
+        lex.Next;  //Take variable name
         operand.Val := -1;        //Indicates to use "operRef"
         operand.Ref := xfun;
         //Check for operations
@@ -307,7 +309,7 @@ begin
         //It's variable identifier
         xvar := TAstVarDec(ele);
         cpx.AddCallerToFromCurr(xvar);  //lleva la cuenta
-        cpx.Next;  //Take variable name
+        lex.Next;  //Take variable name
         operand.Val := -1;        //Indicates to use "operRef"
         operand.Ref := xvar;
         //Check for operations
@@ -321,7 +323,7 @@ begin
         cpx.AddCallerToFromCurr(xcon);  //lleva la cuenta
         //Constants can be resolved as numbers
         if (xcon.typ = cpx.typByte) or (xcon.typ = cpx.typWord) then begin
-          cpx.Next;
+          lex.Next;
           operand.Val := -1;        //Indicates to use "operRef"
           operand.Ref := xcon;
           //Check for operations
@@ -405,12 +407,12 @@ var
 begin
   blkEnd := false;
   addressModes := PIC16InstName[idInst].addressModes;
-   srcInst := cpx.GetSrcPos;
+   srcInst := lex.GetSrcPos;
   //Capture operand
-  cpx.Next;
-  cpx.SkipWhitesNoEOL;
-  tok := cpx.token;
-  if (cpx.tokType = tkEol) then begin
+  lex.Next;
+  lex.SkipWhitesNoEOL;
+  tok := lex.token;
+  if (lex.tokType = tkEol) then begin
     //Sin parámetros. Puede ser Implícito o Acumulador
     if aImplicit in addressModes then begin
       //Tiene modo implícito
@@ -420,10 +422,10 @@ begin
       AddInstruction(idInst, aAcumulat, 0, srcInst);
     end else begin
       //An operand must follow.
-      cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
+      cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
       exit;
     end;
-  end else if (cpx.tokType=tkIdentifier) and (Upcase(cpx.token)='END') then begin
+  end else if (lex.tokType=tkIdentifier) and (Upcase(lex.token)='END') then begin
     //Sin parámetros. Puede ser Implícito o Acumulador
     if aImplicit in addressModes then begin
       //Tiene modo implícito
@@ -433,42 +435,42 @@ begin
       AddInstruction(idInst, aAcumulat, 0, srcInst);
     end else begin
       //An operand must follow.
-      cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
+      cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
       exit;
     end;
     blkEnd := true;
   end else if tok = '#' then begin
     //Direccionamiento Inmediato
-    cpx.Next;      //Toma "#"
+    lex.Next;      //Toma "#"
     AddInstruction(idInst, aImmediat, 0, srcInst);
     //Complete the "param" of "curInst".
     if not CaptureOperand(curInst.operand, undefLabel) then begin
-      cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
+      cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
       exit;
     end;
     if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
-    cpx.SkipWhitesNoEOL;
+    lex.SkipWhitesNoEOL;
   end else if tok = '(' then begin
     //Direccionamiento Indirecto: (indirect), (indirect,X), (indirect),Y o (aAbsInIdX, X)
     AddInstruction(idInst, aIndirect, 0, srcInst);  //Add the instruction with "aImplicit" temporally. Later will be updated.
-    cpx.Next;
-    if cpx.tokType in [tkLitNumber, tkIdentifier] then begin
+    lex.Next;
+    if lex.tokType in [tkLitNumber, tkIdentifier] then begin
       if not CaptureOperand(curInst.operand, undefLabel) then begin
-        cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
+        cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
         exit;
       end;
       if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
-      cpx.SkipWhitesNoEOL;
-      if cpx.token = ',' then begin
+      lex.SkipWhitesNoEOL;
+      if lex.token = ',' then begin
         //Can only be (indirect,X)
-        cpx.Next;  //Take number
-        cpx.SkipWhitesNoEOL;
-        if UpCase(cpx.token) <> 'X' then begin
-          cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
+        lex.Next;  //Take number
+        lex.SkipWhitesNoEOL;
+        if UpCase(lex.token) <> 'X' then begin
+          cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
           exit;
         end;
-        cpx.Next;  //Take X
-        cpx.SkipWhitesNoEOL;
+        lex.Next;  //Take X
+        lex.SkipWhitesNoEOL;
         //Only could be aIndirecX or aAbsInIdX
         if aAbsInIdX in addressModes then begin  //Only JMP have this mode and don't have aIndirecX
           curInst.addMode := ord(aAbsInIdX);
@@ -480,34 +482,34 @@ begin
           cpx.GenError(ER_EXPEC_PAREN);
           exit;
         end;
-      end else if cpx.token = ')' then begin
+      end else if lex.token = ')' then begin
         //(indirect) or (indirect),Y
-        cpx.Next;
-        cpx.SkipWhitesNoEOL;
-        if cpx.token = ',' then begin
+        lex.Next;
+        lex.SkipWhitesNoEOL;
+        if lex.token = ',' then begin
           //Can only be (indirect),Y
           curInst.addMode := ord(aIndirecY);
-          cpx.Next;  //Toma número
-          cpx.SkipWhitesNoEOL;
-          if UpCase(cpx.token) <> 'Y' then begin
-            cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
+          lex.Next;  //Toma número
+          lex.SkipWhitesNoEOL;
+          if UpCase(lex.token) <> 'Y' then begin
+            cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
             exit;
           end;
-          cpx.Next;  //Takes Y
-          cpx.SkipWhitesNoEOL;
-        end else if cpx.tokType = tkEol then begin
+          lex.Next;  //Takes Y
+          lex.SkipWhitesNoEOL;
+        end else if lex.tokType = tkEol then begin
           //Can only be (indirect)
           //No need to change anything.
         end else begin
-          cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
+          cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
           exit;
         end;
       end else begin
-        cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
+        cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
         exit;
       end;
     end else begin
-      cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
+      cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
       exit;
     end;
   end else begin
@@ -515,29 +517,29 @@ begin
     AddInstruction(idInst, aImplicit, 0, srcInst);  //Add the instruction with "aImplicit" temporally. Later will be updated.
     //Complete the "param" of "curInst".
     if not CaptureOperand(curInst.operand, undefLabel) then begin
-      cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
+      cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
       exit;
     end;
     if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
     {Get the addressing mode, considering operand is 16bits. If it's 8 bits, the
      addressing mode should be changed when code is generated.}
-    cpx.SkipWhitesNoEOL;
+    lex.SkipWhitesNoEOL;
     //Verify is follows ,X o ,Y
-    if cpx.token = ',' then begin
-      cpx.Next;
-      cpx.SkipWhitesNoEOL;
-      if Upcase(cpx.token) = 'X' then begin
-        cpx.Next;
-        cpx.SkipWhitesNoEOL;
+    if lex.token = ',' then begin
+      lex.Next;
+      lex.SkipWhitesNoEOL;
+      if Upcase(lex.token) = 'X' then begin
+        lex.Next;
+        lex.SkipWhitesNoEOL;
         curInst.addMode := ord(aAbsolutX);
-      end else if Upcase(cpx.token) = 'Y' then begin
-        cpx.Next;
-        cpx.SkipWhitesNoEOL;
+      end else if Upcase(lex.token) = 'Y' then begin
+        lex.Next;
+        lex.SkipWhitesNoEOL;
         curInst.addMode := ord(aAbsolutY);
       end else begin
         //Could be the 65c02 instruction BBR0 $12, <label>
         if not CaptureOperand(curInst.operand2, undefLabel) then begin
-          cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
+          cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
           exit;
         end;
         if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
@@ -555,7 +557,7 @@ begin
         curInst.addMode := ord(aAbsolute);
       end;
     end;
-    if (cpx.tokType=tkIdentifier) and (Upcase(cpx.token)='END') then begin
+    if (lex.tokType=tkIdentifier) and (Upcase(lex.token)='END') then begin
       blkEnd := true;
     end;
   end;
@@ -571,25 +573,26 @@ var
   tok, lbl: String;
   lblEle: TAstAsmInstr;
   undefLabel: boolean;
+  n: Integer;
 begin
   blkEnd := false;
-  cpx.SkipWhitesNoEOL;
-  if cpx.tokType = tkEol then begin
-    cpx.Next;   //Go to next line
+  lex.SkipWhitesNoEOL;
+  if lex.tokType = tkEol then begin
+    lex.Next;   //Go to next line
     exit; //Empty line
   end;
   //Proccess the ASM line
-  if cpx.tokType = tkIdentifier then begin
+  if lex.tokType = tkIdentifier then begin
     //Could be a mnemonic, directive "ORG" or a label.
-    tok := Upcase(cpx.token);
+    tok := Upcase(lex.token);
     if FindOpcode(tok, idInst) then begin
       //It's a mnemonic
-      cpx.HayError := false;
+      n := msg.nErrors;
       ProcInstrASM(idInst, blkEnd);
-      if cpx.HayError then begin
+      if msg.nErrors>n then begin
         //There were an error in the last instruction
-        cpx.GotoEOL;   //Move to end of line.
-        cpx.Next;      //Pass to the start of the next line.
+        lex.GotoEOL;   //Move to end of line.
+        lex.Next;      //Pass to the start of the next line.
         exit;
       end;
       if blkEnd then exit;  //The END delimiter has found.
@@ -599,7 +602,7 @@ begin
       exit;
     end else if tok = 'ORG' then begin
       //It's the ORG directive
-      cpx.Next;
+      lex.Next;
       AddDirectiveORG(0);  //Operand of ORG will be updated with CaptureOperand().
       if not CaptureOperand(curInst.operand, undefLabel) then exit;
       if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
@@ -607,54 +610,54 @@ begin
     end else if tok = 'DB' then begin
       //Define a byte. Could be multiples bytes.
       repeat
-        cpx.Next;    //Take DB
+        lex.Next;    //Take DB
         AddDirectiveDB;  //Operand of DB will be updated with CaptureOperand().
         if not CaptureOperand(curInst.operand, undefLabel) then exit;
         if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
-        cpx.SkipWhitesNoEOL;
-      until cpx.token<>',';
-      if cpx.tokType = tkEol then begin
+        lex.SkipWhitesNoEOL;
+      until lex.token<>',';
+      if lex.tokType = tkEol then begin
         //Must follow Eol
-        cpx.Next;
+        lex.Next;
       end else begin
-        cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
-        cpx.GotoEOL;   //Move to end of line.
-        cpx.Next;      //Pass to the start of the next line.
+        cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+        lex.GotoEOL;   //Move to end of line.
+        lex.Next;      //Pass to the start of the next line.
       end;
       exit;
     end else if tok = 'DW' then begin
       //Define a byte. Could be multiples bytes.
       repeat
-        cpx.Next;    //Take DB
+        lex.Next;    //Take DB
         AddDirectiveDW;  //Operand of DB will be updated with CaptureOperand().
         if not CaptureOperand(curInst.operand, undefLabel) then exit;
         if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
-        cpx.SkipWhitesNoEOL;
-      until cpx.token<>',';
-      if cpx.tokType = tkEol then begin
+        lex.SkipWhitesNoEOL;
+      until lex.token<>',';
+      if lex.tokType = tkEol then begin
         //Must follow Eol
-        cpx.Next;
+        lex.Next;
       end else begin
-        cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
-        cpx.GotoEOL;   //Move to end of line.
-        cpx.Next;      //Pass to the start of the next line.
+        cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+        lex.GotoEOL;   //Move to end of line.
+        lex.Next;      //Pass to the start of the next line.
       end;
       exit;
     end else begin
       //Must be a label
-      lbl := cpx.token;   //guarda posible etiqueta
-      cpx.Next;
-      if cpx.token = ':' then begin
+      lbl := lex.token;   //guarda posible etiqueta
+      lex.Next;
+      if lex.token = ':' then begin
         //Definitivamente es una etiqueta
         if IsLabelDeclared(lbl, lblEle) then begin  //¿Ya existe?
           cpx.GenError(ER_DUPLIC_LBL_, [lbl]);
           exit;
         end;
         //Crea la instrucción de etiqueta
-        cpx.Next;      //Toma ":"
+        lex.Next;      //Toma ":"
         AddInstructionLabel(lbl);
         //Verifica si sigue una instrucción
-        cpx.SkipWhitesNoEOL;
+        lex.SkipWhitesNoEOL;
         ProcASMline(blkEnd);
         exit;
       end else begin
@@ -663,20 +666,20 @@ begin
         exit;
       end;
     end;
-  end else if cpx.tokType = tkComment then begin
-    cpx.SkipWhitesNoEOL;
+  end else if lex.tokType = tkComment then begin
+    lex.SkipWhitesNoEOL;
   end else begin
     //Something is wrong
-    cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
-    cpx.GotoEOL;   //Move to end of line.
+    cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+    lex.GotoEOL;   //Move to end of line.
   end;
   //Process the line delimiter
-  if cpx.tokType = tkEol then begin
-    cpx.Next;      //Pass to the start of the next line.
+  if lex.tokType = tkEol then begin
+    lex.Next;      //Pass to the start of the next line.
   end else begin
-    cpx.GenError(ER_SYNTAX_ERR_, [cpx.token]);
-    cpx.GotoEOL;   //Move to end of line.
-    cpx.Next;      //Pass to the start of the next line.
+    cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+    lex.GotoEOL;   //Move to end of line.
+    lex.Next;      //Pass to the start of the next line.
   end;
 end;
 procedure TParserAsm_6502.AddInstruction(const inst: TP6502Inst;
@@ -710,7 +713,7 @@ begin
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := lblName;
-  curInst.srcDec := cpx.GetSrcPos;
+  curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itLabel;   //Marca como instrucción de salto.
   cpx.TreeElems.AddElementAndOpen(curInst);
@@ -724,7 +727,7 @@ begin
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := 'ORG';
-  curInst.srcDec := cpx.GetSrcPos;
+  curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itOrgDir;  //Represents ORG
   cpx.TreeElems.AddElementAndOpen(curInst);
@@ -738,7 +741,7 @@ begin
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := 'DB';
-  curInst.srcDec := cpx.GetSrcPos;
+  curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itDefByte;  //Represents DB
   cpx.TreeElems.AddElementAndOpen(curInst);
@@ -751,7 +754,7 @@ begin
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := 'DW';
-  curInst.srcDec := cpx.GetSrcPos;
+  curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itDefWord;  //Represents DB
   cpx.TreeElems.AddElementAndOpen(curInst);
@@ -762,18 +765,20 @@ var
   blkEnd: boolean;
 begin
   cpx := cpx0;  //Reference to compiler.
-  cpx.Next;     //Get ASM
-  cpx.curCtx.OnDecodeNext := @DecodeNext;  //Set a new lexer
+  lex := cpx.lex; //Actualiza referencia al lexer
+  msg := cpx.msg;
+  lex.Next;     //Get ASM
+  lex.curCtx.OnDecodeNext := @DecodeNext;  //Set a new lexer
   curBlock := TAstAsmBlock.Create;
-  curBlock.srcDec := cpx.GetSrcPos;
+  curBlock.srcDec := lex.GetSrcPos;
   curBlock.name := 'ASMblk';
   cpx.TreeElems.AddElementAndOpen(curBlock);
   StartASM;
   curInst := nil;
   repeat
     ProcASMline(blkEnd);
-  until cpx.atEof or blkEnd;
-  if cpx.atEof then begin
+  until lex.atEof or blkEnd;
+  if lex.atEof then begin
     cpx.GenError('Unclosed ASM block.');  //Don't stop scanning
   end;
   EndASM;
@@ -782,8 +787,8 @@ begin
     cpx.TreeElems.CloseElement;
   end;
   //Current token is delimiter END.
-  cpx.curCtx.OnDecodeNext := nil;   //Restore lexer here, in order to take the "END" with the new lexer and avoid problems of syntax.
-  cpx.Next;   //Take END with default lexer.
+  lex.curCtx.OnDecodeNext := nil;   //Restore lexer here, in order to take the "END" with the new lexer and avoid problems of syntax.
+  lex.Next;   //Take END with default lexer.
   cpx.TreeElems.CloseElement;  //Close ASM block
 end;
 function TParserAsm_6502.DecodeNext: boolean;
@@ -795,7 +800,7 @@ function TParserAsm_6502.DecodeNext: boolean;
 var
   ctx: TContext;
 begin
-  ctx := cpx.curCtx;
+  ctx := lex.curCtx;
   if ctx._Eof then begin
     ctx.tokType := tkNull;
     exit(false);

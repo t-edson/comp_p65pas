@@ -47,7 +47,6 @@ type
       decStyle: TTypDeclarStyle; out TypeCreated: boolean): boolean;
     function VerifyEND: boolean;
     function GetCondition(out ex: TAstExpress; ConstBool: boolean = false): boolean;
-    function OpenContextFrom(filePath: string): boolean;
     function AnalyzeStructBody: boolean;
     function MoveNodeToAssign(cntBody: TAstCodeCont; curContainer: TAstElement;
                               Op: TAstExpress): TAstExpress;
@@ -59,11 +58,6 @@ type
     procedure DoAnalyzeUnit(uni: TAstElement);
     procedure DoAnalyzeProgram;
     procedure DoAnalyze;
-  public
-    {Indica que TCompiler, va a acceder a un archivo, peor está preguntando para ver
-     si se tiene un Stringlist, con los datos ya caragdos del archivo, para evitar
-     tener que abrir nuevamente al archivo.}
-    OnRequireFileString: procedure(FilePath: string; var strList: TStrings) of object;
   end;
 
 implementation
@@ -100,7 +94,7 @@ function TAnalyzer.StartOfSection: boolean;
 var
   tokL: String;
 begin
-  tokL := lowercase(token);
+  tokL := lowercase(lex.token);
   Result := (tokL ='var') or (tokL ='const') or
             (tokL ='type') or (tokL ='procedure') or (tokL ='inline');
 end;
@@ -109,11 +103,11 @@ procedure TAnalyzer.CompileLastEnd;
 var
   tokL: String;
 begin
-  if atEof then begin
+  if lex.atEof then begin
     GenError(ER_EOF_END_EXP);
     exit;       //sale
   end;
-  tokL := lowercase(token);
+  tokL := lowercase(lex.token);
   if tokL <> 'end' then begin  //verifica si termina el programa
     if tokL = 'else' then begin
       //Precisa un poco más en el error
@@ -124,12 +118,12 @@ begin
       exit;       //sale
     end;
   end;
-  Next;   //coge "end"
+  lex.Next;   //coge "end"
   //Debería seguir el punto
   if not CaptureTok('.') then exit;
   //no debe haber más instrucciones
   ProcComments;
-  if not atEof then begin
+  if not lex.atEof then begin
     GenError(ER_NOT_AFT_END);
     exit;       //sale
   end;
@@ -167,19 +161,19 @@ begin
     if constTyp.catType = tctArray then begin
       //Literal array. We read in the format (<item>,<item>,... )
       ProcComments;
-      if token = '(' then begin   //Common Pascal syntax ( ... )
+      if lex.token = '(' then begin   //Common Pascal syntax ( ... )
         init := GetConstantArray(')', constTyp.itmType);
         TreeElems.OpenElement(init.Parent);  //Returns to parent because GetConstantArray() has created an opened a node.
         if HayError then exit(nil);
-      end else if token = '[' then begin  //Alternate syntax [ ... ]
+      end else if lex.token = '[' then begin  //Alternate syntax [ ... ]
         init := GetConstantArray(']', constTyp.itmType);
         TreeElems.OpenElement(init.Parent);  //Returns to parent because GetConstantArray() has created an opened a node.
         if HayError then exit(nil);
-      end else if tokType = tkString then begin  //Alternate syntax "abc" only for char.
+      end else if lex.tokType = tkString then begin  //Alternate syntax "abc" only for char.
         init := GetConstantArrayStr(arrtyp, false);
         TreeElems.OpenElement(init.Parent);  //Returns to parent because GetConstantArray() has created an opened a node.
         if HayError then exit(nil);
-      end else if tokType = tkChar then begin  //Could be char like #13.
+      end else if lex.tokType = tkChar then begin  //Could be char like #13.
         init := GetConstantArrayStr(arrtyp, true);
         TreeElems.OpenElement(init.Parent);  //Returns to parent because GetConstantArray() has created an opened a node.
         if HayError then exit(nil);
@@ -273,34 +267,34 @@ var
 begin
   aditVar.hasAdic  := decNone;       //Bandera
   aditVar.hasInit  := nil;
-  tokL := lowercase(token);
-  if (tokL = 'absolute') or (token = '@') then begin
+  tokL := lowercase(lex.token);
+  if (tokL = 'absolute') or (lex.token = '@') then begin
     // Hay especificación de dirección absoluta ////
     aditVar.hasAdic := decAbsol;    //marca bandera
-    Next;
+    lex.Next;
     ProcComments;
     aditVar.absAddr := GetConstValue(varTyp, mainTypCreated);  //Leemos como constante
     if HayError then exit;
 
   end else if tokL = 'register' then begin    //Register type
     aditVar.hasAdic := decRegis;    //marca bandera
-    Next;
+    lex.Next;
     ProcComments;
   end else if tokL = 'registera' then begin //Register type
     aditVar.hasAdic := decRegisA;    //marca bandera
-    Next;
+    lex.Next;
     ProcComments;
   end else if tokL = 'registerx' then begin  //Register type
     aditVar.hasAdic := decRegisX;    //marca bandera
-    Next;
+    lex.Next;
     ProcComments;
   end else if tokL = 'registery' then begin  //Register type
     aditVar.hasAdic := decRegisY;    //marca bandera
-    Next;
+    lex.Next;
     ProcComments;
   end else if tokL = 'zeropage' then begin   //Zero page
     aditVar.hasAdic := decZeroP;    //Set flag
-    Next;
+    lex.Next;
     ProcComments;
   end;
   //Verifica compatibilidad de tamaños
@@ -313,8 +307,8 @@ begin
   end;
   //Puede seguir una sección de inicialización: var: char = 'A';
   ProcComments;
-  if token = '=' then begin
-    Next;   //lo toma
+  if lex.token = '=' then begin
+    lex.Next;   //lo toma
     ProcComments;
     //Aquí debe seguir el valor inicial constante.
     consIni := GetConstValue(varTyp, mainTypCreated);  //Leemos como constante
@@ -456,8 +450,8 @@ en el procesamiento de unidades.}
     i, curSize, n: Integer;
     adicVarDec: TAdicVarDec;
   begin
-    SkipWhites;
-    if EOBlock or EOExpres or (token = ':') then begin
+    lex.SkipWhites;
+    if EOBlock or EOExpres or (lex.token = ':') then begin
       //No tiene parámetros
     end else begin
       //Debe haber parámetros. Prepara espacio para leer.
@@ -466,7 +460,7 @@ en el procesamiento de unidades.}
       setlength(funPars, curSize);  //Tamaño inicial
       //Inicia lectura
       if not CaptureTok('(') then exit;
-      SkipWhites;
+      lex.SkipWhites;
       repeat
         //if tokL = 'register' then begin
         //  IsRegister := regA;  //Asumimos que es A
@@ -508,9 +502,9 @@ en el procesamiento de unidades.}
           end;
         end;
         //Busca delimitador
-        if token = ';' then begin
-          Next;   //toma separador
-          SkipWhites;
+        if lex.token = ';' then begin
+          lex.Next;   //toma separador
+          lex.SkipWhites;
         end else begin
           //no sigue separador de parámetros,
           //debe terminar la lista de parámetros
@@ -528,25 +522,25 @@ var
   tokL: String;
 begin
   //Toma información de ubicación, al inicio del procedimiento
-  SkipWhites;
-  srcPos := GetSrcPos;
+  lex.SkipWhites;
+  srcPos := lex.GetSrcPos;
   //Ahora debe haber un identificador
-  if tokType <> tkIdentifier then begin
+  if lex.tokType <> tkIdentifier then begin
     GenError(ER_IDEN_EXPECT);
     exit;
   end;
   //Lee nombre de función
-  procName := token;
-  Next;  //lo toma
+  procName := lex.token;
+  lex.Next;  //lo toma
   //Captura los parámetros en "pars"
   ReadFunctionParams(pars);
   if HayError then exit;
 
   //Verifica si es función
-  SkipWhites;
-  if token = ':' then begin
-    Next;
-    SkipWhites;
+  lex.SkipWhites;
+  if lex.token = ':' then begin
+    lex.Next;
+    lex.SkipWhites;
     //Es función
     retType := GetTypeDeclarSimple;  //lee tipo
     if HayError then exit;
@@ -555,17 +549,17 @@ begin
   end;
   if not CaptureTok(';') then exit;
   //Verifica si es INTERRUPT
-  SkipWhites;
-  tokL := lowercase(token);
+  lex.SkipWhites;
+  tokL := lowercase(lex.token);
   if tokL = 'interrupt' then begin
-    Next;
+    lex.Next;
     IsInterrupt := true;
     if not CaptureTok(';') then exit;
   end else begin
     IsInterrupt := false;
   end;
   if tokL = 'forward' then begin
-    Next;
+    lex.Next;
     IsForward := true;
     if not CaptureTok(';') then exit;
   end else begin
@@ -629,11 +623,11 @@ If some problems happens, Error is generated and the NIL value is returned.
       arrTyp.consNitm := consDec;  //Update reference to the size.
       exit;
     end;
-    Next; //Toma '['. Se asume que ya se identificó
+    lex.Next; //Toma '['. Se asume que ya se identificó
     ProcComments;
-    if token = ']' then begin
+    if lex.token = ']' then begin
       //Short declaration without size specified: []byte ;
-      Next;
+      lex.Next;
       //Creates constant element "length" to returns array size
       consDec := AddConstDeclarByte('length', 0);
       arrTyp.isDynam := true;
@@ -641,7 +635,7 @@ If some problems happens, Error is generated and the NIL value is returned.
     end else begin
       {Note this section of code is similar to TAnalyzer.GetConstValue().}
       //Creates constant element "length" to returns array size
-      consDec := AddConsDecAndOpen('length', typNull, GetSrcPos);  //No type defined here.
+      consDec := AddConsDecAndOpen('length', typNull, lex.GetSrcPos);  //No type defined here.
       if HayError then exit;  //Can be duplicated
       //Debe seguir una expresión constante, que no genere código
       sizExp := GetExpression(0);  //Add expression to current node os AST
@@ -685,15 +679,15 @@ If some problems happens, Error is generated and the NIL value is returned.
     arrTyp: TAstTypeDec;
   begin
     arrTyp := TAstTypeDec(TreeElems.curNode);  //Get Reference to the array.
-    if token = '[' then begin
+    if lex.token = '[' then begin
       //Declaración corta
       ReadSizeInBrackets(arrTyp);  //Lee tamaño
       if HayError then exit;
     end else begin
       //Declaración larga: ARRAY[tamaño] OF <tipo>
-      Next; //Toma 'ARRAY'. Se asume que ya se identificó.
+      lex.Next; //Toma 'ARRAY'. Se asume que ya se identificó.
       ProcComments;
-      if token = '[' then begin  //Tamaño espefificado o puede ser []
+      if lex.token = '[' then begin  //Tamaño espefificado o puede ser []
         ReadSizeInBrackets(arrTyp);  //Lee tamaño
         if HayError then exit;
       end else begin
@@ -725,12 +719,12 @@ If some problems happens, Error is generated and the NIL value is returned.
     refDecStyle: TTypDeclarStyle;
     refTypCreated: boolean;
   begin
-    if token = '^' then begin
+    if lex.token = '^' then begin
       //Declaración corta
-      Next;  //Toma '^'
+      lex.Next;  //Toma '^'
     end else begin
       //Declaración larga: POINTER TO <tipo>
-      Next; //Toma 'POINTER'. Se asume que ya se identificó.
+      lex.Next; //Toma 'POINTER'. Se asume que ya se identificó.
       ProcComments;
       if not CaptureStr('TO') then exit;
     end;
@@ -756,16 +750,16 @@ If some problems happens, Error is generated and the NIL value is returned.
     adicVarDec: TAdicVarDec;
   begin
     //Declaración: OBJECT ... END
-    Next; //Toma 'OBJECT'. Se asume que ya se identificó.
+    lex.Next; //Toma 'OBJECT'. Se asume que ya se identificó.
     ProcComments;
     //Start reading attributes
     try
       offs := 0;   //Addres offset
       xtyp.objSize := 0;
-      while not atEof and (lowercase(token) <> 'end') do begin
-        if lowercase(token) = 'procedure' then begin
+      while not lex.atEof and (lowercase(lex.token) <> 'end') do begin
+        if lowercase(lex.token) = 'procedure' then begin
           //Es un método. Se crear dentro del nodo tipo.
-          Next;    //lo toma
+          lex.Next;    //lo toma
           AnalyzeProcDeclar(xtyp);   //Pasa el tipo objeto.
           if HayError then exit;
         end else begin     //Debe ser un campo
@@ -788,12 +782,12 @@ If some problems happens, Error is generated and the NIL value is returned.
               //  exit;
               //end;
               //GetAdicVarDeclar2(varTyp, adicVarDec, mainTypCreated);  //Could create new types
-              if token <> ':' then begin
+              if lex.token <> ':' then begin
                 //Debe seguir, el tipo de la variable
                 GenError(ER_SEM_COM_EXP);
                 exit;
               end;
-              Next;  //Toma ":".
+              lex.Next;  //Toma ":".
               varTyp := GetTypeDeclarSimple;   //Solo tipos simples por ahora
               if HayError then exit;
             end;
@@ -805,7 +799,7 @@ If some problems happens, Error is generated and the NIL value is returned.
             //varDec.adicPar := adicVarDec;  //We don't worry for aditional declaraions because GetAdicVarDeclar2() has limited them.
             varDec.adicPar.hasAdic := decNone;
             varDec.adicPar.hasInit := nil;
-            varDec.location := curLocation;
+            varDec.location := lex.curLocation;
             //Close variable
             TreeElems.CloseElement;
             offs += varTyp.size;
@@ -834,9 +828,9 @@ begin
   TypeCreated := false;
   ProcComments;
   //Analiza el tipo declarado
-  srcPos := GetSrcPos;  //Inicio de declaración
-  tokL := lowercase(token);
-  if (tokL = 'array') or (token = '[') then begin
+  srcPos := lex.GetSrcPos;  //Inicio de declaración
+  tokL := lowercase(lex.token);
+  if (tokL = 'array') or (lex.token = '[') then begin
     //Es declaración de arreglo
     decStyle := ttdDeclar;  //Es declaración elaborada
     typ := OpenTypeDec(srcPos, '', 0, tctArray, t_object, location);
@@ -849,7 +843,7 @@ begin
       //Update name *** ¿Podría estar duplicado?
       typ.name := GenArrayTypeName(itemTyp.name, typ.consNitm.value^.ValInt);
     CloseTypeDec(typ);  //Close type
-  end else if {(tokL = 'pointer') or }(token = '^') then begin
+  end else if {(tokL = 'pointer') or }(lex.token = '^') then begin
     //Es declaración de puntero
     decStyle := ttdDeclar;  //Es declaración elaborada
     typ := OpenTypeDec(srcPos, '', 0, tctPointer, t_object, location);
@@ -874,9 +868,9 @@ begin
       callDefineObject(typ);   //Define operations to object
       typ.name := GenerateUniqName('Obj');
     CloseTypeDec(typ);  //Close type
-  end else if tokType = tkIdentifier then begin
+  end else if lex.tokType = tkIdentifier then begin
     //Es un identificador de tipo
-    typName := token;
+    typName := lex.token;
     decStyle := ttdDirect;  //Es directo. Se refiere
     TypeCreated := false;
     {Se pensó usar GetOperandIdent(), para identificar al tipo, pero no está preparado
@@ -889,7 +883,7 @@ begin
     end;
     if ele.idClass = eleTypeDec then begin
       //Es un tipo
-      Next;   //toma identificador
+      lex.Next;   //toma identificador
       typ := TAstTypeDec(ele);
       //AddCallerToFromCurr(typ);  Poner la llamada aquí, complica el manejo posteriormente.
       if typ.copyOf<>nil then typ := typ.copyOf;  {Apunta al tipo copia. Esto es útil para
@@ -940,9 +934,9 @@ tipos que pudieron crearse también) ha generado la creación de un nuevo tipo e
 El tipo creado, cuando se crea alguno, se coloca en el nodo padre antes del nodo actual.
 }
 begin
-  if token = ':' then begin  //Check if type exists
+  if lex.token = ':' then begin  //Check if type exists
     //Debe seguir, el tipo
-    Next;  //Takes ":"
+    lex.Next;  //Takes ":"
     ProcComments;
     decTyp := GetTypeDeclar(decStyle, TypeCreated, tlCurrCodeCon);  //Can create a Type element at this level.
     if HayError then exit(false);
@@ -975,14 +969,14 @@ var
   typName: String;
 begin
   ProcComments;
-  if tokType <> tkIdentifier then begin
+  if lex.tokType <> tkIdentifier then begin
     GenError(ER_IDEN_EXPECT);
     exit;
   end;
   //hay un identificador
-  srcpos := GetSrcPos;
-  typName := token;
-  Next;
+  srcpos := lex.GetSrcPos;
+  typName := lex.token;
+  lex.Next;
   ProcComments;
   if not CaptureTok('=') then exit;
   if TreeElems.curCodCont=nil then TreeElems.curCodCont:=typByte; {Ver comentario de AnalyzeVarDeclar()}
@@ -1031,8 +1025,8 @@ procedure TAnalyzer.AnalyzeConstDeclar;
                              out mainTypCreated: TAstTypeDec);
   {Get the constant initialization for the declaration.}
   begin
-    if token = '=' then begin
-      Next;  //Pass to the next.
+    if lex.token = '=' then begin
+      lex.Next;  //Pass to the next.
       consIni := GetConstValue(consTyp, mainTypCreated);
     end else begin
       GenError(ER_EQU_COM_EXP);
@@ -1090,7 +1084,7 @@ procedure TAnalyzer.AnalyzeVarDeclar;
     xvar.typ := varTyp;   //Update type
     //Inicia campos
     xvar.adicPar := adicVarDec;    //Actualiza propiedades adicionales
-    xvar.location := curLocation;  //Actualiza bandera
+    xvar.location := lex.curLocation;  //Actualiza bandera
     //Update storage
 //    case adicVarDec.hasAdic of
 //    decRegis : xvar.storage := stRegister;
@@ -1298,12 +1292,12 @@ begin
     setlength(pars, 1);
     adicVar.hasAdic := decNone;
     adicVar.hasInit := nil;
-    SetParameter(pars[0], 'self', GetSrcPos, objContainer, adicVar);
+    SetParameter(pars[0], 'self', lex.GetSrcPos, objContainer, adicVar);
   end else begin
     //Es una declaración normal
     setlength(pars, 0);
   end;
-  case curLocation of
+  case lex.curLocation of
   locInterface: begin
     //Las declaraciones en INTERFACE son sencillas. Solo son caebceras.
     ReadProcHeader(procName, retType, srcPos, pars, IsInterrupt, IsForward);
@@ -1317,7 +1311,7 @@ begin
       exit;
     end;
     funDec := AddFunctionDEC(procName, retType, srcPos, pars, IsInterrupt);
-    funDec.location := curLocation;  //Set location
+    funDec.location := lex.curLocation;  //Set location
     funDec.callType := ctUsrNormal;  //Normal function
     exit;  //No more task required.
   end;
@@ -1339,7 +1333,7 @@ begin
       //Ya verificamos que no hay conflicto en IMPLEMENTATION.
       fun := AddFunctionUNI(procName, retType, srcPos, pars, IsInterrupt, true);
     end;
-    fun.location := curLocation;
+    fun.location := lex.curLocation;
     fun.callType := ctUsrNormal;  //Normal function
   end;
   locMain: begin
@@ -1367,7 +1361,7 @@ begin
       //It's a common function
       fun := AddFunctionUNI(procName, retType, srcPos, pars, IsInterrupt, true);
     end;
-    fun.location := curLocation;
+    fun.location := lex.curLocation;
     fun.callType := ctUsrNormal;  //Normal function
   end;
   else
@@ -1376,16 +1370,16 @@ begin
   //Aquí ya se tiene "fun" abierta, validada y apuntando a la declaración.
   //Empiezan las declaraciones VAR, CONST, PROCEDURE, TYPE
   while StartOfSection do begin
-    tokL := lowercase(token);
+    tokL := lowercase(lex.token);
     if tokL = 'var' then begin
-      Next;    //lo toma
-      while not StartOfSection and (lowercase(token) <>'begin') do begin
+      lex.Next;    //lo toma
+      while not StartOfSection and (lowercase(lex.token) <>'begin') do begin
         AnalyzeVarDeclar;
         if HayError then exit;;
       end;
     end else if tokL = 'const' then begin
-      Next;    //lo toma
-      while not StartOfSection and (lowercase(token) <>'begin') do begin
+      lex.Next;    //lo toma
+      while not StartOfSection and (lowercase(lex.token) <>'begin') do begin
         AnalyzeConstDeclar;
         if HayError then exit;;
       end;
@@ -1397,16 +1391,16 @@ begin
       exit;
     end;
   end;
-  if UpCase(token) <> 'BEGIN' then begin
+  if UpCase(lex.token) <> 'BEGIN' then begin
     GenError('Expected "begin", "var", "type" or "const".');
     exit;
   end;
   //Ahora empieza el cuerpo de la función o las declaraciones
-  bod := TreeElems.AddBodyAndOpen(GetSrcPos);  //Open Body node
-  Next;   //Takes "BEGIN"
+  bod := TreeElems.AddBodyAndOpen(lex.GetSrcPos);  //Open Body node
+  lex.Next;   //Takes "BEGIN"
   AnalyzeCurBlock;
   TreeElems.CloseElement;  //Close Body node
-  bod.srcEnd := GetSrcPos; //End of body
+  bod.srcEnd := lex.GetSrcPos; //End of body
   if HayError then exit;
   TreeElems.CloseElement; //Close Function body
   if not CaptureStr('END') then exit;
@@ -1550,7 +1544,7 @@ If there is some error, returns FALSE.}
 begin
   if ConstBool then begin
     //Generates a boolean constant.
-    AddExpressionConstBool('else', true, GetSrcPos);
+    AddExpressionConstBool('else', true, lex.GetSrcPos);
   end else begin
     //Get the boolean expression
 //    OnExprStart;
@@ -1564,34 +1558,6 @@ begin
     ProcComments;
   end;
   exit(true);  //No hay error
-end;
-function TAnalyzer.OpenContextFrom(filePath: string): boolean;
-{Abre un contexto con el archivo indicado. Si lo logra abrir, devuelve TRUE.}
-var
-  strList: TStrings;
-  notFound: boolean;
-begin
-  //Primero ve si puede obteenr acceso directo al contenido del archivo
-  if OnRequireFileString<>nil then begin
-    //Hace la consulta a través del evento
-    strList := nil;
-    OnRequireFileString(filePath, strList);
-    if strList=nil then begin
-      //No hay acceso directo al contenido. Carga de disco
-      //debugln('>disco:'+filePath);
-      NewContextFromFile(filePath, notFound);
-      Result := not notFound;  //El único error es cuando no se encuentra el archivo.
-    end else begin
-      //Nos están dando el acceso al contenido. Usamos "strList"
-      NewContextFromTStrings(strList, filePath);
-      Result := true;
-    end;
-  end else begin
-    //No se ha establecido el evento. Carga de disco
-    //debugln('>disco:'+filePath);
-    NewContextFromFile(filePath, notFound);
-    Result := not notFound;  //El único error es cuando no se encuentra el archivo.
-  end;
 end;
 function TAnalyzer.AnalyzeStructBody: boolean;
 {Compila el cuerpo de un THEN, ELSE, WHILE, ... considerando el modo del compilador.
@@ -1667,26 +1633,26 @@ begin
   if not GetCondition(ex) then exit;
   if not CaptureStr('THEN') then exit; //toma "then"
   //Compile the THEN part.
-  TreeElems.AddElementBlockAndOpen(GetSrcPos);  //Open block
+  TreeElems.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
   if not AnalyzeStructBody then exit;
   TreeElems.CloseElement;  //Close block
   //Compila los ELSIF que pudieran haber
-  while UpCase(token) = 'ELSIF' do begin
-    Next;   //toma "elsif"
+  while UpCase(lex.token) = 'ELSIF' do begin
+    lex.Next;   //toma "elsif"
     if not GetCondition(ex) then exit;
     if not CaptureStr('THEN') then exit;  //toma "then"
     //Compila el cuerpo pero sin código
-    TreeElems.AddElementBlockAndOpen(GetSrcPos);  //Open block
+    TreeElems.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
     if not AnalyzeStructBody then exit;
     TreeElems.CloseElement;  //Close block
   end;
   //Compila el ELSE final, si existe.
-  if Upcase(token) = 'ELSE' then begin
+  if Upcase(lex.token) = 'ELSE' then begin
     //Hay bloque ELSE, pero no se ejecutará nunca
-    Next;   //Takes  "else"
+    lex.Next;   //Takes  "else"
     //An "else" is similar to a ELSIF true
     GetCondition(ex, true);  //Create condiiton block with a fixed TRUE constant.
-    TreeElems.AddElementBlockAndOpen(GetSrcPos);  //Open block
+    TreeElems.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
     if not AnalyzeStructBody then exit;
     TreeElems.CloseElement;  //Close block
     if not VerifyEND then exit;
@@ -1702,7 +1668,7 @@ begin
   if not GetCondition(ex) then exit;  //Condición
   if not CaptureStr('DO') then exit;  //toma "do"
   //Aquí debe estar el cuerpo del "while"
-  TreeElems.AddElementBlockAndOpen(GetSrcPos);  //Open block
+  TreeElems.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
   if not AnalyzeStructBody then exit;
   TreeElems.CloseElement;  //Close block
   if not VerifyEND then exit;
@@ -1712,11 +1678,11 @@ procedure TAnalyzer.AnalyzeREPEAT;
 var
   ex: TAstExpress;
 begin
-  TreeElems.AddElementBlockAndOpen(GetSrcPos);  //Open block
+  TreeElems.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
   AnalyzeCurBlock;
   TreeElems.CloseElement;  //Close block
   if HayError then exit;
-  SkipWhites;
+  lex.SkipWhites;
   if not CaptureStr('UNTIL') then exit; //toma "until"
   if not GetCondition(ex) then exit;
 end;
@@ -1724,7 +1690,7 @@ procedure TAnalyzer.AnalyzeFORFirstAsign(out idx, valIni: TAstExpress);
 var
   Op1: TAstExpress;
 begin
-  Next;         //Takes "FOR"
+  lex.Next;         //Takes "FOR"
   //Generates index asignment
   {Get the first asignment: i:=0; }
   Op1 := GetExpression(0);
@@ -1749,7 +1715,7 @@ begin
     GenError(ER_ONL_BYT_WORD);
     exit;
   end;
-  SkipWhites;
+  lex.SkipWhites;
   valIni := TAstExpress(Op1.elements[1]);
 end;
 procedure TAnalyzer.AnalyzeFOR;
@@ -1763,11 +1729,11 @@ procedure TAnalyzer.AnalyzeFOR;
     _comp, xvar: TAstExpress;
   begin
     //Create the _comp() expression:
-    _comp := CreateExpression('', typNull, otFunct, GetSrcPos);
+    _comp := CreateExpression('', typNull, otFunct, lex.GetSrcPos);
     //Add the new expression
     TreeElems.AddElementAndOpen(_comp);
     //Create a new variable expression "i<=..." or "i<..." or "i=...".
-    xvar := CreateExpression(varComp.name, varComp.Typ, otVariab, GetSrcPos);
+    xvar := CreateExpression(varComp.name, varComp.Typ, otVariab, lex.GetSrcPos);
     SetVariabCA(xvar, varComp.vardec);
     TreeElems.AddElement(xvar);
     //Add the operand for expression "i<=..." or "i<..." or "i=...".
@@ -1798,11 +1764,11 @@ procedure TAnalyzer.AnalyzeFOR;
     Op1, xvar: TAstExpress;
   begin
     //Use reference sifFunInc" to access directly to function Inc().
-    Op1 := CreateExpression(sifFunInc.name, sifFunInc.retType, otFunct, GetSrcPos);
+    Op1 := CreateExpression(sifFunInc.name, sifFunInc.retType, otFunct, lex.GetSrcPos);
     Op1.fundec := sifFunInc;
     TreeElems.AddElementAndOpen(Op1);  //Open Inc()
     //Create a new variable for the expression "i<..."
-    xvar := CreateExpression(idx.name, idx.Typ, otVariab, GetSrcPos);
+    xvar := CreateExpression(idx.name, idx.Typ, otVariab, lex.GetSrcPos);
     SetVariabCA(xvar, idx.vardec);
     TreeElems.AddElement(xvar);
     TreeElems.CloseElement;  //Close Inc()
@@ -1810,7 +1776,7 @@ procedure TAnalyzer.AnalyzeFOR;
 var
   idx, valIni, valFin, tmpVar, _lequ: TAstExpress;
 begin
-  TreeElems.AddElementSentAndOpen(GetSrcPos, sntFOR);  //Open sentence
+  TreeElems.AddElementSentAndOpen(lex.GetSrcPos, sntFOR);  //Open sentence
 
   AnalyzeFORFirstAsign(idx, valIni);
   if HayError then exit;
@@ -1822,7 +1788,7 @@ begin
 
   if not CaptureStr('DO') then exit;  //toma "do"
   //Aquí debe estar el cuerpo del "for"
-  TreeElems.AddElementBlockAndOpen(GetSrcPos);  //Open block
+  TreeElems.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
   if not AnalyzeStructBody then exit;
   //Agrega instrucción de incremento.
   CreateInc(idx);
@@ -1948,12 +1914,12 @@ begin
     exit;
   end;
   ProcComments;
-  if tokType in [tkIdentifier, tkKeyword] then begin
-    tokUp := Upcase(token);
+  if lex.tokType in [tkIdentifier, tkKeyword] then begin
+    tokUp := Upcase(lex.token);
     if tokUp = 'BEGIN' then begin
       //Es bloque
-      Next;  //toma "begin"
-      TreeElems.AddElementBlockAndOpen(GetSrcPos);  //Open block
+      lex.Next;  //toma "begin"
+      TreeElems.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
       AnalyzeCurBlock;   //Recursive call
       TreeElems.CloseElement;  //Close block
       if HayError then exit;
@@ -1961,8 +1927,8 @@ begin
       ProcComments;
       //puede salir con error
     end else if tokUp = 'IF' then begin
-      TreeElems.AddElementSentAndOpen(GetSrcPos, sntIF);  //Open sentence
-      Next;         //Takes "if"
+      TreeElems.AddElementSentAndOpen(lex.GetSrcPos, sntIF);  //Open sentence
+      lex.Next;         //Takes "if"
       AnalyzeIF;
       if HayError then begin
         exit;
@@ -1973,8 +1939,8 @@ begin
       end;
       TreeElems.CloseElement;  //Close sentence
     end else if tokUp = 'WHILE' then begin
-      TreeElems.AddElementSentAndOpen(GetSrcPos, sntWHILE);  //Open sentence
-      Next;         //Takes "while"
+      TreeElems.AddElementSentAndOpen(lex.GetSrcPos, sntWHILE);  //Open sentence
+      lex.Next;         //Takes "while"
       AnalyzeWHILE;
       if HayError then begin
         exit;
@@ -1985,8 +1951,8 @@ begin
       end;
       TreeElems.CloseElement;  //Close sentence
     end else if tokUp = 'REPEAT' then begin
-      TreeElems.AddElementSentAndOpen(GetSrcPos, sntREPEAT);  //Open sentence
-      Next;         //Takes "repeat"
+      TreeElems.AddElementSentAndOpen(lex.GetSrcPos, sntREPEAT);  //Open sentence
+      lex.Next;         //Takes "repeat"
       AnalyzeREPEAT;
       if HayError then begin
         exit;
@@ -2010,7 +1976,7 @@ begin
     end else begin
       AnalyzeExpression;
     end;
-  end else if token = '(' then begin
+  end else if lex.token = '(' then begin
     AnalyzeExpression;
   end else begin
     //Any other thing.
@@ -2023,16 +1989,16 @@ procedure TAnalyzer.AnalyzeCurBlock;
 de archivo. }
 begin
   ProcComments;
-  while not atEof and (tokType<>tkBlkDelim) do begin
+  while not lex.atEof and (lex.tokType<>tkBlkDelim) do begin
     //se espera una expresión o estructura
     AnalyzeSentence;
     if HayError then exit;   //aborta
     //se espera delimitador
-    if atEof then break;  //sale por fin de archivo
+    if lex.atEof then break;  //sale por fin de archivo
     //busca delimitador
     ProcComments;
     //Puede terminar con un delimitador de bloque
-    if tokType=tkBlkDelim then break;
+    if lex.tokType=tkBlkDelim then break;
     //Pero lo común es que haya un delimitador de expresión
     if not CaptureTok(';') then exit;
     ProcComments;  //Puede haber Directivas o ASM también
@@ -2044,11 +2010,11 @@ exploración del archivo.}
 begin
   ProcCommentsNoExec;  //Solo es validación, así que no debe ejecutar nada
   //Busca UNIT
-  if lowercase(token) = 'unit' then begin
-    curCtx.StartScan;   //retorna al inicio
+  if lowercase(lex.token) = 'unit' then begin
+    lex.curCtx.StartScan;   //retorna al inicio
     exit(true);
   end;
-  curCtx.StartScan;   //retorna al inicio
+  lex.curCtx.StartScan;   //retorna al inicio
   exit(false);
 end;
 //Compilación de secciones
@@ -2061,18 +2027,18 @@ var
   p: TContextState;
   ufound: Boolean;
 begin
-  if lowercase(token) = 'uses' then begin
-    Next;  //Go to the name
+  if lowercase(lex.token) = 'uses' then begin
+    lex.Next;  //Go to the name
     //Takes each unit
     repeat
       ProcComments;
       //ahora debe haber un identificador
-      if tokType <> tkIdentifier then begin
+      if lex.tokType <> tkIdentifier then begin
         GenError(ER_IDEN_EXPECT);
         exit;
       end;
       //hay un identificador de unidad
-      uName := token;
+      uName := lex.token;
       uni := CreateEleUnit(uName);
       //Verifica si existe ya el nombre de la unidad
       if NameExistsIn(uni.uname, TreeElems.curNode.elements) then begin
@@ -2080,20 +2046,20 @@ begin
         uni.Destroy;
         exit;
       end;
-      uni.srcDec := GetSrcPos;   //guarda posición de declaración
+      uni.srcDec := lex.GetSrcPos;   //guarda posición de declaración
       uName := uName + '.pas';  //nombre de archivo
 {----}TreeElems.AddElementAndOpen(uni);
       //Ubica al archivo de la unidad
-      p := GetCtxState;   //Se debe guardar la posición antes de abrir otro contexto
+      p := lex.GetCtxState;   //Se debe guardar la posición antes de abrir otro contexto
       //Primero busca en la misma ubicación del archivo fuente
       uPath := ExtractFileDir(mainFile) + DirectorySeparator + uName;
-      if OpenContextFrom(uPath) then begin
+      if lex.OpenContextFrom(uPath) then begin
         uni.srcFile := uPath;   //Guarda el archivo fuente
       end else begin
          //No lo encontró, busca en las carpetas de librerías.
          ufound := false;
          for upath in unitPaths do begin
-           if OpenContextFrom(uPath + uName) then begin
+           if lex.OpenContextFrom(uPath + uName) then begin
              uni.srcFile := uPath + uName;  //Guarda el archivo fuente
              ufound := true;
              break;
@@ -2106,13 +2072,13 @@ begin
       end;
       //Aquí ya se puede realizar otra exploración, como si fuera el archivo principal
       DoAnalyzeUnit(uni);
-      SetCtxState(p); //*** No debería ser necesario salvar y restaurar estados si se usa "autoReturn" como se hace en TParserDirecBase.ProcINCLUDE().
+      lex.SetCtxState(p); //*** No debería ser necesario salvar y restaurar estados si se usa "autoReturn" como se hace en TParserDirecBase.ProcINCLUDE().
       if HayError then exit;  //El error debe haber guardado la ubicación del error
 {----}TreeElems.CloseElement; //cierra espacio de nombres de la función
-      Next;  //toma nombre
-      SkipWhites;
-      if token <> ',' then break; //sale
-      Next;  //toma la coma
+      lex.Next;  //toma nombre
+      lex.SkipWhites;
+      if lex.token <> ',' then break; //sale
+      lex.Next;  //toma la coma
     until false;
     if not CaptureDelExpres then exit;
   end;
@@ -2128,107 +2094,107 @@ begin
   ClearError;
   ProcComments;
   //Busca UNIT
-  if lowercase(token) = 'unit' then begin
-    Next;  //pasa al nombre
+  if lowercase(lex.token) = 'unit' then begin
+    lex.Next;  //pasa al nombre
     ProcComments;
-    if atEof then begin
+    if lex.atEof then begin
       GenError('Name of unit expected.');
       exit;
     end;
-    if UpCase(token)<>uni.uname then begin
+    if UpCase(lex.token)<>uni.uname then begin
       GenError('Name of unit doesn''t match file name.');
       exit;
     end;
-    Next;  //Toma el nombre y pasa al siguiente
+    lex.Next;  //Toma el nombre y pasa al siguiente
     if not CaptureDelExpres then exit;
   end else begin
     GenError('Expected: UNIT');
     exit;
   end;
   ProcComments;
-  if lowercase(token) <> 'interface' then begin
+  if lowercase(lex.token) <> 'interface' then begin
     GenError('Expected: INTERFACE');
     exit;
   end;
-  Next;   //toma
+  lex.Next;   //toma
   ProcComments;
-  curLocation := locInterface;
-  if atEof then begin
+  lex.curLocation := locInterface;
+  if lex.atEof then begin
     GenError('Expected "uses", "var", "type", "const" or "implementation".');
     exit;
   end;
   ProcComments;
   //Busca USES
   AnalyzeUsesDeclaration;
-  if atEof then begin
+  if lex.atEof then begin
     GenError('Expected "var", "type" or "const".');
     exit;
   end;
-  curLocation := locInterface;  //Restore right location
+  lex.curLocation := locInterface;  //Restore right location
   ProcComments;
 //  Cod_StartProgram;  //Se pone antes de codificar procedimientos y funciones
   if HayError then exit;
   //Empiezan las declaraciones
   while StartOfSection do begin
-    tokL := lowercase(token);
+    tokL := lowercase(lex.token);
     if tokL = 'var' then begin
-      Next;    //lo toma
-      while not StartOfSection and (lowercase(token) <>'implementation') do begin
+      lex.Next;    //lo toma
+      while not StartOfSection and (lowercase(lex.token) <>'implementation') do begin
         AnalyzeVarDeclar;  //marca como "IsInterface"
         if HayError then exit;;
       end;
     end else if tokL = 'type' then begin
-      Next;    //lo toma
-      while not StartOfSection and (lowercase(token) <>'implementation') do begin
+      lex.Next;    //lo toma
+      while not StartOfSection and (lowercase(lex.token) <>'implementation') do begin
         AnalyzeTypeDeclar(locInterface);
         if HayError then exit;
       end;
     end else if tokL = 'const' then begin
-      Next;    //lo toma
-      while not StartOfSection and (lowercase(token)<>'implementation') do begin
+      lex.Next;    //lo toma
+      while not StartOfSection and (lowercase(lex.token)<>'implementation') do begin
         AnalyzeConstDeclar;
         if HayError then exit;;
       end;
     end else if tokL = 'procedure' then begin
-      Next;    //lo toma
+      lex.Next;    //lo toma
       AnalyzeProcDeclar(nil);
       if HayError then exit;
     end else begin
-      GenError(ER_NOT_IMPLEM_, [token]);
+      GenError(ER_NOT_IMPLEM_, [lex.token]);
       exit;
     end;
   end;
   ProcComments;
-  if lowercase(token) <> 'implementation' then begin
+  if lowercase(lex.token) <> 'implementation' then begin
     GenError('Expected: IMPLEMENTATION');
     exit;
   end;
-  Next;   //toma
+  lex.Next;   //toma
   /////////////////  IMPLEMENTATION /////////////////////
   ProcComments;
   //Explora las declaraciones e implementaciones
-  curLocation := locImplement;
+  lex.curLocation := locImplement;
   //Empiezan las declaraciones
   while StartOfSection do begin
-    tokL := lowercase(token);
+    tokL := lowercase(lex.token);
     if tokL = 'var' then begin
-      Next;    //lo toma
+      lex.Next;    //lo toma
       while not StartOfSection and (tokL <>'end') do begin
         AnalyzeVarDeclar;
         if HayError then exit;;
       end;
     end else if tokL = 'const' then begin
-      Next;    //lo toma
-      while not StartOfSection and (lowercase(token) <>'end') do begin
+      lex.Next;    //lo toma
+      while not StartOfSection and (lowercase(lex.token) <>'end') do begin
         AnalyzeConstDeclar;
         if HayError then exit;;
       end;
     end else if tokL = 'procedure' then begin
-      Next;    //lo toma
+      lex.Next;    //lo toma
       AnalyzeProcDeclar(nil);  //Compila en IMPLEMENTATION
       if HayError then exit;
     end else begin
-      GenError(ER_NOT_IMPLEM_, [token]);
+      GenError(ER_NOT_IMPLEM_, [lex.token]);
       exit;
     end;
   end;
@@ -2270,22 +2236,22 @@ begin
   ClearError;
   ProcComments;
   //Busca PROGRAM
-  tokL := lowercase(token);
+  tokL := lowercase(lex.token);
   if tokL = 'unit' then begin
     //Se intenta compilar una unidad
     GenError('Expected a program. No a unit.');
     exit;
   end else if tokL = 'program' then begin
-    Next;  //pasa al nombre
+    lex.Next;  //pasa al nombre
     ProcComments;
-    if atEof then begin
+    if lex.atEof then begin
       GenError(ER_PROG_NAM_EX);
       exit;
     end;
-    Next;  //Toma el nombre y pasa al siguiente
+    lex.Next;  //Toma el nombre y pasa al siguiente
     if not CaptureDelExpres then exit;
   end;
-  if atEof then begin
+  if lex.atEof then begin
     GenError('Expected "program", "begin", "var", "type" or "const".');
     exit;
   end;
@@ -2293,7 +2259,7 @@ begin
   //Busca USES
   if HayError then exit;  //AnalyzeUsesDeclaration, va a limpiar "HayError"
   AnalyzeUsesDeclaration;
-  if atEof then begin
+  if lex.atEof then begin
     GenError('Expected "begin", "var", "type" or "const".');
     exit;
   end;
@@ -2301,52 +2267,52 @@ begin
   {*** De momento, se comenta
   callStartProgram;  //Se pone antes de codificar procedimientos y funciones
   }
-  curLocation := locMain;
+  lex.curLocation := locMain;
   if HayError then exit;
   //Empiezan las declaraciones
   while StartOfSection do begin
-    tokL := lowercase(token);
+    tokL := lowercase(lex.token);
     if tokL = 'var' then begin
-      Next;    //lo toma
-      while not StartOfSection and (lowercase(token) <>'begin') do begin
+      lex.Next;    //lo toma
+      while not StartOfSection and (lowercase(lex.token) <>'begin') do begin
         AnalyzeVarDeclar;
         if HayError then exit;
       end;
     end else if tokL = 'type' then begin
-      Next;    //lo toma
-      while not StartOfSection and (lowercase(token) <>'begin') do begin
+      lex.Next;    //lo toma
+      while not StartOfSection and (lowercase(lex.token) <>'begin') do begin
         AnalyzeTypeDeclar(locMain);
         if HayError then exit;
       end;
     end else if tokL = 'const' then begin
-      Next;    //lo toma
-      while not StartOfSection and (lowercase(token) <>'begin') do begin
+      lex.Next;    //lo toma
+      while not StartOfSection and (lowercase(lex.token) <>'begin') do begin
         AnalyzeConstDeclar;
         if HayError then exit;
       end;
     end else if tokL = 'procedure' then begin
-      Next;    //lo toma
+      lex.Next;    //lo toma
       AnalyzeProcDeclar(nil);
       if HayError then exit;
     end else if tokL = 'inline' then begin
-      Next;    //lo toma
+      lex.Next;    //lo toma
       AnalyzeInlineDeclar(locMain);
       if HayError then exit;
     end else begin
-      GenError(ER_NOT_IMPLEM_, [token]);
+      GenError(ER_NOT_IMPLEM_, [lex.token]);
       exit;
     end;
   end;
   //Procesa cuerpo
-  if Upcase(token) <> 'BEGIN' then begin
+  if Upcase(lex.token) <> 'BEGIN' then begin
     GenError('Expected "begin", "var", "type" or "const".');
     exit;
   end;
-  bod := TreeElems.AddBodyAndOpen(GetSrcPos);  //Abre nodo Body
-  Next;   //Takes "BEGIN"
+  bod := TreeElems.AddBodyAndOpen(lex.GetSrcPos);  //Abre nodo Body
+  lex.Next;   //Takes "BEGIN"
   AnalyzeCurBlock;   //Compiles the body
   TreeElems.CloseElement;   //No debería ser tan necesario.
-  bod.srcEnd := GetSrcPos;
+  bod.srcEnd := lex.GetSrcPos;
   if HayError then exit;
   //Verifica si todas las funciones FORWARD, se implementaron
   for elem in TreeElems.curNode.elements do if elem.idClass = eleFuncDec then begin
