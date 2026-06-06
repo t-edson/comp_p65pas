@@ -1606,7 +1606,7 @@ leyendo varias líneas sucesivas del código fuente.}
 var
   lin: String;
   dmac: TDirMacro;
-  p: TMsgInfo;
+  p: TSrcPos;
   dvar: TDirVar;
   dins: TDirInstruc;
   dlin: SizeInt;
@@ -1620,7 +1620,7 @@ begin
   end else begin
     //Es un error, pero es salvable.
     //Ubicamos el error, "manualmente", porque aún no hemos explorado con el lexer.
-    p := lex.GetSrcInfo;
+    p := lex.GetSrcPos;
     p.col := tokIni + dlin + 1;  //columna al final
     GenError(ER_EXPECTED_BR, [], p);
   end;
@@ -1666,7 +1666,7 @@ begin
     if DefinedInstruc(lexDir.ReadToken, dins) then begin
       dins.OnCall();
     end else if DefinedMacro(lexDir.ReadToken, dmac) then begin
-      p := lex.GetSrcInfo;   //Guarda posición del token
+      p := lex.GetSrcPos;   //Guarda posición del token
       lex.Next;  //pasa la directiva
       lex.NewContextFromText(
         dmac.value, //Pasa a explorar contenido de la macro como cadena
@@ -1679,7 +1679,7 @@ begin
       ctxChanged := true;  //Marca bandera para indicar que se ha cambiado de contexto
     end else if DefinedVar(lexDir.ReadToken, dvar) then begin
       //Es variable
-      p := lex.GetSrcInfo;   //Guarda posición del token
+      p := lex.GetSrcPos;   //Guarda posición del token
       lex.Next;  //pasa la directiva
       lex.NewContextFromText(
         dvar.valor.valStr, //Pasa a explorar valor de la variable como texto

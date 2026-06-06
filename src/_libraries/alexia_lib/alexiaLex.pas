@@ -154,8 +154,10 @@ type
   TSrcPosArray = array of TSrcPos;
 type  //Gestor de mensajes
   //Information about a position on the source code.
+  //Used to send messages to the message manager.
   TMsgInfo = object
-    fname  : string;
+    txt    : string;   //Message text
+    fname  : string;   //SOurce file
     row    : integer;  //Row number
     col    : integer;  //Column number
   end;
@@ -171,22 +173,18 @@ type  //Gestor de mensajes
   integración del compilador con una IDE (donde pueden haber otros compialdores) o con
   una consola}
   TMessageManager = class
-  private
-    procedure emit(msgKind: TMessageKind;
-      const Msg: string; const SrcPos: TMsgInfo);
   public
     //Número de errores generados
     nErrors: Integer;              //Número de errores generados
     //Evento que indica que se ha generado un mensaje (Info, Warning or Error)
-    OnMessage: procedure(msgKind: TMessageKind; const Msg: string;
-                         const SrcPos: TMsgInfo) of object;
+    OnMessage: procedure(msgKind: TMessageKind; const msgInfo: TMsgInfo) of object;
     //Evento que indica que se desea generar un mensaje por cuadro de diálogo.
     //El parámetro "mode" indica el tipo de mensaje:
     //  0->Mensaje normal, 1->Mensaje de advertencia, 2->Mensaje de error
     OnMessageBox: procedure(txt: string; mode: integer) of object;
-    procedure warn(const txt: string; const Pos: TMsgInfo);
-    procedure info(const txt: string; const Pos: TMsgInfo);
-    procedure error(const txt: string; const Pos: TMsgInfo);
+    procedure warn(const msgInfo: TMsgInfo);
+    procedure info(const msgInfo: TMsgInfo);
+    procedure error(const msgInfo: TMsgInfo);
     procedure msgbox(const txt: string);
     procedure msgwar(const txt: string);
     procedure msgerr(const txt: string);
@@ -268,9 +266,10 @@ type //Clase "TContext"
     }
     FixErrPos: boolean;     {Indica que los mensajes de error, deben apuntar a una
                              posición fija, y no a la posición en donde se detecta el error.}
-    PreErrPosit: TMsgInfo;  //Posición a usar para el error, cuando se activa FixErrPos.
+    PreErrPosit: TSrcPos;  //Posición a usar para el error, cuando se activa FixErrPos.
     PreErrorMsg: string;    {Mensaje previo al mensaje de error, cuando el errror se
-                             genere en este contexto.}
+                             genere en este contexto. Como se va a concatenar con otro
+                             mensaje de error, debería terminar en ": " o ". ".}
   public  //Métodos de inicialización
     function IniCont:Boolean;
     procedure StartScan;
@@ -300,7 +299,10 @@ type  //Lexer TAleLexer
     //Control for position
     function GetSrcPos: TSrcPos; inline;
     procedure SetSrcPos(const srcPos: TSrcPos);
-    function GetSrcInfo: TMsgInfo; inline;
+    function GetMsgInfo(const txt: string): TMsgInfo;
+    function GetMsgInfo(txt: string; const srcPos: TSrcPos): TMsgInfo; inline;
+    function GetMsgInfoE(const txt: string): TMsgInfo;
+    function GetMsgInfoE(const txt: string; const srcPos: TSrcPos): TMsgInfo;
   public //Information for any context
     function ctxId(fileSrc: string): integer;
     function ctxFile(idCtx: integer): string;
@@ -351,24 +353,18 @@ var
 
 implementation
 { TMessageManager }
-procedure TMessageManager.emit(msgKind: TMessageKind; const Msg: string;
-  const SrcPos: TMsgInfo);
+procedure TMessageManager.info(const msgInfo: TMsgInfo);
 begin
-  if Assigned(OnMessage) then
-    OnMessage(msgKind, Msg, SrcPos);
+  if Assigned(OnMessage) then OnMessage(mkInfo, msgInfo);
 end;
-procedure TMessageManager.info(const txt: string; const Pos: TMsgInfo);
+procedure TMessageManager.warn(const msgInfo: TMsgInfo);
 begin
-  if Assigned(OnMessage) then OnMessage(mkInfo, txt, Pos);
+  if Assigned(OnMessage) then OnMessage(mkWarning, msgInfo);
 end;
-procedure TMessageManager.warn(const txt: string; const Pos: TMsgInfo);
-begin
-  if Assigned(OnMessage) then OnMessage(mkWarning, txt, Pos);
-end;
-procedure TMessageManager.error(const txt: string; const Pos: TMsgInfo);
+procedure TMessageManager.error(const msgInfo: TMsgInfo);
 begin
   inc(nErrors);
-  if Assigned(OnMessage) then OnMessage(mkError, txt, Pos);
+  if Assigned(OnMessage) then OnMessage(mkError, msgInfo);
 end;
 procedure TMessageManager.msgbox(const txt: string);
 {Muestra un diñalogo con un mensaje normal}
@@ -1150,10 +1146,11 @@ end;
 {TAleLexer}
 procedure TAleLexer.AleLexerErrorScan(txt: string);
 {El lexer actual ha generado un error.
-Este es el único caso en que TAleLexer genera un error}
+Este es el único caso en que TAleLexer genera un error.
+****** No considera el caso en que el lexer está en modo "FixErrPos"  }
 begin
   //Mandamos el mensaje de error al gestor.
-  msg.error(txt, GetSrcInfo);
+  msg.error(GetMsgInfo(txt));
 end;
 //Information for current context
 function TAleLexer.GetCtxState: TContextState;
@@ -1199,19 +1196,78 @@ begin
     curCtx.col0 := srcPos.col;
   end;
 end;
-function TAleLexer.GetSrcInfo: TMsgInfo;
-{Devuelve información sobre la posición actual en el código fuente}
+function TAleLexer.GetMsgInfo(const txt: string): TMsgInfo;
+{Devuelve un objeto de mensaje (TMsgInfo) con el texto "txt" y la posición actual en el
+código fuente}
 begin
   if curCtx = nil then begin
-    { #todo : ¿Debería haber un objeto srcInfoNull?.}
+    Result.txt := txt;
+    Result.fname := '';
     Result.row := -1;
     Result.col := -1;
-    Result.fname := '';
   end else begin
     //Devuelve información del contexto actual
+    Result.txt := txt;
+    Result.fname := curCtx.fileSrc;
     Result.Row := curCtx.row0;
     Result.Col := curCtx.col0;
-    Result.fname := curCtx.fileSrc;
+  end;
+end;
+function TAleLexer.GetMsgInfoE(const txt: string): TMsgInfo;
+{Devuelve un objeto de mensaje (TMsgInfo) con el texto "txt" y la posición actual en el
+código fuente. Detecta la condición "FixErrPos"}
+begin
+  if curCtx = nil then begin
+    Result.txt := txt;
+    Result.fname := '';
+    Result.row := -1;
+    Result.col := -1;
+  end else begin
+    if curCtx.FixErrPos then begin
+      //El contexto actual, tiene configurado una posición fija para los errores
+      Result.txt := curCtx.PreErrorMsg + txt;  //completa mensaje
+      Result.fname := ctxFile(curCtx.PreErrPosit.idCtx);
+      Result.Row := curCtx.PreErrPosit.row;
+      Result.Col := curCtx.PreErrPosit.col;
+    end else begin
+      Result.txt := txt;
+      Result.fname := curCtx.fileSrc;
+      Result.Row := curCtx.row0;
+      Result.Col := curCtx.col0;
+    end;
+  end;
+end;
+function TAleLexer.GetMsgInfo(txt: string; const srcPos: TSrcPos): TMsgInfo;
+{Devuelve un objeto de mensaje (TMsgInfo) con el texto "txt" y la posición "srcPos"}
+begin
+  //Devuelve información del contexto actual
+  Result.txt := txt;
+  if srcPos.idCtx = -1 then  //Posición nula
+    Result.fname := ''
+  else
+    Result.fname := ctxFile(srcPos.idCtx);
+  Result.Row := srcPos.row;
+  Result.Col := srcPos.col;
+end;
+function TAleLexer.GetMsgInfoE(const txt: string; const srcPos: TSrcPos): TMsgInfo;
+{Devuelve un objeto de mensaje (TMsgInfo) con el texto "txt" y la posición "srcPos".
+Detecta la condición "FixErrPos"}
+begin
+  if (curCtx <> nil) and curCtx.FixErrPos then begin
+    //El contexto actual, tiene configurado una posición fija para los errores
+    Result.txt := curCtx.PreErrorMsg + txt;  //completa mensaje
+    Result.fname := ctxFile(curCtx.PreErrPosit.idCtx);
+    Result.Row := curCtx.PreErrPosit.row;
+    Result.Col := curCtx.PreErrPosit.col;
+  end else begin
+    //Caso normal
+    Result.txt := txt;
+    if srcPos.idCtx = -1 then  //Posición nula
+      Result.fname := ''
+    else
+      Result.fname := ctxFile(srcPos.idCtx);
+    Result.Row := srcPos.row;
+    Result.Col := srcPos.col;
   end;
 end;
 //Information for any context
