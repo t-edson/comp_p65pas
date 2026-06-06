@@ -9,9 +9,9 @@
         <Filename Value="p65pas.lpr"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="66"/>
-        <CursorPos X="40" Y="79"/>
-        <FoldState Value=" T8K23 T5P041 TMQ2]63iM03011 PWe0 T6iS03K"/>
+        <TopLine Value="99"/>
+        <CursorPos X="22" Y="147"/>
+        <FoldState Value=" T8J23 T5O041 TMP2]63iL03011 PWe0 T6iR030"/>
         <UsageCount Value="93"/>
         <Loaded Value="True"/>
       </Unit>
@@ -163,7 +163,7 @@
         <UsageCount Value="7"/>
       </Unit>
     </Units>
-    <JumpHistory HistoryIndex="22">
+    <JumpHistory HistoryIndex="25">
       <Position>
         <Filename Value="CompBase.pas"/>
       </Position>
@@ -254,6 +254,18 @@
       <Position>
         <Filename Value="AstElemP65.pas"/>
         <Caret Line="272" Column="33" TopLine="271"/>
+      </Position>
+      <Position>
+        <Filename Value="p65pas.lpr"/>
+        <Caret Line="95" Column="10" TopLine="82"/>
+      </Position>
+      <Position>
+        <Filename Value="p65pas.lpr"/>
+        <Caret Line="138" Column="52" TopLine="105"/>
+      </Position>
+      <Position>
+        <Filename Value="p65pas.lpr"/>
+        <Caret Line="64" Column="5" TopLine="48"/>
       </Position>
     </JumpHistory>
     <RunParams>
