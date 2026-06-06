@@ -173,18 +173,25 @@ type  //Gestor de mensajes
   integración del compilador con una IDE (donde pueden haber otros compialdores) o con
   una consola}
   TMessageManager = class
-  public
+  public  //Información sobre los mensajes
     //Número de errores generados
-    nErrors: Integer;              //Número de errores generados
+    nErrors: Integer;          //Número de errores generados
+    nWarns : Integer;          //Número de adevrtencias generadas
+    nInfos : Integer;          //Número de mensajes de información
+    function txtNWarnings: String; //Texto descriptivo de la cantidad de advertencias.
+    function txtNErrors: String;   //Texto descriptivo de la cantidad de errores.
+  public  //Manejo de mensajes de consola
     //Evento que indica que se ha generado un mensaje (Info, Warning or Error)
     OnMessage: procedure(msgKind: TMessageKind; const msgInfo: TMsgInfo) of object;
     //Evento que indica que se desea generar un mensaje por cuadro de diálogo.
     //El parámetro "mode" indica el tipo de mensaje:
     //  0->Mensaje normal, 1->Mensaje de advertencia, 2->Mensaje de error
     OnMessageBox: procedure(txt: string; mode: integer) of object;
-    procedure warn(const msgInfo: TMsgInfo);
     procedure info(const msgInfo: TMsgInfo);
+    procedure warn(const msgInfo: TMsgInfo);
     procedure error(const msgInfo: TMsgInfo);
+  public  //Manejo de mensajes en cuadros de diálogos
+
     procedure msgbox(const txt: string);
     procedure msgwar(const txt: string);
     procedure msgerr(const txt: string);
@@ -350,15 +357,38 @@ type  //Lexer TAleLexer
 
 var
   srcPosNull: TSrcPos;  //Object TScrcPos NULL.
+resourcestring
+  MSG_WARN    = 'Warning'       ;   //Singular
+  MSG_WARNS   = 'Warnings'      ;   //Plural
+  MSG_ERROR   = 'Error'         ;   //Singular
+  MSG_ERRORS  = 'Errors'        ;   //Plural
 
 implementation
 { TMessageManager }
+function TMessageManager.txtNWarnings: String;
+begin
+  if nWarns = 1 then begin
+    Result := '1 ' + MSG_WARN;
+  end else begin
+    Result := IntToStr(nWarns) + ' ' + MSG_WARNS;
+  end;
+end;
+function TMessageManager.txtNErrors: String;
+begin
+  if nErrors = 1 then begin
+    Result := '1 ' + MSG_ERROR;
+  end else begin
+    Result := IntToStr(nErrors) + ' ' + MSG_ERRORS;
+  end;
+end;
 procedure TMessageManager.info(const msgInfo: TMsgInfo);
 begin
+  inc(nInfos);
   if Assigned(OnMessage) then OnMessage(mkInfo, msgInfo);
 end;
 procedure TMessageManager.warn(const msgInfo: TMsgInfo);
 begin
+  inc(nWarns);
   if Assigned(OnMessage) then OnMessage(mkWarning, msgInfo);
 end;
 procedure TMessageManager.error(const msgInfo: TMsgInfo);
