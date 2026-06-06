@@ -1146,11 +1146,10 @@ end;
 {TAleLexer}
 procedure TAleLexer.AleLexerErrorScan(txt: string);
 {El lexer actual ha generado un error.
-Este es el único caso en que TAleLexer genera un error.
-****** No considera el caso en que el lexer está en modo "FixErrPos"  }
+Este es el único caso en que TAleLexer genera un error.}
 begin
   //Mandamos el mensaje de error al gestor.
-  msg.error(GetMsgInfo(txt));
+  msg.error(GetMsgInfoE(txt));
 end;
 //Information for current context
 function TAleLexer.GetCtxState: TContextState;

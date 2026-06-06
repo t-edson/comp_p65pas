@@ -61,7 +61,7 @@ public  //Messages
   procedure GenWarn(txt: string; const Args: array of const; const srcPos: TSrcPos);
   procedure GenWarn(txt: string);
   procedure GenWarn(txt: string; const Args: array of const);
-  //Rutinas de generación de error
+  //Rutinas de generación de error. Envolturas para llamar al gestor de mensajes.
   procedure GenError(txt: string; const srcPos: TSrcPos);
   procedure GenError(txt: String; const Args: array of const; const srcPos: TSrcPos);
   procedure GenError(txt: string);
@@ -297,8 +297,6 @@ begin
 end;
 procedure TCompilerBase.GenError(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de error en la posición indicada.}
-{ #todo : Hay que trabajar mejor este proc. tratando de mover lógica  al gestor de
-mensajes o al lexer}
 begin
   msg.error(lex.GetMsgInfoE(txt, srcPos));
 end;
@@ -818,7 +816,7 @@ begin
       decRegis: begin
         //Parameters REGISTER use: A or H,A register. Only can be used once.
         if regAused then begin
-          GenError(ER_RA_HAV_USED, [], par.srcPos);
+          GenError(ER_RA_HAV_USED, par.srcPos);
           exit;
         end;
         regAused := true;  //Activa bandera
@@ -827,7 +825,7 @@ begin
       decRegisA: begin
         //Parameter REGISTER A
         if regAused then begin
-          GenError(ER_RA_HAV_USED, [], par.srcPos);
+          GenError(ER_RA_HAV_USED, par.srcPos);
           exit;
         end;
         regAused := true;  //Activa bandera
@@ -836,7 +834,7 @@ begin
       decRegisX: begin
         //Parameter REGISTER X
         if regXused then begin
-          GenError(ER_RX_HAV_USED, [], par.srcPos);
+          GenError(ER_RX_HAV_USED, par.srcPos);
           exit;
         end;
         regXused := true;  //Activa bandera
@@ -845,7 +843,7 @@ begin
       decRegisY: begin
         //Parameter REGISTER Y
         if regYused then begin
-          GenError(ER_RY_HAV_USED, [], par.srcPos);
+          GenError(ER_RY_HAV_USED, par.srcPos);
           exit;
         end;
         regYused := true;  //Activa bandera

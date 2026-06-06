@@ -1566,7 +1566,7 @@ var
 begin
   p := lex.GetSrcPos;
   p.col := tokIni + lexDir.col0;  //corrige columna
-  GenError(txt, [], p);
+  GenError(txt, p);
 end;
 procedure TParserDirecBase.GenErrorDir(txt: string; const Args: array of const);
 var
