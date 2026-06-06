@@ -259,6 +259,8 @@ Como norma, se podría decir que solo se debe usar, después de haber procesado 
 error anterior.}
 begin
   msg.nErrors := 0;
+  msg.nInfos := 0;
+  msg.nWarns := 0;
 end;
 function TCompilerBase.HayError: boolean;
 begin
