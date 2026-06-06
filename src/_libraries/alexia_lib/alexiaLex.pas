@@ -268,7 +268,7 @@ type //Clase "TContext"
     }
     FixErrPos: boolean;     {Indica que los mensajes de error, deben apuntar a una
                              posición fija, y no a la posición en donde se detecta el error.}
-    PreErrPosit: TSrcPos;  //Posición a usar para el error, cuando se activa FixErrPos.
+    PreErrPosit: TMsgInfo;  //Posición a usar para el error, cuando se activa FixErrPos.
     PreErrorMsg: string;    {Mensaje previo al mensaje de error, cuando el errror se
                              genere en este contexto.}
   public  //Métodos de inicialización

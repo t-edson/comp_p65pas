@@ -55,11 +55,12 @@ public  //Messages
   procedure ClearError;
   function HayError: boolean; inline;          //Flag for errors
   //Rutinas de generación de mensajes
-  procedure GenInfo(txt: string; const srcPos: TSrcPos);
+  procedure GenInfo(txt: string; const msgInfo: TMsgInfo);
   procedure GenInfo(txt: string);
   //Rutinas de generación de advertencias
-  procedure GenWarn(txt: string; const srcPos: TSrcPos);
-  procedure GenWarn(txt: string; const Args: array of const; const srcPos: TSrcPos);
+  procedure GenWarn(txt: string; const msgInfo: TMsgInfo);
+  procedure GenWarn(txt: string; const Args: array of const;
+    const msgInfo: TMsgInfo);
   procedure GenWarn(txt: string);
   procedure GenWarn(txt: string; const Args: array of const);
   //Rutinas de generación de error
@@ -67,6 +68,7 @@ public  //Messages
   procedure GenError(txt: String; const Args: array of const; const srcPos: TSrcPos);
   procedure GenError(txt: string);
   procedure GenError(txt: String; const Args: array of const);
+  procedure GenError(txt: String; const Args: array of const; const srcInfo: TMsgInfo);
 
 protected  //Parser routines
   ExprLevel  : Integer;  //Nivel de anidamiento de la rutina de evaluación de expresiones
@@ -266,46 +268,36 @@ function TCompilerBase.HayError: boolean;
 begin
   exit(msg.nErrors>0);
 end;
-procedure TCompilerBase.GenInfo(txt: string; const srcPos: TSrcPos);
+procedure TCompilerBase.GenInfo(txt: string; const msgInfo: TMsgInfo);
 {Genera un mensaje de Advertencia, en la posición indicada.}
 { #todo : Considerar usar directamente un parámetro de tipo TMsgInfo}
-var
-  msgInfo: TMsgInfo;
 begin
-  msgInfo.row := srcPos.row;
-  msgInfo.col := srcPos.col;
-  msgInfo.fname := lex.ctxFile(srcPos.idCtx);
   msg.info(txt, msgInfo);
 end;
 procedure TCompilerBase.GenInfo(txt: string);
 {Genera un mensaje de Información, en la posición actual del contexto. }
 begin
-  GenInfo(txt, lex.GetSrcPos);
+  msg.info(txt, lex.GetSrcInfo);
 end;
-procedure TCompilerBase.GenWarn(txt: string; const srcPos: TSrcPos);
+procedure TCompilerBase.GenWarn(txt: string; const msgInfo: TMsgInfo);
 {Genera un mensaje de advertencia en la posición indicada.}
 { #todo : Considerar usar directamente un parámetro de tipo TMsgInfo}
-var
-  msgInfo: TMsgInfo;
 begin
-  msgInfo.row := srcPos.row;
-  msgInfo.col := srcPos.col;
-  msgInfo.fname := lex.ctxFile(srcPos.idCtx);
   msg.warn(txt, msgInfo);
 end;
-procedure TCompilerBase.GenWarn(txt: string; const Args: array of const; const srcPos: TSrcPos);
+procedure TCompilerBase.GenWarn(txt: string; const Args: array of const; const msgInfo: TMsgInfo);
 begin
-  GenWarn(Format(txt, Args), srcPos);
+  msg.warn(Format(txt, Args), msgInfo);
 end;
 procedure TCompilerBase.GenWarn(txt: string);
 {Genera un mensaje de Advertencia, en la posición actual del contexto. }
 begin
-  GenWarn(txt, lex.GetSrcPos);
+  msg.warn(txt, lex.GetSrcInfo);
 end;
 procedure TCompilerBase.GenWarn(txt: string; const Args: array of const);
 {Genera un mensaje de Advertencia, en la posición actual del contexto. }
 begin
-  GenWarn(Format(txt, Args));
+  msg.warn(Format(txt, Args), lex.GetSrcInfo);
 end;
 procedure TCompilerBase.GenError(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de error en la posición indicada.}
@@ -324,11 +316,7 @@ begin
     if lex.curCtx.FixErrPos then begin
       //El contexto actual, tiene configurado una posición fija para los errores
       txt := lex.curCtx.PreErrorMsg + txt;  //completa mensaje
-
-      msgInfo.row := lex.curCtx.PreErrPosit.row;
-      msgInfo.col := lex.curCtx.PreErrPosit.col;
-      msgInfo.fname := lex.ctxFile(lex.curCtx.PreErrPosit.idCtx);
-      msg.error(txt, msgInfo);
+      msg.error(txt, lex.curCtx.PreErrPosit);
     end else begin
       msgInfo.row := srcPos.row;
       msgInfo.col := srcPos.col;
@@ -342,16 +330,21 @@ procedure TCompilerBase.GenError(txt: String; const Args: array of const; const 
 begin
   GenError(Format(txt, Args), srcPos);
 end;
-procedure TCompilerBase.GenError(txt: string);
-{Función de acceso rápido para Perr.GenError(). Pasa como posición a la posición
-del contexto actual. Realiza la traducción del mensaje también.}
+procedure TCompilerBase.GenError(txt: String; const Args: array of const; const srcInfo: TMsgInfo);
+{Versión con parámetros de GenError.}
 begin
-  GenError(txt, lex.GetSrcPos);
+  //******** No verifica   lex.curCtx.FixErrPos
+  msg.error(Format(txt, Args), srcInfo);
+end;
+procedure TCompilerBase.GenError(txt: string);
+{Genera un mensaje de error en la posición actual a la posición del contexto actual.}
+begin
+  msg.error(txt, lex.GetSrcInfo);
 end;
 procedure TCompilerBase.GenError(txt: String; const Args: array of const);
 {Genera un mensaje de error en la posición actual del contexto.}
 begin
-  GenError(Format(txt, Args));
+  msg.error(Format(txt, Args), lex.GetSrcInfo);
 end;
 
 function TCompilerBase.EOExpres: boolean; inline;
