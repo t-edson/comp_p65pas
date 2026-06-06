@@ -51,7 +51,6 @@ private
 public  //Messages
   lex: TAleLexer;
   msg: TMessageManager;    //Referencia al gestor de mensajes
-
   procedure ClearError;
   function HayError: boolean; inline;          //Flag for errors
   //Rutinas de generación de mensajes
@@ -59,8 +58,7 @@ public  //Messages
   procedure GenInfo(txt: string);
   //Rutinas de generación de advertencias
   procedure GenWarn(txt: string; const srcPos: TSrcPos);
-  procedure GenWarn(txt: string; const Args: array of const; const srcPos: TSrcPos
-    );
+  procedure GenWarn(txt: string; const Args: array of const; const srcPos: TSrcPos);
   procedure GenWarn(txt: string);
   procedure GenWarn(txt: string; const Args: array of const);
   //Rutinas de generación de error
