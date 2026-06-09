@@ -1323,7 +1323,7 @@ begin
   txtMsg := GetDExpression(0).valStr;
   if HayError then Exit;
   //Solo muestra en compilación y en la primera pasada
-  if enabDirMsgs then msg.msgbox(txtMsg);
+  if enabDirMsgs then msg.msgBox(txtMsg);
   txtMsg := '';
 end;
 procedure TParserDirecBase.ProcMSGWAR;
@@ -1334,7 +1334,7 @@ begin
   txtMsg := GetDExpression(0).valStr;
   if HayError then Exit;
   //Solo muestra en compilación y en la primera pasada
-  if enabDirMsgs then msg.msgwar(txtMsg);
+  if enabDirMsgs then msg.msgWar(txtMsg);
 end;
 procedure TParserDirecBase.ProcMSGERR;
 var
@@ -1344,7 +1344,7 @@ begin
   txtMsg := GetDExpression(0).valStr;
   if HayError then Exit;
   //Solo muestra en compilación y en la primera pasada
-  if enabDirMsgs then msg.msgerr(txtMsg);
+  if enabDirMsgs then msg.msgErr(txtMsg);
 end;
 procedure TParserDirecBase.ProcMODE;
 var
