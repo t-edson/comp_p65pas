@@ -267,8 +267,7 @@ begin
   exit(msg.nErrors>0);
 end;
 procedure TCompilerBase.GenInfo(txt: string; const srcPos: TSrcPos);
-{Genera un mensaje de Advertencia, en la posición indicada.}
-{ #todo : Considerar usar directamente un parámetro de tipo TMsgInfo}
+{Genera un mensaje de información, en la posición indicada.}
 begin
   msg.info(lex.GetMsgInfo(txt, srcPos));
 end;
