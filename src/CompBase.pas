@@ -330,10 +330,6 @@ function TCompilerBase.EOBlock: boolean; inline;
 //Indica si se ha llegado el final de un bloque
 begin
   Result := lex.tokType = tkBlkDelim;
-  {No está implementado aquí, pero en la práctica puede ser conveniente definir un tipo de token
-   como "tnBlkDelim", para mejorar el tiempo de respuesta del procesamiento, de modo que la
-   condición sería:
-  Result := tokType = tnBlkDelim;}
 end;
 function TCompilerBase.CaptureDelExpres: boolean;
 //Verifica si sigue un delimitador de expresión. Si encuentra devuelve false.
@@ -367,8 +363,8 @@ begin
     if ctxChanged then begin
       {Hubo cambio de contexto. Procesamos nuevamente, porque ahora estamos ya en
       otro contexto y se supone que esta llamada a ProcComments(), se hace precisamente
-      para saltar blancos, comentarios, directivas, o bloques ASM.}
-      ProcComments;   {En el nuevo contexto puede haber nuevos comentarios o bloques Asm.}
+      para saltar blancos, comentarios, directivas.}
+      ProcComments;   {En el nuevo contexto puede haber nuevos comentarios.}
       exit;
     end;
   //Pasa a siguiente
@@ -377,7 +373,7 @@ begin
   end;
 end;
 procedure TCompilerBase.ProcCommentsNoExec;
-{Similar a ProcComments(), pero no ejecuta directivas o bloques ASM.}
+{Similar a ProcComments(), pero no ejecuta directivas.}
 begin
   lex.SkipWhites;
   while (lex.tokType = tkDirective) do begin
