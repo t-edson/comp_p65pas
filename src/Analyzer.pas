@@ -2,8 +2,8 @@ unit Analyzer;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, CompBase, AstElemP65,
-  alexiaLex, ParserASM_6502, CompGlobals, AstTree;
+  Classes, SysUtils, Types, alexiaLex, CompBase,
+  ParserASM_6502, CompGlobals, AstElemP65, AstTree;
 type
 
   { TAnalyzer }
@@ -163,19 +163,19 @@ begin
       ProcComments;
       if lex.token = '(' then begin   //Common Pascal syntax ( ... )
         init := GetConstantArray(')', constTyp.itmType);
-        TreeElems.OpenElement(init.Parent);  //Returns to parent because GetConstantArray() has created an opened a node.
+        ast.OpenElement(init.Parent);  //Returns to parent because GetConstantArray() has created an opened a node.
         if HayError then exit(nil);
       end else if lex.token = '[' then begin  //Alternate syntax [ ... ]
         init := GetConstantArray(']', constTyp.itmType);
-        TreeElems.OpenElement(init.Parent);  //Returns to parent because GetConstantArray() has created an opened a node.
+        ast.OpenElement(init.Parent);  //Returns to parent because GetConstantArray() has created an opened a node.
         if HayError then exit(nil);
       end else if lex.tokType = tkString then begin  //Alternate syntax "abc" only for char.
         init := GetConstantArrayStr(arrtyp, false);
-        TreeElems.OpenElement(init.Parent);  //Returns to parent because GetConstantArray() has created an opened a node.
+        ast.OpenElement(init.Parent);  //Returns to parent because GetConstantArray() has created an opened a node.
         if HayError then exit(nil);
       end else if lex.tokType = tkChar then begin  //Could be char like #13.
         init := GetConstantArrayStr(arrtyp, true);
-        TreeElems.OpenElement(init.Parent);  //Returns to parent because GetConstantArray() has created an opened a node.
+        ast.OpenElement(init.Parent);  //Returns to parent because GetConstantArray() has created an opened a node.
         if HayError then exit(nil);
       end else begin
         GenError('Expected "("');
@@ -212,8 +212,8 @@ begin
   if typesCreated>0 then begin
     {This will work because GetExpression() and GetOperand() creates types at the parent
     level.}
-    parentNod :=  TreeElems.curNode.Parent;
-    indexNode :=  TreeElems.curNode.Index;
+    parentNod :=  ast.curNode.Parent;
+    indexNode :=  ast.curNode.Index;
     typDecElem := parentNod.elements[indexNode-1];
     if typDecElem.idClass = eleTypeDec then begin
       mainTypCreated := TAstTypeDec(typDecElem);
@@ -359,7 +359,7 @@ begin
         exit;
       end;
       //Both are arrays of the same item type.
-//      TreeElems.DeleteTypeNode(varTyp);  //We don't need this type *** Genera error en la síntesis si se elimina.
+//      ast.DeleteTypeNode(varTyp);  //We don't need this type *** Genera error en la síntesis si se elimina.
       varTyp := consTyp;  //Use the same array type declaration.
       exit;
     end;
@@ -480,7 +480,7 @@ en el procesamiento de unidades.}
 //        if typeCreated then begin
 //          //Es un tipo nuevo.
 //          typ.location := curLocation;   //Ubicación del tipo (Interface/Implementation/...)
-//          TreeElems.AddElement(typ); {Tendría que agregarse después de abrir el elemento función, no ahora}
+//          ast.AddElement(typ); {Tendría que agregarse después de abrir el elemento función, no ahora}
 //        end else begin
 //          //El tipo ya existe en el arbol de sintaxis
 //        end;
@@ -647,7 +647,7 @@ If some problems happens, Error is generated and the NIL value is returned.
         GenError(ER_CON_EXP_EXP);
         exit;
       end;
-      TreeElems.CloseElement;  //Close element "length"
+      ast.CloseElement;  //Close element "length"
       //Límites físicos predefinidos
       if (sizExp.Typ <> typByte) and (sizExp.Typ <> typWord) then begin
         GenError('Only byte and word types allowed here.');
@@ -678,7 +678,7 @@ If some problems happens, Error is generated and the NIL value is returned.
     itemTypeCreated: boolean;
     arrTyp: TAstTypeDec;
   begin
-    arrTyp := TAstTypeDec(TreeElems.curNode);  //Get Reference to the array.
+    arrTyp := TAstTypeDec(ast.curNode);  //Get Reference to the array.
     if lex.token = '[' then begin
       //Declaración corta
       ReadSizeInBrackets(arrTyp);  //Lee tamaño
@@ -728,7 +728,7 @@ If some problems happens, Error is generated and the NIL value is returned.
       ProcComments;
       if not CaptureStr('TO') then exit;
     end;
-//    reftyp := TreeElems.FindType(token); //Busca elemento
+//    reftyp := ast.FindType(token); //Busca elemento
     reftyp := GetTypeDeclar(refDecStyle, refTypCreated); //Recursive definition
     if refTypCreated then begin
       //Por ahora solo permitiremos identificadores de tipos
@@ -801,7 +801,7 @@ If some problems happens, Error is generated and the NIL value is returned.
             varDec.adicPar.hasInit := nil;
             varDec.location := lex.curLocation;
             //Close variable
-            TreeElems.CloseElement;
+            ast.CloseElement;
             offs += varTyp.size;
             xtyp.objSize += varTyp.size;
           end;
@@ -875,7 +875,7 @@ begin
     TypeCreated := false;
     {Se pensó usar GetOperandIdent(), para identificar al tipo, pero no está preparado
     para procesar tipos y no se espera tanta flexibilidad. Así que se hace "a mano".}
-    ele := TreeElems.FindFirstType(typName);
+    ele := ast.FindFirstType(typName);
     if ele = nil then begin
       //No identifica a este elemento
       GenError('Unknown identifier: %s', [typName]);
@@ -912,7 +912,7 @@ var
   TypeCreated: boolean;
   par: TAstElement;
 begin
-  if TreeElems.curCodCont=nil then TreeElems.curCodCont:=typByte; {Ver comentario de AnalyzeVarDeclar()}
+  if ast.curCodCont=nil then ast.curCodCont:=typByte; {Ver comentario de AnalyzeVarDeclar()}
   Result := GetTypeDeclar(decStyle, TypeCreated);  //lee tipo
   if HayError then exit;
   if TypeCreated then begin
@@ -979,7 +979,7 @@ begin
   lex.Next;
   ProcComments;
   if not CaptureTok('=') then exit;
-  if TreeElems.curCodCont=nil then TreeElems.curCodCont:=typByte; {Ver comentario de AnalyzeVarDeclar()}
+  if ast.curCodCont=nil then ast.curCodCont:=typByte; {Ver comentario de AnalyzeVarDeclar()}
   etyp := GetTypeDeclar(decStyle, typeCreated);
   if HayError then exit;
   //Analiza la declaración
@@ -988,10 +988,10 @@ begin
     //Para este caso, nosotros creamos un tipo nuevo, en  modo copia.
     reftyp := etyp;  //Referencia al tipo { TODO : ¿Y si el tipo es ya una copia? }
     //etyp := CreateEleType(typName, srcPos, reftyp.size, reftyp.catType, reftyp.group);
-    etyp := TreeElems.AddTypeDecAndOpen(srcPos, typName, reftyp.size, reftyp.catType, reftyp.group);
+    etyp := ast.AddTypeDecAndOpen(srcPos, typName, reftyp.size, reftyp.catType, reftyp.group);
     if HayError then exit;  //Can be duplicated
     AddCallerToFromCurr(reftyp);  //Llamada al tipo usado.  { TODO : Validar si se manejan bien las llamadas a los tipos copia. }
-    TreeElems.CloseElement;  //Close type
+    ast.CloseElement;  //Close type
     {Crea la copia del tipo del sistema, que básicamente es el mismo tipo, solo que
     con otro nombre y que además, ahora, está en el árbol de sintaxis, por lo tanto
     tiene otras reglas de alcance.}
@@ -1001,7 +1001,7 @@ begin
     {Las declaraciones elaboradas de tipo (Algo como TYPE fool = array[] of ...),
     crean siempre nuevos tipos.}
     //Validación de duplicidad de nombre.
-    if NameExistsIn(UpCase(typName), TreeElems.curNode.elements) then begin
+    if NameExistsIn(UpCase(typName), ast.curNode.elements) then begin
       GenError(ER_DUPLIC_IDEN, [etyp.name], srcpos);
       exit;
     end;
@@ -1065,7 +1065,7 @@ begin
       consDec.value := @consIni.value;
     end;
 
-    TreeElems.CloseElement;  //Close constant declaration.
+    ast.CloseElement;  //Close constant declaration.
 
   end else begin
     GenError('Only one constant can be initialized.');
@@ -1132,7 +1132,7 @@ begin
     end;
     AddCallerToFromCurr(varTyp);
     UpdateVarDec(varDec, varTyp, adicVarDec);
-    TreeElems.CloseElement;  //Close variable
+    ast.CloseElement;  //Close variable
   end else begin  //Multiple variables declaration
     //Add Variable declarations element to the AST
     for i := 0 to high(varNames) do begin
@@ -1156,7 +1156,7 @@ begin
       inicialización.}
       AddCallerToFromCurr(varTyp);
       UpdateVarDec(varDec, varTyp, adicVarDec);
-      TreeElems.CloseElement;  //Close variable
+      ast.CloseElement;  //Close variable
     end;
   end;
   if not CaptureDelExpres then exit;
@@ -1185,7 +1185,7 @@ procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TAstTypeDec);
     uname := upcase(procName);
     {This a doble-scanning, to detect: Existence of declaration in INTERFACE, and
     name duplicity in IMPLEMENTATION. }
-    for ele in TreeElems.curNode.elements do begin
+    for ele in ast.curNode.elements do begin
       if ele.uname = uname then begin
         //Match the name.
         if ele.location = locInterface then begin
@@ -1233,7 +1233,7 @@ procedure TAnalyzer.AnalyzeProcDeclar(objContainer: TAstTypeDec);
     //Busca en el entorno para ver si está duplicada o con FORWARD.
     //Se puede explorar todo el AST sin temor porque la función que estamos buscando
     //aún no está registrada en el AST.
-    for ele in TreeElems.curNode.elements do begin
+    for ele in ast.curNode.elements do begin
       if ele.uname = uname then begin
         //Match the name.
         if ele.idClass = eleFuncDec then begin
@@ -1306,7 +1306,7 @@ begin
       GenError('Cannot use FORWARD in INTERFACE section.');
       exit;
     end;
-    if TreeElems.FunctionExistInCur(procName, pars) then begin
+    if ast.FunctionExistInCur(procName, pars) then begin
       GenError(ER_DUPLIC_FUNC_,[procName], srcPos);
       exit;
     end;
@@ -1341,7 +1341,7 @@ begin
     ReadProcHeader(procName, retType, srcPos, pars, IsInterrupt, IsForward);
     if HayError then exit;
     if IsForward then begin
-      if TreeElems.FunctionExistInCur(procName, pars) then begin
+      if ast.FunctionExistInCur(procName, pars) then begin
         GenError(ER_DUPLIC_FUNC_,[procName], srcPos);
         exit;
       end;
@@ -1396,13 +1396,13 @@ begin
     exit;
   end;
   //Ahora empieza el cuerpo de la función o las declaraciones
-  bod := TreeElems.AddBodyAndOpen(lex.GetSrcPos);  //Open Body node
+  bod := ast.AddBodyAndOpen(lex.GetSrcPos);  //Open Body node
   lex.Next;   //Takes "BEGIN"
   AnalyzeCurBlock;
-  TreeElems.CloseElement;  //Close Body node
+  ast.CloseElement;  //Close Body node
   bod.srcEnd := lex.GetSrcPos; //End of body
   if HayError then exit;
-  TreeElems.CloseElement; //Close Function body
+  ast.CloseElement; //Close Function body
   if not CaptureStr('END') then exit;
   if not CaptureTok(';') then exit;
   ProcComments;  //Quita espacios. Puede salir con error
@@ -1429,7 +1429,7 @@ begin
 //    ReadInlineHeader(procName, retType, srcPos, pars);
 //    if HayError then exit;
 //    //Verifica si es implementación de una función en la INTERFACE o no.
-//    ParentElems := TreeElems.curNode.elements;  //Para comparar
+//    ParentElems := ast.curNode.elements;  //Para comparar
 //    {Se supone que esta exploración solo se hará en la primera pasada, así que no hay
 //    problema, en hacer una exploración común.}
 //    //debugln('Buscando declaración de %s en nodo %s desde 0 hasta %d', [fun.name, ParentElems.name, ParentElems.elements.Count-2]);
@@ -1462,7 +1462,7 @@ begin
 //    end;
 //    if Found then begin
 //      //Es una implementación. No vale la pena tener otro nodo.
-//      TreeElems.OpenElement(fun);  //Abre el nodo anterior
+//      ast.OpenElement(fun);  //Abre el nodo anterior
 //    end else begin
 //      //Debe ser una función privada. No declarada en Interface.
 //      //La creamos con seguridad porque ya verificamos que no hay conflicto en IMPLEMENTATION.
@@ -1475,7 +1475,7 @@ begin
 //    //Es una compilación en el programa principal. ¿Y si es FORWARD?
 //    ReadInlineHeader(procName, retType, srcPos, pars);  //Procesa el encabezado
 //    if HayError then exit;
-//    if TreeElems.InlineExistInCur(procName, pars) then begin
+//    if ast.InlineExistInCur(procName, pars) then begin
 //      GenErrorPos(ER_DUPLIC_FUNC_,[procName], srcPos);
 //      exit;
 //    end;
@@ -1517,10 +1517,10 @@ begin
 //  fun.posCtx := PosAct;  //Guarda posición para la segunda compilación
 //  bod := CreateBody;   //crea elemento del cuerpo de la función
 //  bod.srcDec := GetSrcPos;
-//  TreeElems.AddElementAndOpen(bod);  //Abre nodo Body
+//  ast.AddElementAndOpen(bod);  //Abre nodo Body
 //  CompileInlineBody(fun);
-//  TreeElems.CloseElement;  //Cierra Nodo Body
-//  TreeElems.CloseElement; //cierra espacio de nombres de la función
+//  ast.CloseElement;  //Cierra Nodo Body
+//  ast.CloseElement; //cierra espacio de nombres de la función
 //  bod.srcEnd := GetSrcPos;  //Fin de cuerpo
 ////  fun.adrReturn := pic.iRam-1;  //Guarda dirección del i_RETURN
 //  if not CaptureTok(';') then exit;
@@ -1604,25 +1604,25 @@ begin
   _setaux.fundec := funSet;
 
   //Add the new assigment before the main
-  TreeElems.openElement(curContainer);
-  TreeElems.AddElement(_setaux, 0);    //Add a new assigmente before
-  TreeElems.openElement(_setaux);
+  ast.openElement(curContainer);
+  ast.AddElement(_setaux, 0);    //Add a new assigmente before
+  ast.openElement(_setaux);
 
   //Add first operand (variable) of the assignment.
   Op1aux := CreateExpression(_varaux.name, _varaux.typ, otVariab, Op.srcDec);
   SetVariabCA(Op1aux, _varaux);
-  TreeElems.addElement(Op1aux);
+  ast.addElement(Op1aux);
   AddCallerToFromCurr(_varaux); //Add reference to auxiliar variable.
 
   //Move the second operand to the previous _set created
   OpParent := Op.Parent;    //Keep current parent reference.
   OpPos := Op.Index;        //Keep current operand position.
-  TreeElems.ChangeParentTo(_setaux, Op);
+  ast.ChangeParentTo(_setaux, Op);
   //Replace the missed function
-  TreeElems.openElement(OpParent);
+  ast.openElement(OpParent);
   Op2aux := CreateExpression(_varaux.name, _varaux.typ, otVariab, Op.srcDec);
   SetVariabCA(Op2aux, _varaux);
-  TreeElems.addElement(Op2aux, OpPos);
+  ast.addElement(Op2aux, OpPos);
   exit(_setaux);
 end;
 procedure TAnalyzer.AnalyzeIF;
@@ -1633,18 +1633,18 @@ begin
   if not GetCondition(ex) then exit;
   if not CaptureStr('THEN') then exit; //toma "then"
   //Compile the THEN part.
-  TreeElems.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
+  ast.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
   if not AnalyzeStructBody then exit;
-  TreeElems.CloseElement;  //Close block
+  ast.CloseElement;  //Close block
   //Compila los ELSIF que pudieran haber
   while UpCase(lex.token) = 'ELSIF' do begin
     lex.Next;   //toma "elsif"
     if not GetCondition(ex) then exit;
     if not CaptureStr('THEN') then exit;  //toma "then"
     //Compila el cuerpo pero sin código
-    TreeElems.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
+    ast.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
     if not AnalyzeStructBody then exit;
-    TreeElems.CloseElement;  //Close block
+    ast.CloseElement;  //Close block
   end;
   //Compila el ELSE final, si existe.
   if Upcase(lex.token) = 'ELSE' then begin
@@ -1652,9 +1652,9 @@ begin
     lex.Next;   //Takes  "else"
     //An "else" is similar to a ELSIF true
     GetCondition(ex, true);  //Create condiiton block with a fixed TRUE constant.
-    TreeElems.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
+    ast.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
     if not AnalyzeStructBody then exit;
-    TreeElems.CloseElement;  //Close block
+    ast.CloseElement;  //Close block
     if not VerifyEND then exit;
   end else begin
     VerifyEND;
@@ -1668,9 +1668,9 @@ begin
   if not GetCondition(ex) then exit;  //Condición
   if not CaptureStr('DO') then exit;  //toma "do"
   //Aquí debe estar el cuerpo del "while"
-  TreeElems.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
+  ast.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
   if not AnalyzeStructBody then exit;
-  TreeElems.CloseElement;  //Close block
+  ast.CloseElement;  //Close block
   if not VerifyEND then exit;
 end;
 procedure TAnalyzer.AnalyzeREPEAT;
@@ -1678,9 +1678,9 @@ procedure TAnalyzer.AnalyzeREPEAT;
 var
   ex: TAstExpress;
 begin
-  TreeElems.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
+  ast.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
   AnalyzeCurBlock;
-  TreeElems.CloseElement;  //Close block
+  ast.CloseElement;  //Close block
   if HayError then exit;
   lex.SkipWhites;
   if not CaptureStr('UNTIL') then exit; //toma "until"
@@ -1731,16 +1731,16 @@ procedure TAnalyzer.AnalyzeFOR;
     //Create the _comp() expression:
     _comp := CreateExpression('', typNull, otFunct, lex.GetSrcPos);
     //Add the new expression
-    TreeElems.AddElementAndOpen(_comp);
+    ast.AddElementAndOpen(_comp);
     //Create a new variable expression "i<=..." or "i<..." or "i=...".
     xvar := CreateExpression(varComp.name, varComp.Typ, otVariab, lex.GetSrcPos);
     SetVariabCA(xvar, varComp.vardec);
-    TreeElems.AddElement(xvar);
+    ast.AddElement(xvar);
     //Add the operand for expression "i<=..." or "i<..." or "i=...".
     if readExpression then begin
       valFin := GetExpression(0);
     end;
-    TreeElems.CloseElement;      //Close _comp()
+    ast.CloseElement;      //Close _comp()
     Result := _comp;
   end;
   function SetOperation(_comp: TAstExpress; opType: TAstTypeDec; opStr: string): boolean;
@@ -1766,17 +1766,17 @@ procedure TAnalyzer.AnalyzeFOR;
     //Use reference sifFunInc" to access directly to function Inc().
     Op1 := CreateExpression(sifFunInc.name, sifFunInc.retType, otFunct, lex.GetSrcPos);
     Op1.fundec := sifFunInc;
-    TreeElems.AddElementAndOpen(Op1);  //Open Inc()
+    ast.AddElementAndOpen(Op1);  //Open Inc()
     //Create a new variable for the expression "i<..."
     xvar := CreateExpression(idx.name, idx.Typ, otVariab, lex.GetSrcPos);
     SetVariabCA(xvar, idx.vardec);
-    TreeElems.AddElement(xvar);
-    TreeElems.CloseElement;  //Close Inc()
+    ast.AddElement(xvar);
+    ast.CloseElement;  //Close Inc()
   end;
 var
   idx, valIni, valFin, tmpVar, _lequ: TAstExpress;
 begin
-  TreeElems.AddElementSentAndOpen(lex.GetSrcPos, sntFOR);  //Open sentence
+  ast.AddElementSentAndOpen(lex.GetSrcPos, sntFOR);  //Open sentence
 
   AnalyzeFORFirstAsign(idx, valIni);
   if HayError then exit;
@@ -1788,14 +1788,14 @@ begin
 
   if not CaptureStr('DO') then exit;  //toma "do"
   //Aquí debe estar el cuerpo del "for"
-  TreeElems.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
+  ast.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
   if not AnalyzeStructBody then exit;
   //Agrega instrucción de incremento.
   CreateInc(idx);
   //Close block
-  TreeElems.CloseElement;
+  ast.CloseElement;
   if not VerifyEND then exit;
-  TreeElems.CloseElement;  //Close sentence
+  ast.CloseElement;  //Close sentence
 end;
 procedure TAnalyzer.AnalyzeEXIT(exitSent: TAstExpress);
 var
@@ -1806,7 +1806,7 @@ var
 begin
   ProcComments;
   //Detect if an expression must follow
-  parentNod := TreeElems.curCodCont.Parent;  //Se supone que nunca debería fallar
+  parentNod := ast.curCodCont.Parent;  //Se supone que nunca debería fallar
   //posExit := GetSrcPos;
   if parentNod.idClass = eleProg then begin
     prog := TAstProg(parentNod);
@@ -1850,7 +1850,7 @@ begin
     //Explore the first level.
     if ele.idClass = eleTypeDec then begin  //It's a type, we need to move
       //Move the element to declaration section
-      TreeElems.ChangeParentTo(declarSec, ele, declarPos);
+      ast.ChangeParentTo(declarSec, ele, declarPos);
     end;
     //Explore in deeper level
     MoveInternalTypes(ele, declarSec, declarPos);
@@ -1867,9 +1867,9 @@ begin
   //Validate expression
   if HayError then  exit;
   //Check for possible types generated to move to the declaration section.
-  declarSec := TreeElems.curCodCont.Parent;  //Declaration section.
-  declarPos := TreeElems.curCodCont.Index;  //Position before of the body.
-  MoveInternalTypes(TreeElems.curNode, declarSec, declarPos);
+  declarSec := ast.curCodCont.Parent;  //Declaration section.
+  declarPos := ast.curCodCont.Index;  //Position before of the body.
+  MoveInternalTypes(ast.curNode, declarSec, declarPos);
   //We expected one expression element.
   if ele.idClass = eleExpress then begin
     //The expected element
@@ -1908,7 +1908,7 @@ procedure TAnalyzer.AnalyzeSentence;
 var
   tokUp: String;
 begin
-  if not (TreeElems.curNode.idClass in [eleBody, eleBlock]) then begin
+  if not (ast.curNode.idClass in [eleBody, eleBlock]) then begin
     //No debería pasar, porque las instrucciones solo pueden estar en eleBody
     GenError('Syntax error.');
     exit;
@@ -1919,49 +1919,49 @@ begin
     if tokUp = 'BEGIN' then begin
       //Es bloque
       lex.Next;  //toma "begin"
-      TreeElems.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
+      ast.AddElementBlockAndOpen(lex.GetSrcPos);  //Open block
       AnalyzeCurBlock;   //Recursive call
-      TreeElems.CloseElement;  //Close block
+      ast.CloseElement;  //Close block
       if HayError then exit;
       if not CaptureStr('END') then exit;
       ProcComments;
       //puede salir con error
     end else if tokUp = 'IF' then begin
-      TreeElems.AddElementSentAndOpen(lex.GetSrcPos, sntIF);  //Open sentence
+      ast.AddElementSentAndOpen(lex.GetSrcPos, sntIF);  //Open sentence
       lex.Next;         //Takes "if"
       AnalyzeIF;
       if HayError then begin
         exit;
-      end else if TreeElems.curNode.idClass <> eleSenten then begin
+      end else if ast.curNode.idClass <> eleSenten then begin
         //Something went wrong
         GenError('Syntax error.');
         exit;
       end;
-      TreeElems.CloseElement;  //Close sentence
+      ast.CloseElement;  //Close sentence
     end else if tokUp = 'WHILE' then begin
-      TreeElems.AddElementSentAndOpen(lex.GetSrcPos, sntWHILE);  //Open sentence
+      ast.AddElementSentAndOpen(lex.GetSrcPos, sntWHILE);  //Open sentence
       lex.Next;         //Takes "while"
       AnalyzeWHILE;
       if HayError then begin
         exit;
-      end else if TreeElems.curNode.idClass <> eleSenten then begin
+      end else if ast.curNode.idClass <> eleSenten then begin
         //Something went wrong
         GenError('Syntax error.');
         exit;
       end;
-      TreeElems.CloseElement;  //Close sentence
+      ast.CloseElement;  //Close sentence
     end else if tokUp = 'REPEAT' then begin
-      TreeElems.AddElementSentAndOpen(lex.GetSrcPos, sntREPEAT);  //Open sentence
+      ast.AddElementSentAndOpen(lex.GetSrcPos, sntREPEAT);  //Open sentence
       lex.Next;         //Takes "repeat"
       AnalyzeREPEAT;
       if HayError then begin
         exit;
-      end else if TreeElems.curNode.idClass <> eleSenten then begin
+      end else if ast.curNode.idClass <> eleSenten then begin
         //Something went wrong
         GenError('Syntax error.');
         exit;
       end;
-      TreeElems.CloseElement;  //Close sentence
+      ast.CloseElement;  //Close sentence
     end else if tokUp = 'FOR' then begin
       AnalyzeFOR;
       if HayError then exit;
@@ -2041,14 +2041,14 @@ begin
       uName := lex.token;
       uni := CreateEleUnit(uName);
       //Verifica si existe ya el nombre de la unidad
-      if NameExistsIn(uni.uname, TreeElems.curNode.elements) then begin
+      if NameExistsIn(uni.uname, ast.curNode.elements) then begin
         GenError('Identifier duplicated: %s.', [uName]);
         uni.Destroy;
         exit;
       end;
       uni.srcDec := lex.GetSrcPos;   //guarda posición de declaración
       uName := uName + '.pas';  //nombre de archivo
-{----}TreeElems.AddElementAndOpen(uni);
+{----}ast.AddElementAndOpen(uni);
       //Ubica al archivo de la unidad
       p := lex.GetCtxState;   //Se debe guardar la posición antes de abrir otro contexto
       //Primero busca en la misma ubicación del archivo fuente
@@ -2074,7 +2074,7 @@ begin
       DoAnalyzeUnit(uni);
       lex.SetCtxState(p); //*** No debería ser necesario salvar y restaurar estados si se usa "autoReturn" como se hace en TParserDirecBase.ProcINCLUDE().
       if HayError then exit;  //El error debe haber guardado la ubicación del error
-{----}TreeElems.CloseElement; //cierra espacio de nombres de la función
+{----}ast.CloseElement; //cierra espacio de nombres de la función
       lex.Next;  //toma nombre
       lex.SkipWhites;
       if lex.token <> ',' then break; //sale
@@ -2090,7 +2090,7 @@ var
   fundec: TAstFunDec;
   tokL: String;
 begin
-//debugln('   Ini Unit: %s-%s',[TreeElems.curNode.name, ExtractFIleName(curCon.fileSrc)]);
+//debugln('   Ini Unit: %s-%s',[ast.curNode.name, ExtractFIleName(curCon.fileSrc)]);
   ClearError;
   ProcComments;
   //Busca UNIT
@@ -2199,7 +2199,7 @@ begin
     end;
   end;
   //Verifica si todas las funciones de INTERFACE, se implementaron
-  for elem in TreeElems.curNode.elements do if elem.idClass = eleFuncDec then begin
+  for elem in ast.curNode.elements do if elem.idClass = eleFuncDec then begin
     fundec := TAstFunDec(elem);
     if fundec.BodyNode = nil then begin  //Sin cuerpo. Debe ser FORWARD.
       if fundec.implem = nil then begin
@@ -2308,14 +2308,14 @@ begin
     GenError('Expected "begin", "var", "type" or "const".');
     exit;
   end;
-  bod := TreeElems.AddBodyAndOpen(lex.GetSrcPos);  //Abre nodo Body
+  bod := ast.AddBodyAndOpen(lex.GetSrcPos);  //Abre nodo Body
   lex.Next;   //Takes "BEGIN"
   AnalyzeCurBlock;   //Compiles the body
-  TreeElems.CloseElement;   //No debería ser tan necesario.
+  ast.CloseElement;   //No debería ser tan necesario.
   bod.srcEnd := lex.GetSrcPos;
   if HayError then exit;
   //Verifica si todas las funciones FORWARD, se implementaron
-  for elem in TreeElems.curNode.elements do if elem.idClass = eleFuncDec then begin
+  for elem in ast.curNode.elements do if elem.idClass = eleFuncDec then begin
     fundec := TAstFunDec(elem);
     if fundec.BodyNode = nil then begin  //Sin cuerpo. Debe ser FORWARD.
       if fundec.implem = nil then begin
@@ -2335,7 +2335,7 @@ Input: The current context.
 Output: The AST.}
 begin
   if IsUnit then begin
-    DoAnalyzeUnit(TreeElems.main);
+    DoAnalyzeUnit(ast.main);
   end else begin
     DoAnalyzeProgram;    //puede dar error
   end;

@@ -1,12 +1,10 @@
-
-
 program muestra;
 var
   x: byte;
 
 begin
 
-  x := 123+;
+  x := 123+1;
   
 
 end. 

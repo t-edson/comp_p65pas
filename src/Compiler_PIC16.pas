@@ -5,9 +5,9 @@ unit Compiler_PIC16;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fgl, LazLogger, P65C02utils, CPUCore, CompBase,
-  ParserDirec, CompGlobals, AstElemP65, AstTree, ParserASM_6502, MirList,
-  alexiaLex, SIF_P65pas, StrUtils;
+  Classes, SysUtils, fgl, LazLogger, StrUtils,
+  P65C02utils, CPUCore, CompBase, ParserDirec, CompGlobals, AstElemP65, AstTree,
+  ParserASM_6502, MirList, alexiaLex, SIF_P65pas;
 type
   { TCompiler_PIC16 }
   TCompiler_PIC16 = class(TParserDirecBase)
@@ -693,7 +693,7 @@ begin
 //    end;
 //  end;
 //  //Reserva espacio para las variables (Que no son de funciones).
-//  for xvar in TreeElems.AllVars do begin
+//  for xvar in ast.AllVars do begin
 //    if xvar.Parent.idClass = eleFuncImp then continue;  //Las variables de funciones ya se crearon
 //    //if xvar.Parent.idClass = eleUnit then continue;
 ////debugln('Verificando: ' + xvar.name);
@@ -705,7 +705,7 @@ begin
 //    end else begin
 //      //Variable no usada
 //      xvar.ResetAddress;
-//      if xvar.Parent = TreeElems.main then begin
+//      if xvar.Parent = ast.main then begin
 //        //Genera mensaje solo para variables del programa principal.
 //        GenWarn(WA_UNUSED_VAR_, [xVar.name], xvar.srcDec);
 //      end;
@@ -756,7 +756,7 @@ begin
 //    end else begin
 //      //Variable no usada
 //      vardec.ResetAddress;
-//      if vardec.Parent = TreeElems.main then begin
+//      if vardec.Parent = ast.main then begin
 //        //Genera mensaje solo para variables del programa principal.
 //        GenWarn(WA_UNUSED_VAR_, [vardec.name], vardec.srcDec);
 //      end;
@@ -978,7 +978,7 @@ begin
 //      if (val1.opType = otConst) and (val2.opType = otConst) then begin
 //        if val1.val > val2.val then begin
 //          //Unreachable code
-////          TreeElems.DeleteTypeNode();
+////          ast.DeleteTypeNode();
 //        end;
 //      end;
 //    end else if sen.sntType = sntExit then begin
@@ -1003,7 +1003,7 @@ var
   mirTypDec: TMirTypDec;
 begin
   //Agrega variables globales
-//  for astVardec in TreeElems.AllVars do begin
+//  for astVardec in ast.AllVars do begin
 //    if astVardec.Parent.idClass = eleFuncImp then continue;  //Las variables de funciones ya se crearon
 ////debugln('Verificando: ' + astVardec.name);
 //    if (astVardec.nCalled>0) or astVardec.required then begin
@@ -1011,7 +1011,7 @@ begin
 //      astVardec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.;
 //    end;
 //  end;
-  for elem in TreeElems.main.elements do begin
+  for elem in ast.main.elements do begin
     if elem.nCalled=0 then Continue;  //No usado.
     if elem.idClass = eleConsDec then begin
       astConDec := TAstConsDec(elem);
@@ -1052,7 +1052,7 @@ begin
     end;
   end;
   //Split body
-  bod := TreeElems.BodyNode;  //lee Nodo del cuerpo principal
+  bod := ast.BodyNode;  //lee Nodo del cuerpo principal
   ConvertBody(mirRep.root.instrucs, bod);
 end;
 procedure TCompiler_PIC16.DoOptimize;
@@ -1064,7 +1064,7 @@ begin
   ExprLevel := 0;
   ClearError;
   //Detecting unused elements
-  TreeElems.RefreshAllUnits; //Actualiza lista de unidades
+  ast.RefreshAllUnits; //Actualiza lista de unidades
   RemoveUnusedFunc;       //Se debe empezar con las funciones. 1ms aprox.
   RemoveUnusedVars;       //Luego las variables. 1ms aprox.
   RemoveUnusedCons;       //1ms aprox.
@@ -1117,13 +1117,13 @@ begin
       exit;
     end;
     {-------------------------------------------------}
-    TreeElems.Clear;
+    ast.Clear;
     mirRep.Clear;
     //Asigna nombre y archivo a elemento
-    TreeElems.main.name := ExtractFileName(mainFile);
-    p := pos('.',TreeElems.main.name);
-    if p <> 0 then TreeElems.main.name := copy(TreeElems.main.name, 1, p-1);
-    TreeElems.main.srcDec := lex.GetSrcPos;
+    ast.main.name := ExtractFileName(mainFile);
+    p := pos('.',ast.main.name);
+    if p <> 0 then ast.main.name := copy(ast.main.name, 1, p-1);
+    ast.main.srcDec := lex.GetSrcPos;
     //Continúa con preparación
 //    EndCountElapsed('** Setup in: ');
 //    StartCountElapsed;  //Start timer
@@ -1197,7 +1197,7 @@ const
     subUsed: string;
   begin
     { *** Completar luego
-    for v in TreeElems.AllVars do begin   //Se supone que "AllVars" ya se actualizó.
+    for v in ast.AllVars do begin   //Se supone que "AllVars" ya se actualizó.
         //debugln('AllVars['+IntToStr(i)+']='+v.name+','+v.Parent.name);
         if ExcUnused and (v.nCalled = 0) then continue;
         if v.storage in [stRegister, stRegistX, stRegistY] then continue;
@@ -1331,9 +1331,9 @@ begin
   usedRAM := pic.UsedMemRAM;
   ramUse := usedRAM/totRAM;
   //Calcula STACK
-//  nes := TreeElems.main.UpdateCalledAll;   //Debe haberse llenado TreeElems.main.lstCalled
+//  nes := ast.main.UpdateCalledAll;   //Debe haberse llenado ast.main.lstCalled
   //No considera el anidamiento por interrupciones
-  stkUse := TreeElems.maxNesting/STACK_SIZE;
+  stkUse := ast.maxNesting/STACK_SIZE;
 end;
 procedure TCompiler_PIC16.GenerateListReport(lins: TStrings);
 {Genera un reporte detallado de la compilación}
@@ -1397,7 +1397,7 @@ begin
 
   lins.Add(';NAME                    USED   POSITION IN SOURCE');
   lins.Add(';----------------------- ------ -------------------------------');
-  for fun in TreeElems.AllFuncs do begin
+  for fun in ast.AllFuncs do begin
     if fun.nCalled > 0 then begin
       if fun.nCalled = 0 then
         state := 'Unused'
@@ -1417,7 +1417,7 @@ begin
   lins.Add('');
   lins.Add(';PROCEDURE DETAIL');
   lins.Add(';===================');
-  for fun in TreeElems.AllFuncs do begin
+  for fun in ast.AllFuncs do begin
     if fun.nCalled > 0 then begin
       lins.Add('------------------------------------');
       lins.Add('----- PROCEDURE ' + fun.name);
@@ -1472,16 +1472,16 @@ begin
   lins.Add('----- Main Program');
   lins.Add('------------------------------------');
   lins.Add('  Called Procedures:');
-  if TreeElems.main.lstCalled.Count = 0 then begin
+  if ast.main.lstCalled.Count = 0 then begin
     lins.Add('    <none>');
   end else begin
-    for called in TreeElems.main.lstCalled do begin
+    for called in ast.main.lstCalled do begin
       lins.Add('    - ' + called.name);
     end;
   end;
   lins.Add('');
   //Muestra el máximo nivel de anidamiento.
-  lins.Add('Max. Nesting = ' + IntToSTr(TreeElems.maxNesting));
+  lins.Add('Max. Nesting = ' + IntToSTr(ast.maxNesting));
 
 end;
 //Interfaz for IDE
@@ -1605,10 +1605,10 @@ begin
   //Here variables can be added
   {Create a body, to be uniform with normal function and for have a space where
   compile code and access to posible variables or other elements.}
-  TreeElems.AddBodyAndOpen(SrcPos);  //Create body
+  ast.AddBodyAndOpen(SrcPos);  //Create body
   SetCodSysInline(Result);  //Set routine to generate code o SIF routine.
-  TreeElems.CloseElement;  //Close body
-  TreeElems.CloseElement;  //Close function implementation
+  ast.CloseElement;  //Close body
+  ast.CloseElement;  //Close function implementation
   lex.curLocation := tmpLoc;   //Restore current location
 end;
 function TCompiler_PIC16.AddSNFtoUnit(name: string; retType: TAstTypeDec; const srcPos: TSrcPos;
@@ -1660,20 +1660,20 @@ begin
   funimp := AddFunctionIMP(name, retType, srcPos, fundec, true);
   //Create local variables
   for i:=0 to high(local_vars) do begin
-    locvar := TreeElems.AddVarDecAndOpen(srcPos, local_vars[i].name, local_vars[i].typ);
+    locvar := ast.AddVarDecAndOpen(srcPos, local_vars[i].name, local_vars[i].typ);
     locvar.storage := stRamFix;
     locvar.adicPar := local_vars[i].adicVar;
-    TreeElems.CloseElement;  //Close variable
+    ast.CloseElement;  //Close variable
     local_vars[i].vardec := locvar;  //Keep reference
   end;
   {Create a body, to be uniform with normal function and for have a space where
   compile code and access to posible variables or other elements.}
-  TreeElems.AddBodyAndOpen(SrcPos);  //Create body
+  ast.AddBodyAndOpen(SrcPos);  //Create body
   //Set function created
   fundec.callType     := ctSysNormal;
   fundec.codSysNormal := codSys;  //Set routine to generate code SIF.
-  TreeElems.CloseElement;  //Close body
-  TreeElems.CloseElement;  //Close function implementation
+  ast.CloseElement;  //Close body
+  ast.CloseElement;  //Close function implementation
   lex.curLocation := tmpLoc;   //Restore current location
   //Add callers to local variables created. Must be done after creating the body.
   for i:=0 to high(local_vars) do begin
@@ -1721,7 +1721,7 @@ begin
   Result.oper := UpCase(opr); //Set operator as UpperCase to speed searching.
   if opr = '' then Result.operTyp := opkNone
   else Result.operTyp := operTyp; //Must be pre or post
-  TreeElems.CloseElement;    //Close function implementation
+  ast.CloseElement;    //Close function implementation
 end;
 function TCompiler_PIC16.CreateInBOMethod(
                       clsType: TAstTypeDec;   //Base type where the method bellow.
@@ -1742,7 +1742,7 @@ begin
   //Add declaration
   Result      := AddFunctionUNI(name, retType, srcPosNull, pars, false,
                       false);  //Don't include variables to don't ask for RAM.
-  TreeElems.AddBodyAndOpen(srcPosNull);  //Create body
+  ast.AddBodyAndOpen(srcPosNull);  //Create body
   //Here variables can be added
   {Create a body, to be uniform with normal function and for have a space where
   compile code and access to posible variables or other elements.}
@@ -1750,8 +1750,8 @@ begin
   Result.oper := UpCase(opr); //Set operator as UpperCase to speed search.
   if opr = '' then Result.operTyp := opkNone
   else Result.operTyp := opkBinary;
-  TreeElems.CloseElement;  //Close body
-  TreeElems.CloseElement;  //Close function implementation
+  ast.CloseElement;  //Close body
+  ast.CloseElement;  //Close function implementation
 end;
 function TCompiler_PIC16.CreateInTerMethod(clsType: TAstTypeDec;
   name: string; parType1, parType2: TAstTypeDec; retType: TAstTypeDec
@@ -1769,14 +1769,14 @@ begin
   //Add declaration
   Result      := AddFunctionUNI(name, retType, srcPosNull, pars, false,
                       false);  //Don't include variables to don't ask for RAM.
-  TreeElems.AddBodyAndOpen(srcPosNull);  //Create body
+  ast.AddBodyAndOpen(srcPosNull);  //Create body
   //Here variables can be added
   {Create a body, to be uniform with normal function and for have a space where
   compile code and access to posible variables or other elements.}
   SetCodSysInline(Result); //Set routine to generate code
   Result.operTyp := opkNone;   //Could be a ternary operator
-  TreeElems.CloseElement;  //Close body
-  TreeElems.CloseElement;  //Close function implementation
+  ast.CloseElement;  //Close body
+  ast.CloseElement;  //Close function implementation
 end;
 procedure TCompiler_PIC16.DefineArray(etyp: TAstTypeDec);
 var
@@ -1844,61 +1844,61 @@ begin
   /////////////// System types ////////////////////
   typBool := CreateEleTypeDec('boolean', srcPosNull, 1, tctAtomic, t_boolean);
   typBool.location := locInterface;   //Location for type (Interface/Implementation/...)
-  TreeElems.AddElementAndOpen(typBool);  //Open to create "elements" list.
-  TreeElems.CloseElement;   //Close Type
+  ast.AddElementAndOpen(typBool);  //Open to create "elements" list.
+  ast.CloseElement;   //Close Type
   typByte := CreateEleTypeDec('byte', srcPosNull, 1, tctAtomic, t_uinteger);
   typByte.location := locInterface;
-  TreeElems.AddElementAndOpen(typByte);  //Open to create "elements" list.
-  TreeElems.CloseElement;
+  ast.AddElementAndOpen(typByte);  //Open to create "elements" list.
+  ast.CloseElement;
 
   typChar := CreateEleTypeDec('char', srcPosNull, 1, tctAtomic, t_string);
   typChar.location := locInterface;
-  TreeElems.AddElementAndOpen(typChar);
-  TreeElems.CloseElement;
+  ast.AddElementAndOpen(typChar);
+  ast.CloseElement;
 
   typWord := CreateEleTypeDec('word', srcPosNull, 2, tctAtomic, t_uinteger);
   typWord.location := locInterface;
-  TreeElems.AddElementAndOpen(typWord);
-  TreeElems.CloseElement;
+  ast.AddElementAndOpen(typWord);
+  ast.CloseElement;
 
   typDWord := CreateEleTypeDec('dword', srcPosNull, 4, tctAtomic, t_uinteger);
   //typDWord.OnLoadToWR := @word_LoadToWR;
   //typDWord.OnRequireWR := @word_RequireWR;
   typDWord.location := locInterface;
-  TreeElems.AddElementAndOpen(typDWord);
-  TreeElems.CloseElement;
+  ast.AddElementAndOpen(typDWord);
+  ast.CloseElement;
 
   typTriplet := CreateEleTypeDec('triplet', srcPosNull, 3, tctAtomic, t_uinteger);
   //typTriplet.OnLoadToWR := @trip_LoadToWR;
   //typTriplet.OnRequireWR := @trip_RequireWR;
   //typTriplet.location := locInterface;
-  TreeElems.AddElementAndOpen(typTriplet);
-  TreeElems.CloseElement;
+  ast.AddElementAndOpen(typTriplet);
+  ast.CloseElement;
 
   // ****  This section is hardware dependent ****
   {Create variables for aditional Working register. These variables are accesible
   (and usable) from the code, because the name assigned is a common variable.}
   //Create register H as variable
   H := AddVarDecAndOpen('__H', typByte, srcPosNull);
-  TreeElems.CloseElement;  { TODO : ¿No sería mejor evitar abrir el elemento para no tener que cerrarlo? }
+  ast.CloseElement;  { TODO : ¿No sería mejor evitar abrir el elemento para no tener que cerrarlo? }
   H.adicPar.hasAdic := decNone;
   H.adicPar.hasInit := nil;
   H.location := locInterface;  //make visible
   //Create register E as variable
   E := AddVarDecAndOpen('__E', typByte, srcPosNull);
-  TreeElems.CloseElement;
+  ast.CloseElement;
   E.adicPar.hasAdic := decNone;
   E.adicPar.hasInit := nil;
   E.location := locInterface;  //make visible
   //Create register U as variable
   U := AddVarDecAndOpen('__U', typByte, srcPosNull);
-  TreeElems.CloseElement;
+  ast.CloseElement;
   U.adicPar.hasAdic := decNone;
   U.adicPar.hasInit := nil;
   U.location := locInterface;  //make visible
   //Create register IX as variable
   IX := AddVarDecAndOpen('__IX', typWord, srcPosNull);
-  TreeElems.CloseElement;
+  ast.CloseElement;
   IX.adicPar.hasAdic := decNone;
   IX.adicPar.hasInit := nil;
   IX.location := locInterface;  //make visible
@@ -1909,7 +1909,7 @@ var
 begin
   /////////////// Boolean type ////////////////////
   //Methods-Operators
-  TreeElems.OpenElement(typBool);
+  ast.OpenElement(typBool);
   f:=CreateInBOMethod(typBool, ':=',  '_set', typBool, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
@@ -1924,14 +1924,14 @@ begin
   f.fConmutat := true;
   f:=CreateInBOMethod(typBool, '<>',  '_dif', typBool, typBool);
   f.fConmutat := true;
-  TreeElems.CloseElement;   //Close Type
+  ast.CloseElement;   //Close Type
 end;
 procedure TCompiler_PIC16.CreateByteOperations;
 var
   f, f1, f2: TAstFunDec;
 begin
   //Methods-Operators
-  TreeElems.OpenElement(typByte);
+  ast.OpenElement(typByte);
   //Simple Assignment
   f:=CreateInBOMethod(typByte, ':=', '_set', typByte, AstTree.typNull);
   f.asgMode := asgSimple;
@@ -1990,14 +1990,14 @@ begin
   f:=CreateInBOMethod(typByte, '<=', '_lequ',typByte, typBool);
   f:=CreateInBOMethod(typByte, '>>', '_shr', typByte, typByte);  { TODO : Definir bien la precedencia }
   f:=CreateInBOMethod(typByte, '<<', '_shl', typByte, typByte);
-  TreeElems.CloseElement;   //Close Type
+  ast.CloseElement;   //Close Type
 end;
 procedure TCompiler_PIC16.CreateCharOperations;
 var
   f: TAstFunDec;
 begin
   /////////////// Char type ////////////////////
-  TreeElems.OpenElement(typChar);
+  ast.OpenElement(typChar);
   f:=CreateInBOMethod(typChar, ':=', '_set', typChar, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
@@ -2006,14 +2006,14 @@ begin
   f.fConmutat := true;
   f:=CreateInBOMethod(typChar, '<>', '_dif', typChar, typBool);
   f.fConmutat := true;
-  TreeElems.CloseElement;   //Close Type
+  ast.CloseElement;   //Close Type
 end;
 procedure TCompiler_PIC16.CreateWordOperations;
 var
   f: TAstFunDec;
 begin
   /////////////// Word type ////////////////////
-  TreeElems.OpenElement(typWord);
+  ast.OpenElement(typWord);
   f:=CreateInBOMethod(typWord, ':=' ,'_set' , typWord, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
@@ -2076,14 +2076,14 @@ begin
   f:=CreateInUOMethod(typWord, '', 'low' , typByte);
   f:=CreateInUOMethod(typWord, '', 'high', typByte);
 
-  TreeElems.CloseElement;   //Close Type
+  ast.CloseElement;   //Close Type
 end;
 procedure TCompiler_PIC16.CreateDWordOperations;
 var
   f: TAstFunDec;
 begin
   /////////////// DWord type ////////////////////
-  TreeElems.OpenElement(typDWord);
+  ast.OpenElement(typDWord);
   f:=CreateInBOMethod(typDWord, ':=' ,'_set' , typDWord, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
@@ -2151,7 +2151,7 @@ begin
 //  f:=CreateInUOMethod(typDWord, '', 'low' , typByte, @word_Low);
 //  f:=CreateInUOMethod(typDWord, '', 'high', typByte, @word_High);
 
-  TreeElems.CloseElement;   //Close Type
+  ast.CloseElement;   //Close Type
 end;
 procedure TCompiler_PIC16.CreateSystemUnitInAST;
 {Initialize the system elements. Must be executed just one time when compiling.}
@@ -2176,7 +2176,7 @@ begin
   linking, calling and optimization that we use in common functions. Moreover, we can
   create private functions.}
   uni := CreateEleUnit('System');  //System unit
-  TreeElems.AddElementAndOpen(uni);  //Open Unit
+  ast.AddElementAndOpen(uni);  //Open Unit
   CreateSystemTypesAndVars;
   lex.curLocation := locInterface;   {Maybe not needed because element here are created directly.}
   //Creates operations
@@ -2273,7 +2273,7 @@ begin
   AddCallerToFrom(snfWordShift_l, sifWordShlByte.bodyNode);
 }
   //Close Unit
-  TreeElems.CloseElement;
+  ast.CloseElement;
 end;
 
 procedure TCompiler_PIC16.cbSetGeneralORG(value: integer);

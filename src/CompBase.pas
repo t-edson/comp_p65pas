@@ -128,7 +128,7 @@ protected //Containers
   procedure UpdateFunLstCalled;
   procedure SeparateUsedFunctions;
 public    //Containers
-  TreeElems     : TAstTree;    //Abstract syntax tree.
+  ast     : TAstTree;    //Abstract syntax tree.
   mirRep        : TMirList;     //Container for MIR representation
   usedFuncs     : TAstFunDecs; //Store only used functions
   unusedFuncs   : TAstFunDecs; //Store only unused functions
@@ -622,7 +622,7 @@ var
 begin
   expr := CreateExpression(opName, dtType, opType, srcPos);
   if opType = otConst then expr.Sto := stConst;  //The only option.
-  TreeElems.AddElementAndOpen(expr);
+  ast.AddElementAndOpen(expr);
   exit(expr);
 end;
 function TCompilerBase.AddExpressionConstByte(name: string; bytValue: byte;
@@ -633,7 +633,7 @@ begin
   Result := CreateExpression(name, typByte, otConst, srcPos);
   Result.Sto := stConst;
   Result.SetLiteraltIntConst(bytValue);
-  TreeElems.AddElement(Result);
+  ast.AddElement(Result);
 end;
 function TCompilerBase.AddExpressionConstWord(name: string; wrdValue: word;
   srcPos: TSrcPos): TAstExpress;
@@ -643,7 +643,7 @@ begin
   Result := CreateExpression(name, typWord, otConst, srcPos);
   Result.Sto := stConst;
   Result.SetLiteraltIntConst(wrdValue);
-  TreeElems.AddElement(Result);
+  ast.AddElement(Result);
 end;
 function TCompilerBase.AddExpressionConstBool(name: string; boolValue: Boolean;
   srcPos: TSrcPos): TAstExpress;
@@ -653,7 +653,7 @@ begin
   Result := CreateExpression(name, typBool, otConst, srcPos);
   Result.Sto := stConst;
   Result.SetLiteralBoolConst(boolValue);
-  TreeElems.AddElement(Result);
+  ast.AddElement(Result);
 end;
 function TCompilerBase.AddVarDecAndOpen(varName: string; eleTyp: TAstTypeDec;
   srcPos: TSrcPos): TAstVarDec;
@@ -665,15 +665,15 @@ var
   xvar: TAstVarDec;
 begin
   //Check for duplicated name. Only a search in the current node is needed.
-  if NameExistsIn(UpCase(varName), TreeElems.curNode.elements) then begin
+  if NameExistsIn(UpCase(varName), ast.curNode.elements) then begin
     GenError(ER_DUPLIC_IDEN, [varName], srcPos);
     exit(nil);
   end;
   //xvar := CreateEleVarDec(varName, eleTyp);
   //xvar.srcDec := srcPos;  //Actualiza posición
-  //TreeElems.AddElement(xvar);
+  //ast.AddElement(xvar);
   //Result := xvar;
-  Result := TreeElems.AddVarDecAndOpen(srcPos, varName, eleTyp);
+  Result := ast.AddVarDecAndOpen(srcPos, varName, eleTyp);
 end;
 function TCompilerBase.AddConsDecAndOpen(conName: string; eleTyp: TAstTypeDec;
   srcPos: TSrcPos): TAstConsDec;
@@ -682,21 +682,21 @@ Si no hay errores, devuelve la referencia a la variable. En caso contrario,
 devuelve NIL. }
 begin
   //Check for duplicated name. Only a search in the current node is needed.
-  if NameExistsIn(UpCase(conName), TreeElems.curNode.elements) then begin
+  if NameExistsIn(UpCase(conName), ast.curNode.elements) then begin
     GenError(ER_DUPLIC_IDEN, [conName], srcPos);
     exit(nil);
   end;
-  Result := TreeElems.AddConsDecAndOpen(srcPos, conName, eleTyp);
+  Result := ast.AddConsDecAndOpen(srcPos, conName, eleTyp);
 end;
 function TCompilerBase.AddTypeDecAndOpen(typName: string; typeSize: integer;
   catType: TCatType; group: TTypeGroup; srcPos: TSrcPos): TAstTypeDec;
 begin
   //Check for duplicated name. Only a search in the current node is needed.
-  if NameExistsIn(UpCase(typName), TreeElems.curNode.elements) then begin
+  if NameExistsIn(UpCase(typName), ast.curNode.elements) then begin
     GenError(ER_DUPLIC_IDEN, [typName], srcPos);
     exit(nil);
   end;
-  Result := TreeElems.AddTypeDecAndOpen(srcPos, typName, typeSize, catType, group);
+  Result := ast.AddTypeDecAndOpen(srcPos, typName, typeSize, catType, group);
 end;
 function TCompilerBase.OpenTypeDec(const srcPos: TSrcPos; tname: string;
   tsize: word; catType: TCatType; group: TTypeGroup;
@@ -706,32 +706,32 @@ var
   ipos: Integer;
   typeDec: TAstTypeDec;
 begin
-  {Similar to TreeElems.AddTypeDecAndOpen() but can specify the location where the
+  {Similar to ast.AddTypeDecAndOpen() but can specify the location where the
   type is opened.
   This instruction must used with CloseTypeDec()
   }
   if location = tlCurrCodeCon then begin
     //Create in the parent location.
-    tmp := TreeElems.curNode;  //Save current location
+    tmp := ast.curNode;  //Save current location
     //Change to the parent of the current code container. This will work always.
-    progFrame := TreeElems.curCodCont.Parent;  //Should be TEleCodCont (Function, unit or main program)
-    TreeElems.OpenElement(progFrame);
+    progFrame := ast.curCodCont.Parent;  //Should be TEleCodCont (Function, unit or main program)
+    ast.OpenElement(progFrame);
     ipos := progFrame.elements.Count-1;  //Before of the current COde container
   end else begin
     //Creates in the current location.
-    tmp := TreeElems.curNode;  //Save current location
+    tmp := ast.curNode;  //Save current location
     ipos := -1;
   end;
   //----------- Create Type -----------
-  typeDec := TreeElems.AddTypeDecAndOpen(srcPos, tname, tsize, catType, group, ipos);
+  typeDec := ast.AddTypeDecAndOpen(srcPos, tname, tsize, catType, group, ipos);
   typeDec.tmpNode := tmp;  //Save current node here
   exit(typeDec);
 end;
 procedure TCompilerBase.CloseTypeDec(typeDec: TAstTypeDec);
 {Close a Type declaration element, opened with OpenTypeDec().}
 begin
-  TreeElems.CloseElement;  //Close type declaration.
-  TreeElems.curNode := typeDec.tmpNode;  //Restore location
+  ast.CloseElement;  //Close type declaration.
+  ast.curNode := typeDec.tmpNode;  //Restore location
 end;
 function TCompilerBase.AddArrayTypeDecCC(typName: string; nELem: integer;
                                           itType: TAstTypeDec;
@@ -767,14 +767,14 @@ var
   curNode: TAstElement;
 begin
   {To obtain the Current code container it will be easy to do:
-   curCodCont := TreeElems.curCodCont;
+   curCodCont := ast.curCodCont;
    However this function not always works in Analisys but also in Optimization}
 
   if varName='' then varName := '_x' + IntToStr(curCodCont.Index);
-//  Result := TreeElems.AddVarDecAndOpen(GetSrcPos, varName, eleTyp);
+//  Result := ast.AddVarDecAndOpen(GetSrcPos, varName, eleTyp);
 //  Result.adicPar.hasAdic := decNone;
 //  Result.storage := stRamFix;
-//  TreeElems.CloseElement;
+//  ast.CloseElement;
 
   xVar        := TAstVarDec.Create;
   xVar.name   := varName;
@@ -782,10 +782,10 @@ begin
   xVar.adicPar.hasAdic := decNone;
   xVar.adicPar.hasInit := nil;
 
-  curNode := TreeElems.curNode;   //Save current location
-  TreeElems.openElement(curCodCont.Parent);
-  TreeElems.AddElement(xVar, curCodCont.Index);  //Add before the cntBody.
-  TreeElems.curNode := curNode;  //Restore AST location
+  curNode := ast.curNode;   //Save current location
+  ast.openElement(curCodCont.Parent);
+  ast.AddElement(xVar, curCodCont.Index);  //Add before the cntBody.
+  ast.curNode := curNode;  //Restore AST location
 
   Result       := xVar;
 
@@ -804,7 +804,7 @@ begin
   for i := 0 to high(funPars) do begin
       par := funPars[i];
       xvar := AddVarDecAndOpen({fun.name + '_' + }par.name, par.typ, par.srcPos);
-      TreeElems.CloseElement;
+      ast.CloseElement;
       if HayError then exit;
       xvar.IsParameter := true;  //Marca bandera
       xvar.adicPar := par.adicVar;  //Copy aditional settings
@@ -871,7 +871,7 @@ begin
   fundec.pars := pars;      //Copy parameters
   fundec.IsInterrupt := Interrup;
   //La validación de duplicidad no se puede hacer hasta tener los parámetros.
-  TreeElems.AddElementAndOpen(fundec);  //Se abre un nuevo espacio de nombres
+  ast.AddElementAndOpen(fundec);  //Se abre un nuevo espacio de nombres
   Result := fundec;
   //Crea parámetros en el nuevo espacio de nombres de la función
   if addParam then CreateFunctionParams(fundec.pars);
@@ -893,11 +893,11 @@ begin
   fundec.pars := pars;   //Copy parameters
   fundec.IsInterrupt := Interrup;
   Result := fundec;
-  TreeElems.AddElement(fundec);
-//  TreeElems.AddElementAndOpen(fundec);
+  ast.AddElement(fundec);
+//  ast.AddElementAndOpen(fundec);
 //  //Parameters are always creadted in declaration.
 //  CreateFunctionParams(fundec.pars);
-//  TreeElems.CloseElement;
+//  ast.CloseElement;
 end;
 function TCompilerBase.AddFunctionIMP(funName: string; retTyp: TAstTypeDec;
   const srcPos: TSrcPos; funDeclar: TAstFunDec; addParam: boolean): TAstFunImp;
@@ -915,7 +915,7 @@ begin
   funimp.IsInterrupt := funDeclar.IsInterrupt; //Copy from declaration
   funDeclar.elemImplem := funimp.elements;       //Apunta sus elementos a la implementación.
   //La validación de duplicidad no se puede hacer hasta tener los parámetros.
-  TreeElems.AddElementAndOpen(funimp);  //Se abre un nuevo espacio de nombres
+  ast.AddElementAndOpen(funimp);  //Se abre un nuevo espacio de nombres
   Result := funimp;
   //Crea parámetros en el nuevo espacio de nombres de la función
   if addParam then CreateFunctionParams(funDeclar.pars);
@@ -977,9 +977,9 @@ var
 begin
   offset := TAstExpress(varExp.elements[0]);
   eleMeth := CreateExpression('_add', typWord, otFunct, lex.GetSrcPos);
-  TreeElems.InsertParentTo(eleMeth, offset);
-  TreeElems.ChangeParentTo(eleMeth, offConst);
-//          TreeElems.OpenElement(eleMeth);  //Set parent to add parameter (item index).
+  ast.InsertParentTo(eleMeth, offset);
+  ast.ChangeParentTo(eleMeth, offConst);
+//          ast.OpenElement(eleMeth);  //Set parent to add parameter (item index).
   funSet := MethodFromBinOperator(offset.Typ, '+', typWord);
   if funSet = nil then begin   //Operator not found
     GenError('Undefined operation: %s %s %s', [offset.Typ.name, '+', typWord.name], lex.GetSrcPos);
@@ -995,18 +995,18 @@ Para que esta función trabaje bien, debe haberse llamado a RefreshAllElementLis
   function RemoveUnusedFuncReferences: integer;
   {Explora las funciones, para quitarle las referencias de funciones no usadas.
   Devuelve la cantidad de funciones no usadas.
-  Para que esta función trabaje bien, debe estar actualizada "TreeElems.AllFuncs". }
+  Para que esta función trabaje bien, debe estar actualizada "ast.AllFuncs". }
   var
     fun, fun2: TAstFunDec;
   begin
     Result := 0;
-    for fun in TreeElems.AllFuncs do begin
+    for fun in ast.AllFuncs do begin
       if fun.nCalled = 0 then begin
         inc(Result);   //Lleva la cuenta
         //Si no se usa la función, tampoco sus elementos locales
         fun.SetElementsUnused;  //Elements are in Implementation
         //También se quita las llamadas que hace a otras funciones
-        for fun2 in TreeElems.AllFuncs do begin
+        for fun2 in ast.AllFuncs do begin
           fun2.RemoveCallsFrom(fun.BodyNode);
 //          debugln('Eliminando %d llamadas desde: %s', [n, fun.name]);
         end;
@@ -1045,23 +1045,23 @@ y a RemoveUnusedFunc(). }
     En este caso, la variable STATUS_IRP, hace referencia a STATUS.
     Si STATUS_IRP no se usa, esta referencia debe quitarse.
     }
-    for xvar in TreeElems.AllVars do begin
+    for xvar in ast.AllVars do begin
       if xvar.nCalled = 0 then begin
         //Esta es una variable no usada
         inc(Result);   //Lleva la cuenta
         //Quita las llamadas que podría estar haciendo a otras variables
-        for xvar2 in TreeElems.AllVars do begin
+        for xvar2 in ast.AllVars do begin
           xvar2.RemoveCallsFrom(xvar);
 //            debugln('Eliminando llamada a %s desde: %s', [xvar2.name, xvar.name]);
         end;
       end;
     end;
     //Ahora quita las referencias de funciones no usadas
-    for fun in TreeElems.AllFuncs do begin
+    for fun in ast.AllFuncs do begin
       if fun.nCalled = 0 then begin
         //Esta es una función no usada
         inc(Result);   //Lleva la cuenta
-        for xvar2 in TreeElems.AllVars do begin
+        for xvar2 in ast.AllVars do begin
           xvar2.RemoveCallsFrom(fun.BodyNode);
 //          debugln('Eliminando llamada a %s desde: %s', [xvar2.name, xvar.name]);
         end;
@@ -1099,12 +1099,12 @@ y a RemoveUnusedFunc(). }
     En este caso, la constante CONST_2, hace referencia a CONST_1.
     Si CONST_2 no se usa, esta referencia debe quitarse.
     }
-    for cons in TreeElems.AllCons do begin
+    for cons in ast.AllCons do begin
       if cons.nCalled = 0 then begin
         //Esta es una constante no usada
         inc(Result);   //Lleva la cuenta
         //Quita las llamadas que podría estar haciendo a otras constantes
-        for cons2 in TreeElems.AllCons do begin
+        for cons2 in ast.AllCons do begin
           cons2.RemoveCallsFrom(cons);
 //            debugln('Eliminando llamada a %s desde: %s', [cons2.name, cons.name]);
         end;
@@ -1114,24 +1114,24 @@ y a RemoveUnusedFunc(). }
     como en:
     VAR mi_var: byte absolute CONST_DIR;
     Entonces es necesario este código:}
-    for xvar in TreeElems.AllVars do begin
+    for xvar in ast.AllVars do begin
       if xvar.nCalled = 0 then begin
         //Esta es una variable no usada
         inc(Result);   //Lleva la cuenta
         //Quita las llamadas que podría estar haciendo a constantes
-        for cons2 in TreeElems.AllCons do begin
+        for cons2 in ast.AllCons do begin
           cons2.RemoveCallsFrom(xvar);
 //debugln('Eliminando llamada a %s desde: %s', [cons2.name, xvar.name]);
         end;
       end;
     end;
     //Ahora quita las referencias de funciones no usadas
-    for fun in TreeElems.AllFuncs do begin  { TODO : Una forma más óptima sería considerar solo las funciones del programa o unidad actual, porque las funciones dentro de unidades (USES ...), no pueden llamar a funciones del programa o unidad actual. }
+    for fun in ast.AllFuncs do begin  { TODO : Una forma más óptima sería considerar solo las funciones del programa o unidad actual, porque las funciones dentro de unidades (USES ...), no pueden llamar a funciones del programa o unidad actual. }
       if fun.BodyNode = nil then continue;   //Funciones INLINE
       if fun.nCalled = 0 then begin
         //Esta es una función no usada
         inc(Result);   //Lleva la cuenta
-        for cons2 in TreeElems.AllCons do begin
+        for cons2 in ast.AllCons do begin
 //debugln('Eliminando llamada a %s desde func.no usada: %s', [cons2.name, fun.name+':'+fun.srcDec.RowColString]);
           cons2.RemoveCallsFrom(fun.BodyNode);
         end;
@@ -1163,16 +1163,16 @@ y a RemoveUnusedFunc(). }
     xtyp, xtyp2{, ntyp}: TAstTypeDec;
     fun : TAstFunDec;
   begin
-//TreeElems.OpenElement(TreeElems.main);
-//ntyp := TAstTypeDec(TreeElems.FindFirst('tarr1'));
+//ast.OpenElement(ast.main);
+//ntyp := TAstTypeDec(ast.FindFirst('tarr1'));
     Result := 0;
     {Quita, a los tipos, las referencias de constantes no usadas (de ese tipo).}
-    for cons in TreeElems.AllCons do begin
+    for cons in ast.AllCons do begin
       if cons.nCalled = 0 then begin
         //Esta es una constante no usada
         inc(Result);   //Lleva la cuenta
         //Quita las llamadas que podría estar haciendo a otras constantes
-        for xtyp in TreeElems.AllTypes do begin
+        for xtyp in ast.AllTypes do begin
           xtyp.RemoveCallsFrom(cons);
 //if xtyp.name='tarr1' then debugln('Eliminando llamada a %s desde: %s', [xtyp.name, cons.name]);
         end;
@@ -1180,12 +1180,12 @@ y a RemoveUnusedFunc(). }
     end;
 //debugln('ntyp.lstCallers=%d', [ntyp.lstCallers.Count]);
     {Quita, a los tipos, las referencias de variables no usadas (de ese tipo).}
-    for xvar in TreeElems.AllVars do begin
+    for xvar in ast.AllVars do begin
       if xvar.nCalled = 0 then begin
         //Esta es una variable no usada
         inc(Result);   //Lleva la cuenta
         //Quita las llamadas que podría estar haciendo a constantes
-        for xtyp in TreeElems.AllTypes do begin
+        for xtyp in ast.AllTypes do begin
           xtyp.RemoveCallsFrom(xvar);
 //if xtyp.name='tarr1' then debugln('Eliminando llamada a %s desde: %s', [xtyp.name, xvar.name]);
         end;
@@ -1194,12 +1194,12 @@ y a RemoveUnusedFunc(). }
 //debugln('ntyp.lstCallers=%d', [ntyp.lstCallers.Count]);
     {Quita, a los tipos, las referencias de otros tipos no usadas.
     Como en los tipos que se crean a partir de otros tipos}
-    for xtyp2 in TreeElems.AllTypes do begin
+    for xtyp2 in ast.AllTypes do begin
       if xtyp2.nCalled = 0 then begin
         //Esta es una variable no usada
         inc(Result);   //Lleva la cuenta
         //Quita las llamadas que podría estar haciendo a constantes
-        for xtyp in TreeElems.AllTypes do begin
+        for xtyp in ast.AllTypes do begin
           xtyp.RemoveCallsFrom(xtyp2);
 //if xtyp.name='tarr1' then debugln('Eliminando llamada a %s desde: %s', [xtyp.name, xtyp2.name]);
         end;
@@ -1207,11 +1207,11 @@ y a RemoveUnusedFunc(). }
     end;
 //debugln('ntyp.lstCallers=%d', [ntyp.lstCallers.Count]);
     //Ahora quita las referencias de funciones no usadas (de ese tipo)
-    for fun in TreeElems.AllFuncs do begin
+    for fun in ast.AllFuncs do begin
       if fun.nCalled = 0 then begin
         //Esta es una función no usada
         inc(Result);   //Lleva la cuenta
-        for xtyp in TreeElems.AllTypes do begin
+        for xtyp in ast.AllTypes do begin
           if fun.BodyNode = nil then continue;  { TODO : ¿Las funciones sin cuerpo, como las del sistema deberían generar llamadas? }
           xtyp.RemoveCallsFrom(fun.BodyNode);
 if xtyp.name='tarr1' then debugln('Eliminando llamada a %s desde: %s', [xtyp.name, cons.name]);
@@ -1272,7 +1272,7 @@ El objetivo final es determinar los accesos a las unidades.}
     end;
   end;
 begin
-  ScanUnits(TreeElems.main);
+  ScanUnits(ast.main);
 end;
 procedure TCompilerBase.UpdateFunLstCalled;
 {Actualiza la lista lstCalled de las funciones, para saber, a qué funciones llama
@@ -1285,7 +1285,7 @@ var
   curNest, maxNest: Integer;
 begin
   //Actualiza la lista "lstCalled" de todos los elementos que llaman a algo.
-  for fun in TreeElems.AllFuncs do begin
+  for fun in ast.AllFuncs do begin
     if fun.nCalled = 0 then continue;  //No usada. Nadie llama a esta función.
     //Procesa las llamadas hechas desde otras funciones, para llenar
     //su lista "lstCalled", y así saber a quienes llama.
@@ -1304,7 +1304,7 @@ begin
   end;
   {Actualizar la lista fun.lstCalledAll con la totalidad de llamadas a todas
    las funciones, sean de forma directa o indirectamente.}
-  for fun in TreeElems.AllFuncs do begin
+  for fun in ast.AllFuncs do begin
     ReadCalledAll(fun, curNest, maxNest);  //***¿No bastaría hacerlo solo para las funciones usadas?
     UpdateIsTerminal2(fun);  //Aprovechamos para actualizar "fun.IsTerminal2"
     if curNest<0 then begin
@@ -1313,8 +1313,8 @@ begin
   end;
   if HayError then exit;
   //Actualiza el programa principal
-  ReadCalledAll(TreeElems.main, curNest, maxNest);  //No debería dar error de recursividad, porque ya se verificaron las funciones
-  TreeElems.maxNesting := maxNest;         //Guarda información
+  ReadCalledAll(ast.main, curNest, maxNest);  //No debería dar error de recursividad, porque ya se verificaron las funciones
+  ast.maxNesting := maxNest;         //Guarda información
   if maxNest>128 then begin
     {Stack is 256 bytes size, and it could contain 128 max. JSR calls, without
     considering stack instructions.}
@@ -1332,7 +1332,7 @@ begin
   usedFuncs.Clear;
   unusedFuncs.Clear;
   interruptFunct := nil;
-  for fun in TreeElems.AllFuncs do begin
+  for fun in ast.AllFuncs do begin
     if fun.nCalled>0 then usedFuncs.Add(fun) else unusedFuncs.Add(fun);
     if fun.IsInterrupt then interruptFunct := fun;
   end;
@@ -1379,7 +1379,7 @@ begin
     expr := AddExpressionConstByte('n', consVal, lex.GetSrcPos);
   end;
   consDec.value := @expr.value;
-  TreeElems.CloseElement;  //Close constant.
+  ast.CloseElement;  //Close constant.
   exit(consDec);
 end;
 function TCompilerBase.GetConstantArray(arrDelimt: char; itmType: TAstTypeDec): TAstExpress;
@@ -1484,7 +1484,7 @@ begin
     lex.Next;  //Take ']' or ')'.
     nElem := Op.Value.nItems;
     if nElem = 0 then itmTypeRead := typNull;  //Something like []
-    if not TreeElems.ExistsArrayType(itmTypeRead, nElem, xtyp) then begin
+    if not ast.ExistsArrayType(itmTypeRead, nElem, xtyp) then begin
       //The type doesn't exist. We need to create.
       typName := GenArrayTypeName(itmTypeRead.name, nElem); //Op.nItems won't work
       xtyp := AddArrayTypeDecCC(typName, nElem, itmTypeRead, srcpos);
@@ -1560,7 +1560,7 @@ begin
       str += #0;
       inc(nElem);
     end;
-    if not TreeElems.ExistsArrayType(typChar, nElem, arrtyp) then begin
+    if not ast.ExistsArrayType(typChar, nElem, arrtyp) then begin
       //There is not a similar type. We create a new type.
       typName := GenArrayTypeName('char', nElem); //Op.nItems won't work
       arrtyp := AddArrayTypeDecCC(typName, nElem, typChar, srcpos);
@@ -1635,7 +1635,7 @@ var
 begin
   lex.Next;    //Pasa al siguiente
   if lex.toktype = tkIdentifier then begin
-    ele := TreeElems.FindFirst(lex.token); //Identify element
+    ele := ast.FindFirst(lex.token); //Identify element
     if ele = nil then begin
       //Unidentified element.
       GenError(ER_UNKNOWN_IDE_, [lex.token]);
@@ -1648,7 +1648,7 @@ begin
       AddCallerToFromCurr(ele); //Add reference to variable, however final operand can be: <variable>.<fieldName>
       Op1 := AddExpressAndOpen(ele.name, typWord, otConst, lex.GetSrcPos);
       Op1.SetAddrVar(xvar);
-      TreeElems.CloseElement;
+      ast.CloseElement;
       lex.Next;    //Pasa al siguiente
     end else if ele.idClass = eleFuncDec then begin  //Is function
       {It's a function (or procedure), but we don't know what's the exact funtion because
@@ -1671,19 +1671,19 @@ begin
       exit(nil);
     end;
   end else if lex.tokType in [tkString, tkChar] then begin
-    curLoc := TreeElems.curNode;
+    curLoc := ast.curNode;
     //Literal string generates a variable declared as arrays of char.
     constArr := GetConstantArrayStr(arrtyp);
     if HayError then exit(nil);
     //Create a new variable in the declaration section of this sntBlock.
-    _varaux := AddVarDecCC('', arrtyp, TreeElems.curCodCont);
+    _varaux := AddVarDecCC('', arrtyp, ast.curCodCont);
     AddCallerToFromCurr(arrtyp);
     _varaux.adicPar.hasAdic  := decDatSec;  //To asure it can be initialized.
     _varaux.adicPar.hasInit := constArr;    //Activa
     //Move the constant array
-    TreeElems.ChangeParentTo(_varaux, constArr);
+    ast.ChangeParentTo(_varaux, constArr);
     //Add constant Operand
-    TreeElems.openElement(curLoc);
+    ast.openElement(curLoc);
     AddCallerToFromCurr(_varaux); //Add reference
     Op1 := AddExpressAndOpen('ref', typWord, otConst, lex.GetSrcPos);
     Op1.SetAddrVar(_varaux);
@@ -1779,12 +1779,12 @@ in this function.
   var
     firstFunc: TAstFunBase;
   begin
-    TreeElems.curFind := searchState;  //Restore previous Finding, to continue the searching.
+    ast.curFind := searchState;  //Restore previous Finding, to continue the searching.
     firstFunc := xfun;  //Save reference to original function.
     repeat
       if SameParamsType(xfun, pars) then break;
       //Usar FindNextFunc, es la forma es eficiente, porque retoma la búsqueda anterior.
-      xfun := TreeElems.FindNextFuncName;
+      xfun := ast.FindNextFuncName;
     until xfun = nil;
     if xfun = nil then begin
       //None of the versions match the parameters.
@@ -1802,13 +1802,13 @@ in this function.
   var
     constOff: TAstExpress;
   begin
-    TreeElems.OpenElement(varOp);
-    TreeElems.AddElement(idxVar);
+    ast.OpenElement(varOp);
+    ast.AddElement(idxVar);
     constOff := CreateExpression('off', typByte, otConst, lex.GetSrcPos);
     constOff.Sto := stConst;
     constOff.SetLiteraltIntConst(offset);
-    TreeElems.AddElement(constOff);
-    TreeElems.CloseElement;
+    ast.AddElement(constOff);
+    ast.CloseElement;
   end;
 var
   xvar: TAstVarDec;
@@ -1843,8 +1843,8 @@ begin
     Op1.SetLiteralBoolConst(false);
     lex.Next;    //Pasa al siguiente
   end else if lex.toktype = tkIdentifier then begin
-    eleDec := TreeElems.FindFirst(lex.token); //Identify element finding declaration.
-    findState := TreeElems.curFind;    //Save because can be altered with CaptureParams()
+    eleDec := ast.FindFirst(lex.token); //Identify element finding declaration.
+    findState := ast.curFind;    //Save because can be altered with CaptureParams()
     if eleDec = nil then begin
       //Unidentified element.
       GenError(ER_UNKNOWN_IDE_, [lex.token]);
@@ -1959,7 +1959,7 @@ begin
 //          Op1.Typ := xvar.typ;
 //          Op1.vardec := xvar;
           eleMeth := CreateExpression(lex.token, xvar.typ, otVariab, lex.GetSrcPos);
-          TreeElems.InsertParentTo(eleMeth, Op1);
+          ast.InsertParentTo(eleMeth, Op1);
           lex.Next;   //Take the identifier
           Op1 := eleMeth;
         end else begin
@@ -1974,8 +1974,8 @@ begin
         lex.SkipWhites;         //Take spaces
         xfun := TAstFunBase(field).declar;  //The ancestor of eleFuncImp and eleFuncDec
         eleMeth := CreateExpression(field.name, xfun.retType, otFunct, posCall);
-        TreeElems.InsertParentTo(eleMeth, Op1);
-        TreeElems.OpenElement(eleMeth);  //Set parent to add parameters.
+        ast.InsertParentTo(eleMeth, Op1);
+        ast.OpenElement(eleMeth);  //Set parent to add parameters.
         //Capture parameters
         CaptureParams(pars);    //Read parameters in "pars".
         if HayError then exit(nil);
@@ -1999,8 +1999,8 @@ begin
       //Put element as parent of Op1
       eleMeth := CreateExpression('ptr^', Op1.Typ.ptrType, otVariab, lex.GetSrcPos);
       eleMeth.fcallOp := true;  //Come from an operator.
-      TreeElems.InsertParentTo(eleMeth, Op1);
-      TreeElems.OpenElement(eleMeth);  //Set parent.
+      ast.InsertParentTo(eleMeth, Op1);
+      ast.OpenElement(eleMeth);  //Set parent.
       Op1 := eleMeth;   //Set new operand 1
     end else begin  //Must be '['.
       //We have: array[something].
@@ -2024,8 +2024,8 @@ begin
       end else begin     //It has already an Index expression
         //Include the new index adding to the previous
         eleMeth := CreateExpression('', typWord, otFunct, lex.GetSrcPos);
-        TreeElems.InsertParentTo(eleMeth, Op1);
-        TreeElems.OpenElement(eleMeth);  //Set parent to add parameter (item index).
+        ast.InsertParentTo(eleMeth, Op1);
+        ast.OpenElement(eleMeth);  //Set parent to add parameter (item index).
         //We get the index
         OpIdx := GetExpression(0);
         if HayError then exit(nil);
@@ -2086,8 +2086,8 @@ begin
     //Put method as parent
     eleMeth := CreateExpression(opr1.name, opr1.retType, otFunct, oprPos);  //Type will updated later.
     eleMeth.fcallOp := true;  //Come from an operator.
-    TreeElems.InsertParentTo(eleMeth, Op1);
-    TreeElems.OpenElement(eleMeth);  //Set parent to add parameters.
+    ast.InsertParentTo(eleMeth, Op1);
+    ast.OpenElement(eleMeth);  //Set parent to add parameters.
     eleMeth.fundec := opr1;  //Method for operator.
     Op1 := eleMeth;   //Set new operand 1 (Expression)
   end else begin
@@ -2095,7 +2095,7 @@ begin
     Op1 := GetOperand();  //Add operand to the current node.
     if HayError then exit(nil);
   end;
-  TreeElems.OpenElement(Op1.Parent);  //Returns to parent (sentence), in the case the expression have only one operand.
+  ast.OpenElement(Op1.Parent);  //Returns to parent (sentence), in the case the expression have only one operand.
   lex.SkipWhites;
   p := lex.GetCtxState; //In the case we need to go back.  { TODO : ¿No debería ir dentro del WHILE? }
   //--------- Start loop: <Operator> <Operand> ----------
@@ -2114,8 +2114,8 @@ begin
     //Put element as parent of Op1
     eleMeth := CreateExpression('', typNull, otFunct, oprPos);  //Type will be updated later.
     eleMeth.fcallOp := true;  //Come from an operator.
-    TreeElems.InsertParentTo(eleMeth, Op1);
-    TreeElems.OpenElement(eleMeth);  //Set parent to method to allow add parameters as child node.
+    ast.InsertParentTo(eleMeth, Op1);
+    ast.OpenElement(eleMeth);  //Set parent to method to allow add parameters as child node.
     //-------------------- Get second operand --------------------
     Op2 := GetExpression(oprPre);   //toma operando con precedencia
     if HayError then exit(nil);
@@ -2131,7 +2131,7 @@ begin
     AddCallerToFromCurr(opr1);   //Mark as used.
     //Prepare next operation.
     Op1 := eleMeth;   //Set new operand 1
-    TreeElems.OpenElement(Op1.Parent);  //Returns to parent (sentence).
+    ast.OpenElement(Op1.Parent);  //Returns to parent (sentence).
     lex.SkipWhites;  //Prepares for take next operator.
   end;  //hasta que ya no siga un operador
   Result := Op1;  //aquí debe haber quedado el resultado
@@ -2215,7 +2215,7 @@ function TCompilerBase.AddCallerToFromCurr(toElem: TAstElement): TAstEleCaller;
 {Add a call to the element "toElem", from the current Code container (If there is one).
 Returns the reference to the caller class: TAstEleCaller. }
 begin
-  Result := AddCallerToFrom(toElem, TreeElems.curCodCont);
+  Result := AddCallerToFrom(toElem, ast.curCodCont);
 end;
 //Miscellaneous
 function TCompilerBase.GenerateUniqName(base: string): string;
@@ -2286,7 +2286,7 @@ begin
   msg := msg0;
   ClearError;   //inicia motor de errores
   //Crea arbol de elementos y listas
-  TreeElems  := TAstTree.Create;
+  ast  := TAstTree.Create;
   mirRep    := TMirList.Create;
   ejecProg := false;
   //Containers for functions
@@ -2298,7 +2298,7 @@ begin
   unusedFuncs.Destroy;
   usedFuncs.Destroy;
   mirRep.Destroy;
-  TreeElems.Destroy;
+  ast.Destroy;
   lex.Destroy;
   inherited Destroy;
 end;

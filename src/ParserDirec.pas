@@ -4,8 +4,8 @@ unit ParserDirec;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fgl, math, CompBase,
-  alexiaLex, CompGlobals, Analyzer, LazLogger, FileUtil;
+  Classes, SysUtils, fgl, math, LazLogger, FileUtil,
+  alexiaLex, CompBase, CompGlobals, Analyzer;
 type  //Tipos para manejo de expresiones
   TDirDatType = (ddtNumber, ddtString);
 
@@ -1839,7 +1839,6 @@ end;
 constructor TParserDirecBase.Create(msg0: TMessageManager);
 begin
   inherited Create(msg0);
-  //lexDir := TSynFacilSyn.Create(nil);  //crea lexer para analzar directivas
   //DefLexDirectiv;
   lexDir := TContext.Create();  //crea lexer para analizar directivas
   lexDir.OnDecodeNext := @DecodeNext;

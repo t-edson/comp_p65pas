@@ -277,7 +277,7 @@ begin
       operand.used := true;
       exit(true);
     end;
-    ele := cpx.TreeElems.FindFirst(lex.token);  //identifica elemento
+    ele := cpx.ast.FindFirst(lex.token);  //identifica elemento
     if ele=nil then begin
       //Es un identificador no definido (como una etiqueta). Puede definirse luego.
       operand.Val := -1;        //Indicates to use "operRef"
@@ -689,14 +689,14 @@ to the instruction added.}
 begin
   if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.TreeElems.CloseElement;
+    cpx.ast.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := '<inst>';
   curInst.srcDec := srcDec;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itOpcode;   //Marca como instrucción de salto.
-  cpx.TreeElems.AddElementAndOpen(curInst);
+  cpx.ast.AddElementAndOpen(curInst);
   //Actualiza propiedades de la instrucción
   curInst.opcode := ord(inst);
   curInst.addMode := ord(addMode);
@@ -709,55 +709,55 @@ If operand of the instruction is expression, it mus be added in the child nodes.
 begin
   if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.TreeElems.CloseElement;
+    cpx.ast.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := lblName;
   curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itLabel;   //Marca como instrucción de salto.
-  cpx.TreeElems.AddElementAndOpen(curInst);
+  cpx.ast.AddElementAndOpen(curInst);
   labels.add(curInst);  //Agrega a la lista de etiquetas
 end;
 procedure TParserAsm_6502.AddDirectiveORG(param: word);
 begin
   if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.TreeElems.CloseElement;
+    cpx.ast.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := 'ORG';
   curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itOrgDir;  //Represents ORG
-  cpx.TreeElems.AddElementAndOpen(curInst);
+  cpx.ast.AddElementAndOpen(curInst);
   curInst.operand.Val := param;
 end;
 procedure TParserAsm_6502.AddDirectiveDB;
 begin
   if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.TreeElems.CloseElement;
+    cpx.ast.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := 'DB';
   curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itDefByte;  //Represents DB
-  cpx.TreeElems.AddElementAndOpen(curInst);
+  cpx.ast.AddElementAndOpen(curInst);
 end;
 procedure TParserAsm_6502.AddDirectiveDW;
 begin
   if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.TreeElems.CloseElement;
+    cpx.ast.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := 'DW';
   curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itDefWord;  //Represents DB
-  cpx.TreeElems.AddElementAndOpen(curInst);
+  cpx.ast.AddElementAndOpen(curInst);
 end;
 //Inicialización
 procedure TParserAsm_6502.ProcessASMblock(cpx0: TCompilerBase);
@@ -772,7 +772,7 @@ begin
   curBlock := TAstAsmBlock.Create;
   curBlock.srcDec := lex.GetSrcPos;
   curBlock.name := 'ASMblk';
-  cpx.TreeElems.AddElementAndOpen(curBlock);
+  cpx.ast.AddElementAndOpen(curBlock);
   StartASM;
   curInst := nil;
   repeat
@@ -784,12 +784,12 @@ begin
   EndASM;
   if curInst <> nil then begin
     //There are an instruction opened
-    cpx.TreeElems.CloseElement;
+    cpx.ast.CloseElement;
   end;
   //Current token is delimiter END.
   lex.curCtx.OnDecodeNext := nil;   //Restore lexer here, in order to take the "END" with the new lexer and avoid problems of syntax.
   lex.Next;   //Take END with default lexer.
-  cpx.TreeElems.CloseElement;  //Close ASM block
+  cpx.ast.CloseElement;  //Close ASM block
 end;
 function TParserAsm_6502.DecodeNext: boolean;
 {Decode the token in the current position, indicated by (frow, fcol), and returns:
