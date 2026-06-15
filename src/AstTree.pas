@@ -85,8 +85,6 @@ type  //Abstract Syntax Tree
                              out typFound: TAstTypeDec): boolean;
     function GetElementBodyAt(posXY: TPoint): TAstBody;
     function GetElementAt(posXY: TPoint): TAstElement;
-    function GetElementCalledAt(const srcPos: TSrcPos): TAstElement;
-    function GetELementDeclaredAt(const srcPos: TSrcPos): TAstElement;
     function FunctionExistInCur(funName: string; const pars: TAstParamArray
       ): boolean;
   public  //Debug
@@ -599,59 +597,6 @@ begin
   //Realiza una búsqueda recursiva.
   res := nil;   //Por defecto
   ExploreFor(main);
-  Result := res;
-end;
-function TAstTree.GetElementCalledAt(const srcPos: TSrcPos): TAstElement;
-{Explora los elementos, para ver si alguno es llamado desde la posición indicada.
-Si no lo encuentra, devueleve NIL.}
-var
-  res: TAstElement;
-
-  procedure ExploreForCall(nod: TAstElement);
-  var
-    ele : TAstElement;
-  begin
-    //Explora a todos sus elementos
-    for ele in nod.elements do begin
-      if ele.IsCAlledAt(srcPos) then begin
-          res := ele;   //guarda referencia
-          exit;
-      end else begin
-        //No es un body, puede ser un eleemnto con nodos hijos
-        ExploreForCall(ele);  //recursivo
-      end;
-    end;
-  end;
-begin
-  //Realiza una búsqueda recursiva.
-  res := nil;   //Por defecto
-  ExploreForCall(main);
-  Result := res;
-end;
-function TAstTree.GetELementDeclaredAt(const srcPos: TSrcPos): TAstElement;
-{Explora los elementos, para ver si alguno es declarado en la posición indicada.}
-var
-  res: TAstElement;
-
-  procedure ExploreForDec(nod: TAstElement);
-  var
-    ele : TAstElement;
-  begin
-    //Explora a todos sus elementos
-    for ele in nod.elements do begin
-      if ele.IsDeclaredAt(srcPos) then begin
-          res := ele;   //guarda referencia
-          exit;
-      end else begin
-        //No es un body, puede ser un eleemnto con nodos hijos
-        ExploreForDec(ele);  //recursivo
-      end;
-    end;
-  end;
-begin
-  //Realiza una búsqueda recursiva.
-  res := nil;   //Por defecto
-  ExploreForDec(main);
   Result := res;
 end;
 function TAstTree.FunctionExistInCur(funName: string;

@@ -1148,7 +1148,6 @@ begin
   Result := TMirFunDec.Create;
   Result.text := funcName0.name;
   Result.astFunDec := funcName0;
-  Result.IsTerminal2 := funcName0.IsTerminal2;
   Result.operTyp := funcName0.operTyp;
   Result.oper := funcName0.oper;
   mcont.items.Add(Result);
@@ -1159,7 +1158,6 @@ begin
   Result := TMirFunDec.Create;
   Result.text := funcName0.name;
   Result.astFunDec := funcName0;
-  Result.IsTerminal2 := funcName0.IsTerminal2;
   Result.oper := funcName0.oper;
   mcont.items.Add(Result);
 end;

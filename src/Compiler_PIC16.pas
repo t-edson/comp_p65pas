@@ -1012,7 +1012,6 @@ begin
 //    end;
 //  end;
   for elem in ast.main.elements do begin
-    if elem.nCalled=0 then Continue;  //No usado.
     if elem.idClass = eleConsDec then begin
       astConDec := TAstConsDec(elem);
       mirConDec := AddMirConDec(mirRep.root.declars, astConDec);
@@ -1065,13 +1064,6 @@ begin
   ClearError;
   //Detecting unused elements
   ast.RefreshAllUnits; //Actualiza lista de unidades
-  RemoveUnusedFunc;       //Se debe empezar con las funciones. 1ms aprox.
-  RemoveUnusedVars;       //Luego las variables. 1ms aprox.
-  RemoveUnusedCons;       //1ms aprox.
-  RemoveUnusedTypes;      //1ms aprox.
-  UpdateFunLstCalled;     //Actualiza lista "lstCalled" de las funciones usadas.
-  if HayError then exit;
-  SeparateUsedFunctions;  //Updates "usedFuncs".
   //Genera la representación MIR
   GenerateMIR;
   //Evaluate declared constants
@@ -1139,7 +1131,6 @@ begin
     IsUnit := GetUnitDeclaration();
     DoAnalyze;
     if HayError then exit;
-    UpdateCallersToUnits;
     //Actualiza esta opción al generador de código porque puede haberse cambiado con las directivas.
     SIF_P65pas.str_nullterm := str_nullterm;
 
@@ -1149,7 +1140,7 @@ begin
         {Compila solo los procedimientos usados, leyendo la información del árbol de sintaxis,
         que debe haber sido actualizado en la primera pasada.}
         StartCountElapsed;
-        DoOptimize;
+//        DoOptimize;
         if HayError then exit;
         EndCountElapsed('-- Optimized in: ');
       end;
@@ -1395,22 +1386,6 @@ begin
   lins.Add(';PROCEDURE LIST');
   lins.Add(';===================');
 
-  lins.Add(';NAME                    USED   POSITION IN SOURCE');
-  lins.Add(';----------------------- ------ -------------------------------');
-  for fun in ast.AllFuncs do begin
-    if fun.nCalled > 0 then begin
-      if fun.nCalled = 0 then
-        state := 'Unused'
-      else
-        state := RightStr('     '+IntToStr(fun.nCalled)+ '', 6);
-
-      lins.Add( copy(fun.name + space(24) , 1, 24) + ' ' +
-                state + ' ' +
-                fun.srcDec.RowColString + ':' + lex.ctxFile(fun.srcDec.idCtx)
-      );
-    end;
-  end;
-
   ////////////////////////////////////////////////////////////
   ////////////////// Detalle de Funciones   ///////////
   ////////////////////////////////////////////////////////////
@@ -1418,53 +1393,7 @@ begin
   lins.Add(';PROCEDURE DETAIL');
   lins.Add(';===================');
   for fun in ast.AllFuncs do begin
-    if fun.nCalled > 0 then begin
-      lins.Add('------------------------------------');
-      lins.Add('----- PROCEDURE ' + fun.name);
-      lins.Add('------------------------------------');
-      lins.Add('  Caller Procedures:');
-      if fun.lstCallers .Count = 0 then begin
-        lins.Add('    <none>');
-      end else begin
-        for caller in fun.lstCallers do begin
-          lins.Add('    - ' + caller.caller.Parent.name);
-        end;
-      end;
-      lins.Add('');
 
-      lins.Add('  Called Procedures:');
-      if fun.lstCalled.Count = 0 then begin
-        lins.Add('    <none>');
-      end else begin
-        for called in fun.lstCalled do begin
-          lins.Add('    - ' + called.name);
-        end;
-      end;
-      lins.Add('');
-
-      lins.Add('  All Called Procedures:');
-      lstCalledAll := ReadCalledAll(fun, curNesting, maxNesting);
-      if lstCalledAll.Count = 0 then begin
-        lins.Add('    <none>');
-      end else begin
-        for called in lstCalledAll do begin
-          lins.Add('    - ' + called.name);
-        end;
-      end;
-      lins.Add('');
-
-      lins.Add('  Exit Instruction in obligatory code:');
-      if fun.firstObligExit = nil then begin
-        lins.Add('    <none>');
-      end else begin
-        //for exitCall in fun.lstExitCalls do begin
-        //  lins.Add('    - Exit() in ' +exitCall.srcPos.RowColString);
-        //end;
-        lins.Add('    - Oblig. exit() in ' + fun.firstObligExit.srcDec.RowColString);
-      end;
-      lins.Add('');
-
-    end;
   end;
   //Detalles del programa principal
 
@@ -1472,13 +1401,7 @@ begin
   lins.Add('----- Main Program');
   lins.Add('------------------------------------');
   lins.Add('  Called Procedures:');
-  if ast.main.lstCalled.Count = 0 then begin
-    lins.Add('    <none>');
-  end else begin
-    for called in ast.main.lstCalled do begin
-      lins.Add('    - ' + called.name);
-    end;
-  end;
+
   lins.Add('');
   //Muestra el máximo nivel de anidamiento.
   lins.Add('Max. Nesting = ' + IntToSTr(ast.maxNesting));
@@ -1675,11 +1598,6 @@ begin
   ast.CloseElement;  //Close body
   ast.CloseElement;  //Close function implementation
   lex.curLocation := tmpLoc;   //Restore current location
-  //Add callers to local variables created. Must be done after creating the body.
-  for i:=0 to high(local_vars) do begin
-    locvar := local_vars[i].vardec;
-    AddCallerToFrom(locvar, funimp.BodyNode);
-  end;
   exit(fundec);
 end;
 procedure TCompiler_PIC16.AddParam(var pars: TAstParamArray; parName: string; const srcPos: TSrcPos;
@@ -1967,10 +1885,10 @@ begin
   f.fConmutat := true;
   sifByteMulByte := f;
   f:=CreateInBOMethod(typByte, 'DIV' , '_div', typByte, typByte);
-  AddCallerToFrom(H, f.bodyNode);  //Dependency
+//  AddCallerToFrom(H, f.bodyNode);  //Dependency
   sifByteDivByte := f;
   f:=CreateInBOMethod(typByte, 'MOD' , '_mod', typByte, typByte);
-  AddCallerToFrom(H, f.bodyNode);  //Dependency
+//  AddCallerToFrom(H, f.bodyNode);  //Dependency
   sifByteModByte := f;
 
   f:=CreateInBOMethod(typByte, 'AND','_and', typByte, typByte);
@@ -2017,7 +1935,7 @@ begin
   f:=CreateInBOMethod(typWord, ':=' ,'_set' , typWord, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
-  AddCallerToFrom(H, f.bodyNode);  //Dependency
+//  AddCallerToFrom(H, f.bodyNode);  //Dependency
   f:=CreateInBOMethod(typWord, ':=' ,'_set' , typByte, AstTree.typNull);
   f.getset := gsSetInSimple;
   f:=CreateInBOMethod(typWord, '+=' ,'_aadd', typByte, AstTree.typNull);
@@ -2030,24 +1948,24 @@ begin
   f.asgMode := asgOperat;
   f.getset := gsSetInSimple;
   f:=CreateInBOMethod(typWord, '-=' ,'_asub', typWord, AstTree.typNull);
-  AddCallerToFrom(E, f.bodyNode);  // Require _E
+//  AddCallerToFrom(E, f.bodyNode);  // Require _E
   f.asgMode := asgOperat;
   f.getset := gsSetInSimple;
   f:=CreateInBOMethod(typWord, '+'  , '_add', typByte, typWord);
   f.fConmutat := true;
   f:=CreateInBOMethod(typWord, '+'  , '_add', typWord, typWord);
   f.fConmutat := true;
-  AddCallerToFrom(H, f.bodyNode);  //Dependency
+//  AddCallerToFrom(H, f.bodyNode);  //Dependency
   f:=CreateInBOMethod(typWord, '-'  , '_sub', typByte, typWord);
   f:=CreateInBOMethod(typWord, '-'  , '_sub', typWord, typWord);
   f:=CreateInBOMethod(typWord, '*' , '_mul', typByte, typWord);
   f.fConmutat := true;
 
   f:=CreateInBOMethod(typWord, 'DIV' , '_div', typWord, typWord);
-  AddCallerToFrom(H, f.bodyNode);  //Dependency
+//  AddCallerToFrom(H, f.bodyNode);  //Dependency
   sifWordDivWord := f;
   f:=CreateInBOMethod(typWord, 'MOD' , '_mod', typWord, typWord);
-  AddCallerToFrom(H, f.bodyNode);  //Dependency
+//  AddCallerToFrom(H, f.bodyNode);  //Dependency
   sifWordModWord := f;
 
   f:=CreateInBOMethod(typWord, 'AND', '_and', typByte, typByte);
@@ -2068,7 +1986,7 @@ begin
   f:=CreateInBOMethod(typWord, '<>', '_dif' , typWord, typBool);
   f.fConmutat := true;
   f:=CreateInBOMethod(typWord, '>=', '_gequ', typWord, typBool);
-  AddCallerToFrom(E, f.bodyNode);  //Dependency
+//  AddCallerToFrom(E, f.bodyNode);  //Dependency
   f:=CreateInBOMethod(typWord, '<' , '_les' , typWord, typBool);
   f:=CreateInBOMethod(typWord, '>' , '_gre' , typWord, typBool);
   f:=CreateInBOMethod(typWord, '<=', '_lequ', typWord, typBool);
@@ -2093,7 +2011,7 @@ begin
   f:=CreateInBOMethod(typDWord, ':=' ,'_set' , typWord, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
-  AddCallerToFrom(H, f.bodyNode);  //Dependency
+//  AddCallerToFrom(H, f.bodyNode);  //Dependency
   f:=CreateInBOMethod(typDWord, '+=' ,'_aadd', typByte, AstTree.typNull);
 //  f.getset := gsSetOther;
   f:=CreateInBOMethod(typDWord, '+=' ,'_aadd', typDWord, AstTree.typNull);
@@ -2111,7 +2029,7 @@ begin
   f.fConmutat := true;
   f:=CreateInBOMethod(typDWord, '+'  , '_add', typWord, typDWord);
   f.fConmutat := true;
-  AddCallerToFrom(H, f.bodyNode);  //Dependency
+//  AddCallerToFrom(H, f.bodyNode);  //Dependency
   f:=CreateInBOMethod(typDWord, '-'  , '_sub', typByte, typDWord);
   f:=CreateInBOMethod(typDWord, '-'  , '_sub', typDWord, typDWord);
 //  f:=CreateInBOMethod(typDWord, '*' , '_mul', typByte, typDWord, @SIF_word_mul_byte);
@@ -2218,7 +2136,7 @@ begin
   //Create system function "word"
   sifWord :=
   AddSIFtoUnit('word', SFI_WORD, typWord, srcPosNull, pars1null);
-  AddCallerToFrom(H, sifWord.BodyNode);  //Require H
+//  AddCallerToFrom(H, sifWord.BodyNode);  //Require H
   //Create system function "word"
   //sifWord :=
   AddSIFtoUnit('dword', SFI_DWORD,  typDWord, srcPosNull, pars1null);

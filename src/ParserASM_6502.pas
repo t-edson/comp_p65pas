@@ -296,7 +296,6 @@ begin
       if ele.idClass = eleFuncImp then begin
         //Es un identificador de función del árbol de sintaxis
         xfun := TAstFunImp(ele);
-        cpx.AddCallerToFromCurr(xfun);  //lleva la cuenta
         lex.Next;  //Take variable name
         operand.Val := -1;        //Indicates to use "operRef"
         operand.Ref := xfun;
@@ -308,7 +307,6 @@ begin
       end else if ele.idClass = eleVarDec then begin
         //It's variable identifier
         xvar := TAstVarDec(ele);
-        cpx.AddCallerToFromCurr(xvar);  //lleva la cuenta
         lex.Next;  //Take variable name
         operand.Val := -1;        //Indicates to use "operRef"
         operand.Ref := xvar;
@@ -320,7 +318,6 @@ begin
       end else if ele.idClass = eleConsDec then begin
         //Es identificador de constante
         xcon := TAstConsDec(ele);
-        cpx.AddCallerToFromCurr(xcon);  //lleva la cuenta
         //Constants can be resolved as numbers
         if (xcon.typ = cpx.typByte) or (xcon.typ = cpx.typWord) then begin
           lex.Next;

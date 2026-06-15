@@ -3,11 +3,13 @@ unit Analyzer;
 interface
 uses
   Classes, SysUtils, Types, alexiaLex, CompBase,
-  ParserASM_6502, CompGlobals, AstElemP65, AstTree;
+  ParserASM_6502, CompGlobals, AstElemP65, AstTree, ASTunit;
 type
 
   { TAnalyzer }
   TAnalyzer = class(TCompilerBase)
+  public
+    Prog: TProgram;  //Nuevo AST
   public    //Access to CPU hardware.
     function PICName: string; virtual; abstract;
     function RAMmax: integer; virtual; abstract;
@@ -27,6 +29,7 @@ type
       declarPos: Integer);
     procedure SetParameter(var funPar: TAstParam; const name: string;
       const srcPos: TSrcPos; typ: TAstTypeDec; const adicVar: TAdicVarDec);
+    procedure TestAllConstructs;
   protected
     function GetUnitDeclaration: boolean;
     function StartOfSection: boolean;
@@ -58,6 +61,9 @@ type
     procedure DoAnalyzeUnit(uni: TAstElement);
     procedure DoAnalyzeProgram;
     procedure DoAnalyze;
+  public      //Inicialización
+    constructor Create(msg0: TMessageManager);
+    destructor Destroy; override;
   end;
 
 implementation
@@ -793,7 +799,6 @@ If some problems happens, Error is generated and the NIL value is returned.
             end;
             ProcComments;
 //              attr.offs := offs;
-            AddCallerToFromCurr(varTyp);
             //Complete "varDec"
             varDec.typ := varTyp;
             //varDec.adicPar := adicVarDec;  //We don't worry for aditional declaraions because GetAdicVarDeclar2() has limited them.
@@ -990,7 +995,6 @@ begin
     //etyp := CreateEleType(typName, srcPos, reftyp.size, reftyp.catType, reftyp.group);
     etyp := ast.AddTypeDecAndOpen(srcPos, typName, reftyp.size, reftyp.catType, reftyp.group);
     if HayError then exit;  //Can be duplicated
-    AddCallerToFromCurr(reftyp);  //Llamada al tipo usado.  { TODO : Validar si se manejan bien las llamadas a los tipos copia. }
     ast.CloseElement;  //Close type
     {Crea la copia del tipo del sistema, que básicamente es el mismo tipo, solo que
     con otro nombre y que además, ahora, está en el árbol de sintaxis, por lo tanto
@@ -1058,7 +1062,6 @@ begin
     if HayError then begin
       exit;
     end;
-    if consTyp<>nil then AddCallerToFromCurr(consTyp);  //Add caller
     consDec.typ := consIni.Typ;   //Update constant type.
     if consIni.Sto = stConst then begin
       //A simple value. We can initialize the constant.
@@ -1130,7 +1133,6 @@ begin
       //if varTypCreated then varTyp.Destroy;
       exit;
     end;
-    AddCallerToFromCurr(varTyp);
     UpdateVarDec(varDec, varTyp, adicVarDec);
     ast.CloseElement;  //Close variable
   end else begin  //Multiple variables declaration
@@ -1154,7 +1156,6 @@ begin
       {Aquí, finalmente, se tiene el tipo completo en su estructura porque, si había un
       arreglo no dimensionado, como:  foo []CHAR = 'HELLO'; ya se verificó la
       inicialización.}
-      AddCallerToFromCurr(varTyp);
       UpdateVarDec(varDec, varTyp, adicVarDec);
       ast.CloseElement;  //Close variable
     end;
@@ -1612,7 +1613,6 @@ begin
   Op1aux := CreateExpression(_varaux.name, _varaux.typ, otVariab, Op.srcDec);
   SetVariabCA(Op1aux, _varaux);
   ast.addElement(Op1aux);
-  AddCallerToFromCurr(_varaux); //Add reference to auxiliar variable.
 
   //Move the second operand to the previous _set created
   OpParent := Op.Parent;    //Keep current parent reference.
@@ -1801,7 +1801,7 @@ procedure TAnalyzer.AnalyzeEXIT(exitSent: TAstExpress);
 var
   parentNod: TAstElement;
   func: TAstFunImp;
-  prog: TAstProg;
+  progEle: TAstProg;
   argType: TAstTypeDec;
 begin
   ProcComments;
@@ -1809,13 +1809,13 @@ begin
   parentNod := ast.curCodCont.Parent;  //Se supone que nunca debería fallar
   //posExit := GetSrcPos;
   if parentNod.idClass = eleProg then begin
-    prog := TAstProg(parentNod);
+    progEle := TAstProg(parentNod);
     //It's the main body
     if exitSent.fundec.sfi = SFI_EXIT1 then begin
       GenError('Main program cannot return a value.');
     end;
     //Lleva el registro de las llamadas a exit()
-    prog.RegisterExitCall(exitSent);
+    progEle.RegisterExitCall(exitSent);
   end else if parentNod.idClass in [eleFuncDec, eleFuncImp] then begin
     func := TAstFunImp(parentNod);
     if func.retType = typNull then begin
@@ -2339,6 +2339,264 @@ begin
   end else begin
     DoAnalyzeProgram;    //puede dar error
   end;
+  //********************** CÓDIGO DE PRUEBA DEL NUEVO LEXER *****************************
+  TestAllConstructs;
+end;
+
+constructor TAnalyzer.Create(msg0: TMessageManager);
+begin
+  inherited Create(msg0);
+  Prog := TProgram.Create('test', lex.GetSrcPos);
+
+end;
+
+destructor TAnalyzer.Destroy;
+begin
+  Prog.Free;  // Ahora todo se libera correctamente
+  inherited Destroy;
+end;
+
+//********************** CÓDIGO DE PRUEBA DEL NUEVO LEXER *****************************
+procedure TAnalyzer.TestAllConstructs;
+var
+  SrcPos: TSrcPos;
+  MainBlock: TBlock;
+  VarDecl: TVarDecl;
+
+  // Variables para los ejemplos - SOLO para declaraciones, NO para reutilizar
+  iVarDecl, jVarDecl, xVarDecl: TVarDecl;
+
+  // Para asignaciones y expresiones - CREAR NUEVOS NODOS CADA VEZ
+  Assign1, Assign2: TAssignment;
+  Literal1, Literal5, Literal10, Literal0, Literal2, Literal20: TNumberLiteral;
+
+  // Para IF
+  IfCondition: TBinaryOp;
+  IfThenBlock, IfElseBlock: TBlock;
+  IfStatement: TIfStatement;
+
+  // Para FOR
+  ForLoop: TForLoop;
+  ForBody: TBlock;
+
+  // Para REPEAT
+  RepeatBody: TBlock;
+  RepeatCondition: TBinaryOp;
+  RepeatUntil: TRepeatUntil;
+
+  // Para CASE
+  CaseSelector: TVariableRef;
+  CaseStatement: TCaseStatement;
+  Branch1, Branch2: TCaseBranch;
+  BranchBody1, BranchBody2: TBlock;
+  Const1, Const2: TNumberLiteral;
+
+  i: Integer;
+begin
+  SrcPos.idCtx := 1;
+  SrcPos.row := 1;
+  SrcPos.col := 1;
+
+  // Declarar variable global i: integer;
+  SrcPos.row := 3;
+  SrcPos.col := 1;
+  iVarDecl := TVarDecl.Create('i', dtInteger, 'integer', SrcPos);
+  Prog.AddGlobalDecl(iVarDecl);
+
+  SrcPos.row := 3;
+  SrcPos.col := 1;
+  jVarDecl := TVarDecl.Create('j', dtInteger, 'integer', SrcPos);
+  Prog.AddGlobalDecl(jVarDecl);
+
+  MainBlock := Prog.MainBody;   //Toma la referencia al cuerpo
+
+  // ============================================================
+  // 1. Asignación: i := 1;
+  // ============================================================
+  SrcPos.row := 5;
+  SrcPos.col := 3;
+  Literal1 := TNumberLiteral.Create(1, SrcPos);
+  Assign1 := TAssignment.Create(
+    TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo
+    Literal1,
+    SrcPos
+  );
+  MainBlock.AddStatement(Assign1);
+
+  // ============================================================
+  // 2. IF i > 0 THEN i := i + 5 ELSE i := i - 2;
+  // ============================================================
+  SrcPos.row := 7;
+  SrcPos.col := 3;
+  Literal0 := TNumberLiteral.Create(0, SrcPos);
+
+  // Condición: i > 0 (crea NUEVOS nodos para cada 'i')
+  IfCondition := TBinaryOp.Create('>',
+    TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo
+    Literal0,
+    SrcPos
+  );
+
+  // Then branch: i := i + 5
+  SrcPos.row := 7;
+  SrcPos.col := 3;
+  Literal5 := TNumberLiteral.Create(5, SrcPos);
+  Assign2 := TAssignment.Create(
+    TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo destino
+    TBinaryOp.Create('+',
+      TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo fuente
+      Literal5,
+      SrcPos
+    ),
+    SrcPos
+  );
+  IfThenBlock := TBlock.Create(SrcPos);
+  IfThenBlock.AddStatement(Assign2);
+
+  // Else branch: i := i - 2
+  SrcPos.row := 7;
+  SrcPos.col := 3;
+  Literal2 := TNumberLiteral.Create(2, SrcPos);
+  IfElseBlock := TBlock.Create(SrcPos);
+  IfElseBlock.AddStatement(
+    TAssignment.Create(
+      TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo destino
+      TBinaryOp.Create('-',
+        TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo fuente
+        Literal2,
+        SrcPos
+      ),
+      SrcPos
+    )
+  );
+
+  IfStatement := TIfStatement.Create(IfCondition, IfThenBlock, IfElseBlock, SrcPos);
+  MainBlock.AddStatement(IfStatement);
+
+  // ============================================================
+  // 3. FOR i := 1 TO 10 DO i := i + 1;
+  // ============================================================
+  SrcPos.row := 9;
+  SrcPos.col := 3;
+
+  ForBody := TBlock.Create(SrcPos);
+  Literal1 := TNumberLiteral.Create(1, SrcPos);
+  ForBody.AddStatement(
+    TAssignment.Create(
+      TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo destino
+      TBinaryOp.Create('+',
+        TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo fuente
+        Literal1,
+        SrcPos
+      ),
+      SrcPos
+    )
+  );
+
+  ForLoop := TForLoop.Create(
+    TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo variable control
+    fdUpTo,
+    TNumberLiteral.Create(1, SrcPos),
+    TNumberLiteral.Create(10, SrcPos),
+    ForBody,
+    SrcPos
+  );
+  MainBlock.AddStatement(ForLoop);
+
+  // ============================================================
+  // 4. REPEAT i := i - 1; UNTIL i = 0;
+  // ============================================================
+  SrcPos.row := 11;
+  SrcPos.col := 3;
+  RepeatBody := TBlock.Create(SrcPos);
+  Literal1 := TNumberLiteral.Create(1, SrcPos);
+  RepeatBody.AddStatement(
+    TAssignment.Create(
+      TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo destino
+      TBinaryOp.Create('-',
+        TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo fuente
+        Literal1,
+        SrcPos
+      ),
+      SrcPos
+    )
+  );
+
+  SrcPos.row := 12;
+  SrcPos.col := 3;
+  Literal0 := TNumberLiteral.Create(0, SrcPos);
+  RepeatCondition := TBinaryOp.Create('=',
+    TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo
+    Literal0,
+    SrcPos
+  );
+
+  RepeatUntil := TRepeatUntil.Create(RepeatBody, RepeatCondition, SrcPos);
+  MainBlock.AddStatement(RepeatUntil);
+
+  // ============================================================
+  // 5. CASE i OF 1: j:=10; 2: j:=20; ELSE j:=0; END;
+  // ============================================================
+  SrcPos.row := 14;
+  SrcPos.col := 3;
+  CaseSelector := TVariableRef.Create('i', SrcPos);  // ← NUEVO nodo
+  CaseStatement := TCaseStatement.Create(CaseSelector, SrcPos);
+
+  // Rama 1: 1: j := 10;
+  BranchBody1 := TBlock.Create(SrcPos);
+  BranchBody1.AddStatement(
+    TAssignment.Create(
+      TVariableRef.Create('j', SrcPos),  // ← NUEVO nodo
+      TNumberLiteral.Create(10, SrcPos),
+      SrcPos
+    )
+  );
+
+  Branch1 := TCaseBranch.Create(SrcPos);
+  Const1 := TNumberLiteral.Create(1, SrcPos);
+  Branch1.AddConstant(Const1);
+  Branch1.Statement := BranchBody1;
+  CaseStatement.AddBranch(Branch1);
+
+  // Rama 2: 2: j := 20;
+  BranchBody2 := TBlock.Create(SrcPos);
+  BranchBody2.AddStatement(
+    TAssignment.Create(
+      TVariableRef.Create('j', SrcPos),  // ← NUEVO nodo
+      TNumberLiteral.Create(20, SrcPos),
+      SrcPos
+    )
+  );
+
+  Branch2 := TCaseBranch.Create(SrcPos);
+  Const2 := TNumberLiteral.Create(2, SrcPos);
+  Branch2.AddConstant(Const2);
+  Branch2.Statement := BranchBody2;
+  CaseStatement.AddBranch(Branch2);
+
+  // ELSE: j := 0;
+  SrcPos.row := 14;
+  SrcPos.col := 3;
+  CaseStatement.ElseBranch := TBlock.Create(SrcPos);
+  CaseStatement.ElseBranch.AddStatement(
+    TAssignment.Create(
+      TVariableRef.Create('j', SrcPos),  // ← NUEVO nodo
+      TNumberLiteral.Create(0, SrcPos),
+      SrcPos
+    )
+  );
+
+  MainBlock.AddStatement(CaseStatement);
+
+  Prog.MainBody := MainBlock;
+
+  // Imprimir AST
+  WriteLn('=== AST COMPLETO ===');
+  Prog.PrintDebug;
+
+  WriteLn;
+  WriteLn('Presiona Enter para salir...');
+//  ReadLn;
 end;
 
 end.

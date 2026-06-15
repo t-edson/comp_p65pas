@@ -3,8 +3,6 @@
 Clase base para la creación de un compilador como el P65Pas.
 La idea es tener aquí todas las rutinas que en lo posible sean independientes del
 lenguaje y del modelo de CPU.
-Para mayor información sobre el uso del framework Xpres, consultar la documentación
-técnica.
 }
 //{$Define LogExpres}
 unit CompBase;
@@ -119,14 +117,6 @@ protected //Element set
     idxVar: TAstVarDec);
   procedure AddOffsetVariab(varExp: TAstExpress; offConst: TAstExpress);
 
-protected //Containers
-  procedure RemoveUnusedFunc;
-  procedure RemoveUnusedVars;
-  procedure RemoveUnusedCons;
-  procedure RemoveUnusedTypes;
-  procedure UpdateCallersToUnits;
-  procedure UpdateFunLstCalled;
-  procedure SeparateUsedFunctions;
 public    //Containers
   ast     : TAstTree;    //Abstract syntax tree.
   mirRep        : TMirList;     //Container for MIR representation
@@ -211,9 +201,6 @@ public    //Abstract methods
   procedure GetResourcesUsed(out ramUse, romUse, stkUse: single); virtual; abstract;
   procedure DumpCode(lins: TSTrings); virtual; abstract;
   procedure GenerateListReport(lins: TStrings); virtual; abstract;
-public    //Callers methods
-  function AddCallerToFrom(toElem: TAstElement; callerElem: TAstElement): TAstEleCaller;
-  function AddCallerToFromCurr(toElem: TAstElement): TAstEleCaller;
 protected //Miscellaneous
   elemCnt: integer;  //Counter to generate names.
   function GenerateUniqName(base: string): string;
@@ -988,355 +975,6 @@ begin
   end;
   eleMeth.fundec := funSet;
 end;
-//Containers
-procedure TCompilerBase.RemoveUnusedFunc;
-{Explora las funciones, para quitarle las referencias de funciones no usadas.
-Para que esta función trabaje bien, debe haberse llamado a RefreshAllElementLists(). }
-  function RemoveUnusedFuncReferences: integer;
-  {Explora las funciones, para quitarle las referencias de funciones no usadas.
-  Devuelve la cantidad de funciones no usadas.
-  Para que esta función trabaje bien, debe estar actualizada "ast.AllFuncs". }
-  var
-    fun, fun2: TAstFunDec;
-  begin
-    Result := 0;
-    for fun in ast.AllFuncs do begin
-      if fun.nCalled = 0 then begin
-        inc(Result);   //Lleva la cuenta
-        //Si no se usa la función, tampoco sus elementos locales
-        fun.SetElementsUnused;  //Elements are in Implementation
-        //También se quita las llamadas que hace a otras funciones
-        for fun2 in ast.AllFuncs do begin
-          fun2.RemoveCallsFrom(fun.BodyNode);
-//          debugln('Eliminando %d llamadas desde: %s', [n, fun.name]);
-        end;
-      end;
-    end;
-  end;
-var
-  noUsed, noUsedPrev: Integer;
-begin
-  //Explora las funciones, para identifcar a las no usadas
-  //Se requieren varias iteraciones.
-  noUsed := 0;
-  repeat  //Explora en varios niveles
-    noUsedPrev := noUsed;   //valor anterior
-    noUsed := RemoveUnusedFuncReferences;
-  until noUsed = noUsedPrev;
-end;
-procedure TCompilerBase.RemoveUnusedVars;
-{Explora las variables de todo el programa, para detectar las que no son usadas
-(quitando las referencias que se hacen a ellas)).
-Para que esta función trabaje bien, debe haberse llamado a RefreshAllElementLists()
-y a RemoveUnusedFunc(). }
-  function RemoveUnusedVarReferences: integer;
-  {Explora las variables de todo el programa, de modo que a cada una:
-  * Le quita las referencias hechas por variables no usadas.
-  Devuelve la cantidad de variables no usadas.}
-  var
-    xvar, xvar2: TAstVarDec;
-    fun: TAstFunDec;
-  begin
-    Result := 0;
-    {Quita, a las variables, las referencias de variables no usadas.
-    Una referencia de una variable a otra se da, por ejemplo, en el caso:
-    VAR
-      STATUS_IRP: bit absolute STATUS.7;
-    En este caso, la variable STATUS_IRP, hace referencia a STATUS.
-    Si STATUS_IRP no se usa, esta referencia debe quitarse.
-    }
-    for xvar in ast.AllVars do begin
-      if xvar.nCalled = 0 then begin
-        //Esta es una variable no usada
-        inc(Result);   //Lleva la cuenta
-        //Quita las llamadas que podría estar haciendo a otras variables
-        for xvar2 in ast.AllVars do begin
-          xvar2.RemoveCallsFrom(xvar);
-//            debugln('Eliminando llamada a %s desde: %s', [xvar2.name, xvar.name]);
-        end;
-      end;
-    end;
-    //Ahora quita las referencias de funciones no usadas
-    for fun in ast.AllFuncs do begin
-      if fun.nCalled = 0 then begin
-        //Esta es una función no usada
-        inc(Result);   //Lleva la cuenta
-        for xvar2 in ast.AllVars do begin
-          xvar2.RemoveCallsFrom(fun.BodyNode);
-//          debugln('Eliminando llamada a %s desde: %s', [xvar2.name, xvar.name]);
-        end;
-      end;
-    end;
-  end;
-var
-  noUsed, noUsedPrev: Integer;
-begin
-  noUsed := 0;
-  repeat  //Explora en varios niveles
-    noUsedPrev := noUsed;   //valor anterior
-    noUsed := RemoveUnusedVarReferences;
-  until noUsed = noUsedPrev;   //Ya no se eliminan más variables
-end;
-procedure TCompilerBase.RemoveUnusedCons;
-{Explora las constantes de todo el programa, para detectar las que no son usadas
-(quitando las referencias que se hacen a ellas)).
-Para que esta función trabaje bien, debe haberse llamado a RefreshAllElementLists()
-y a RemoveUnusedFunc(). }
-  function RemoveUnusedConsReferences: integer;
-  {Explora las constantes de todo el programa, de modo que a cada una:
-  * Le quita las referencias hechas por constantes no usadas.
-  Devuelve la cantidad de constantes no usadas.}
-  var
-    cons, cons2: TAstConsDec;
-    xvar: TAstVarDec;
-    fun: TAstFunDec;
-  begin
-    Result := 0;
-    {Quita, a las constantes, las referencias de constantes no usadas.
-    Una referencia de una constante a otra se da, por ejemplo, en el caso:
-    CONST
-      CONST_2 = CONST_1 + 1;
-    En este caso, la constante CONST_2, hace referencia a CONST_1.
-    Si CONST_2 no se usa, esta referencia debe quitarse.
-    }
-    for cons in ast.AllCons do begin
-      if cons.nCalled = 0 then begin
-        //Esta es una constante no usada
-        inc(Result);   //Lleva la cuenta
-        //Quita las llamadas que podría estar haciendo a otras constantes
-        for cons2 in ast.AllCons do begin
-          cons2.RemoveCallsFrom(cons);
-//            debugln('Eliminando llamada a %s desde: %s', [cons2.name, cons.name]);
-        end;
-      end;
-    end;
-    {Si se incluye la posibilidad de definir variables a partir de constantes,
-    como en:
-    VAR mi_var: byte absolute CONST_DIR;
-    Entonces es necesario este código:}
-    for xvar in ast.AllVars do begin
-      if xvar.nCalled = 0 then begin
-        //Esta es una variable no usada
-        inc(Result);   //Lleva la cuenta
-        //Quita las llamadas que podría estar haciendo a constantes
-        for cons2 in ast.AllCons do begin
-          cons2.RemoveCallsFrom(xvar);
-//debugln('Eliminando llamada a %s desde: %s', [cons2.name, xvar.name]);
-        end;
-      end;
-    end;
-    //Ahora quita las referencias de funciones no usadas
-    for fun in ast.AllFuncs do begin  { TODO : Una forma más óptima sería considerar solo las funciones del programa o unidad actual, porque las funciones dentro de unidades (USES ...), no pueden llamar a funciones del programa o unidad actual. }
-      if fun.BodyNode = nil then continue;   //Funciones INLINE
-      if fun.nCalled = 0 then begin
-        //Esta es una función no usada
-        inc(Result);   //Lleva la cuenta
-        for cons2 in ast.AllCons do begin
-//debugln('Eliminando llamada a %s desde func.no usada: %s', [cons2.name, fun.name+':'+fun.srcDec.RowColString]);
-          cons2.RemoveCallsFrom(fun.BodyNode);
-        end;
-      end;
-    end;
-  end;
-var
-  noUsed, noUsedPrev: Integer;
-begin
-  noUsed := 0;
-  repeat  //Explora en varios niveles
-    noUsedPrev := noUsed;   //valor anterior
-    noUsed := RemoveUnusedConsReferences;
-  until noUsed = noUsedPrev;   //Ya no se eliminan más constantes
-end;
-procedure TCompilerBase.RemoveUnusedTypes;
-{Explora los tipos (definidos por el usuario) de todo el programa, para detectar
-los que no son usados (quitando las referencias que se hacen a ellos)).
-Para que esta función trabaje bien, debe haberse llamado a RefreshAllElementLists()
-y a RemoveUnusedFunc(). }
-  function RemoveUnusedTypReferences: integer;
-  {Explora los tipos de todo el programa, de modo que a cada uno:
-  * Le quita las referencias hechas por constantes, variables, tipos y funciones no usadas.
-  Devuelve la cantidad de tipos no usados.
-  ////////// POR REVISAR ///////////}
-  var
-    cons: TAstConsDec;
-    xvar: TAstVarDec;
-    xtyp, xtyp2{, ntyp}: TAstTypeDec;
-    fun : TAstFunDec;
-  begin
-//ast.OpenElement(ast.main);
-//ntyp := TAstTypeDec(ast.FindFirst('tarr1'));
-    Result := 0;
-    {Quita, a los tipos, las referencias de constantes no usadas (de ese tipo).}
-    for cons in ast.AllCons do begin
-      if cons.nCalled = 0 then begin
-        //Esta es una constante no usada
-        inc(Result);   //Lleva la cuenta
-        //Quita las llamadas que podría estar haciendo a otras constantes
-        for xtyp in ast.AllTypes do begin
-          xtyp.RemoveCallsFrom(cons);
-//if xtyp.name='tarr1' then debugln('Eliminando llamada a %s desde: %s', [xtyp.name, cons.name]);
-        end;
-      end;
-    end;
-//debugln('ntyp.lstCallers=%d', [ntyp.lstCallers.Count]);
-    {Quita, a los tipos, las referencias de variables no usadas (de ese tipo).}
-    for xvar in ast.AllVars do begin
-      if xvar.nCalled = 0 then begin
-        //Esta es una variable no usada
-        inc(Result);   //Lleva la cuenta
-        //Quita las llamadas que podría estar haciendo a constantes
-        for xtyp in ast.AllTypes do begin
-          xtyp.RemoveCallsFrom(xvar);
-//if xtyp.name='tarr1' then debugln('Eliminando llamada a %s desde: %s', [xtyp.name, xvar.name]);
-        end;
-      end;
-    end;
-//debugln('ntyp.lstCallers=%d', [ntyp.lstCallers.Count]);
-    {Quita, a los tipos, las referencias de otros tipos no usadas.
-    Como en los tipos que se crean a partir de otros tipos}
-    for xtyp2 in ast.AllTypes do begin
-      if xtyp2.nCalled = 0 then begin
-        //Esta es una variable no usada
-        inc(Result);   //Lleva la cuenta
-        //Quita las llamadas que podría estar haciendo a constantes
-        for xtyp in ast.AllTypes do begin
-          xtyp.RemoveCallsFrom(xtyp2);
-//if xtyp.name='tarr1' then debugln('Eliminando llamada a %s desde: %s', [xtyp.name, xtyp2.name]);
-        end;
-      end;
-    end;
-//debugln('ntyp.lstCallers=%d', [ntyp.lstCallers.Count]);
-    //Ahora quita las referencias de funciones no usadas (de ese tipo)
-    for fun in ast.AllFuncs do begin
-      if fun.nCalled = 0 then begin
-        //Esta es una función no usada
-        inc(Result);   //Lleva la cuenta
-        for xtyp in ast.AllTypes do begin
-          if fun.BodyNode = nil then continue;  { TODO : ¿Las funciones sin cuerpo, como las del sistema deberían generar llamadas? }
-          xtyp.RemoveCallsFrom(fun.BodyNode);
-if xtyp.name='tarr1' then debugln('Eliminando llamada a %s desde: %s', [xtyp.name, cons.name]);
-        end;
-      end;
-    end;
-//debugln('ntyp.lstCallers=%d', [ntyp.lstCallers.Count]);
-  end;
-var
-  noUsed, noUsedPrev: Integer;
-begin
-  noUsed := 0;
-  repeat  //Explora en varios niveles
-    noUsedPrev := noUsed;   //valor anterior
-    noUsed := RemoveUnusedTypReferences;
-//debugln('---noUsed=%d',[noUsed]);
-  until noUsed = noUsedPrev;   //Ya no se eliminan más tipos
-end;
-procedure TCompilerBase.UpdateCallersToUnits;
-{Explora recursivamente el arbol de sintaxis para encontrar (y agregar) las
-llamadas que se hacen a una unidad desde el programa o unidad que la incluye.
-El objetivo final es determinar los accesos a las unidades.}
-  procedure ScanUnits(nod: TAstElement);
-  var
-    ele, eleInter , elemUnit: TAstElement;
-    uni : TAstUnit;
-    cal , c: TAstEleCaller;
-  begin
-//debugln('+Scanning in:'+nod.name);
-    for ele in nod.elements do begin
-      //Solo se explora a las unidades
-      if ele.idClass = eleUnit then begin
-//debugln('  Unit:'+ele.name);
-        //"ele" es una unidad de "nod". Verifica si es usada
-        uni := TAstUnit(ele);    //Accede a la unidad.
-        uni.ReadInterfaceElements; //Accede a sus campos
-        {Buscamos por los elementos de la interfaz de la unidad para ver si son
-         usados}
-        for eleInter in uni.InterfaceElements do begin
-//debugln('    Interface Elem:'+eleInter.name);
-          //Explora por los llamadores de este elemento.
-          for cal in eleInter.lstCallers do begin
-            elemUnit := cal.CallerUnit;   //Unidad o programa
-            if elemUnit = nod then begin
-              {Este llamador está contenido en "nod". Lo ponemos como llamador de
-              la unidad.}
-              c := AddCallerToFromCurr(uni);
-              c.caller := cal.caller;
-              c.curPos := cal.curPos;
-//                debugln('      Added caller to %s from %s (%d,%d)',
-//                        [uni.name, c.curPos.fil, c.curPos.row, c.curPos.col]);
-            end;
-          end;
-        end;
-        //Ahora busca recursivamente, por si la unidad incluye a otras unidades
-        ScanUnits(ele);  //recursivo
-      end;
-    end;
-  end;
-begin
-  ScanUnits(ast.main);
-end;
-procedure TCompilerBase.UpdateFunLstCalled;
-{Actualiza la lista lstCalled de las funciones, para saber, a qué funciones llama
- cada función.
- También hace una verificación de recursividad o desborde de pila.}
-var
-  fun    : TAstFunDec;
-  itCall : TAstEleCaller;
-  whoCalls: TAstBody;
-  curNest, maxNest: Integer;
-begin
-  //Actualiza la lista "lstCalled" de todos los elementos que llaman a algo.
-  for fun in ast.AllFuncs do begin
-    if fun.nCalled = 0 then continue;  //No usada. Nadie llama a esta función.
-    //Procesa las llamadas hechas desde otras funciones, para llenar
-    //su lista "lstCalled", y así saber a quienes llama.
-    for itCall in fun.lstCallers do begin
-      //Agrega la referencia de la llamada a la función
-      if not (itCall.caller.idClass in [eleBody, eleConsDec, eleVarDec]) then begin
-        //Según diseño, itCall.caller debe ser alguno de los elementos válidos.
-        GenError('Design error.');
-        exit;
-      end;
-      whoCalls := TAstBody(itCall.caller);
-      //Se agregan todas las llamadas (así sean al mismo procedimiento) pero luego
-      //AddCalled(), los filtra.
-      whoCalls.Parent.AddCalled(fun);  //Agrega al procedimiento
-    end;
-  end;
-  {Actualizar la lista fun.lstCalledAll con la totalidad de llamadas a todas
-   las funciones, sean de forma directa o indirectamente.}
-  for fun in ast.AllFuncs do begin
-    ReadCalledAll(fun, curNest, maxNest);  //***¿No bastaría hacerlo solo para las funciones usadas?
-    UpdateIsTerminal2(fun);  //Aprovechamos para actualizar "fun.IsTerminal2"
-    if curNest<0 then begin
-      GenError('Recursive call or circular recursion in %s', [fun.name], fun.srcDec);
-    end;
-  end;
-  if HayError then exit;
-  //Actualiza el programa principal
-  ReadCalledAll(ast.main, curNest, maxNest);  //No debería dar error de recursividad, porque ya se verificaron las funciones
-  ast.maxNesting := maxNest;         //Guarda información
-  if maxNest>128 then begin
-    {Stack is 256 bytes size, and it could contain 128 max. JSR calls, without
-    considering stack instructions.}
-    GenError('Not enough stack.');
-  end;
-end;
-procedure TCompilerBase.SeparateUsedFunctions;
-{Performs two tasks:
-1. Fill the list usedFuncs with all used functions, including Interrupt function.
-2. Set interruptFunct to point to the interrupt function (Only one).
-Must be called after call to RemoveUnusedFunc().}
-var
-  fun : TAstFunDec;
-begin
-  usedFuncs.Clear;
-  unusedFuncs.Clear;
-  interruptFunct := nil;
-  for fun in ast.AllFuncs do begin
-    if fun.nCalled>0 then usedFuncs.Add(fun) else unusedFuncs.Add(fun);
-    if fun.IsInterrupt then interruptFunct := fun;
-  end;
-end;
 function TCompilerBase.CompatibleTypes(typ1, typ2: TAstTypeDec): boolean;
 {Indicates if the types are equals or similar.}
 begin
@@ -1567,7 +1205,6 @@ begin
 
     end;
     Op1 := AddExpressAndOpen('str', arrtyp, otConst, srcPos);
-    AddCallerToFromCurr(arrtyp);
     Op1.StringToArrayOfChar(str);
     Op1.evaluated := true;
   end;
@@ -1645,7 +1282,6 @@ begin
       GenError('Cannot get the address for a constant.');
     end else if ele.idClass = eleVarDec then begin  //Is variable
       xvar := TAstVarDec(ele);
-      AddCallerToFromCurr(ele); //Add reference to variable, however final operand can be: <variable>.<fieldName>
       Op1 := AddExpressAndOpen(ele.name, typWord, otConst, lex.GetSrcPos);
       Op1.SetAddrVar(xvar);
       ast.CloseElement;
@@ -1654,7 +1290,6 @@ begin
       {It's a function (or procedure), but we don't know what's the exact funtion because
 //      could be different overload versions.}
       xfun := TAstFunDec(ele);
-      AddCallerToFromCurr(xfun);
       Op1 := AddExpressAndOpen(ele.name, typWord, otConst, lex.GetSrcPos);
       Op1.SetAddrFun(xfun);
       lex.Next;               //Take identifier
@@ -1662,7 +1297,6 @@ begin
       {It's a function (or procedure), but we don't know what's the exact funtion because
 //      could be different overload versions.}
       xfun := TAstFunImp(ele).declar;  //Get the declaration
-      AddCallerToFromCurr(xfun);
       Op1 := AddExpressAndOpen(ele.name, typWord, otConst, lex.GetSrcPos);
       Op1.SetAddrFun(xfun);
       lex.Next;               //Take identifier
@@ -1677,14 +1311,12 @@ begin
     if HayError then exit(nil);
     //Create a new variable in the declaration section of this sntBlock.
     _varaux := AddVarDecCC('', arrtyp, ast.curCodCont);
-    AddCallerToFromCurr(arrtyp);
     _varaux.adicPar.hasAdic  := decDatSec;  //To asure it can be initialized.
     _varaux.adicPar.hasInit := constArr;    //Activa
     //Move the constant array
     ast.ChangeParentTo(_varaux, constArr);
     //Add constant Operand
     ast.openElement(curLoc);
-    AddCallerToFromCurr(_varaux); //Add reference
     Op1 := AddExpressAndOpen('ref', typWord, otConst, lex.GetSrcPos);
     Op1.SetAddrVar(_varaux);
   end else begin
@@ -1852,13 +1484,11 @@ begin
     end;
     if eleDec.idClass = eleConsDec then begin  //Is constant
       xcon := TAstConsDec(eleDec);
-      AddCallerToFromCurr(eleDec);
       Op1 := AddExpressAndOpen(eleDec.name, xcon.Typ, otConst, lex.GetSrcPos);
       Op1.SetConstRef(xcon);
       lex.Next;    //Pasa al siguiente
     end else if eleDec.idClass = eleVarDec then begin  //Is variable
       xvar := TAstVarDec(eleDec);
-      AddCallerToFromCurr(eleDec); //Add reference to variable, however final operand can be: <variable>.<fieldName>
       Op1 := AddExpressAndOpen(eleDec.name, xvar.Typ, otVariab, lex.GetSrcPos);
       SetVariabCA(Op1, xvar);
       lex.Next;    //Pasa al siguiente
@@ -1878,8 +1508,6 @@ begin
       //Resolve final function called, acording to parameters.
       xfun := ResolveFunction(pars, xfun, findState);
       if HayError then exit(nil);
-      AddCallerToFromCurr(xfun).curPos := posCall;  {Fix call position, otherwise will be pointing to the
-                                   end of parameters}
       Op1.fundec := xfun;  //We can now set the final function.
     end else begin
       //Operand expected
@@ -1941,7 +1569,6 @@ begin
       //Found the field. Create an expression node.
       if field.idClass = eleConsDec then begin
         xcon := TAstConsDec(field);
-        AddCallerToFromCurr(field);
         //We rather convert all to a constant
         eleMeth := Op1;
         eleMeth.opType := otConst;
@@ -2128,7 +1755,6 @@ begin
     eleMeth.name := opr1.name;
     eleMeth.fundec := opr1;  //Method for operator.
     eleMeth.Typ  := opr1.retType;  //Complete returning type.
-    AddCallerToFromCurr(opr1);   //Mark as used.
     //Prepare next operation.
     Op1 := eleMeth;   //Set new operand 1
     ast.OpenElement(Op1.Parent);  //Returns to parent (sentence).
@@ -2179,44 +1805,6 @@ begin
   hexfile := filPath;
 end;
 //Callers methods
-function TCompilerBase.AddCallerToFrom(toElem: TAstElement; callerElem: TAstElement): TAstEleCaller;
-{General function to add a call to an element of the syntax ("toElem"). The "caller"
-element is "callerElem".
-Returns the reference to the caller class: TAstEleCaller.
-The objective of this function is not to be called directly (that is why it is private)
-but rather to use the most specialized functions: AddCallerToFromBody, AddCallerToFromVar
-and AddCallerToFromCurBody, to have more control on the types of elements added as
-"callers". }
-var
-  fc: TAstEleCaller;
-  funimp: TAstFunImp;
-  fundec: TAstFunDec;
-begin
-  //Creates caller class.
-  fc:= TAstEleCaller.Create;
-  fc.caller := callerElem;
-  fc.curPos := lex.GetSrcPos;  //Can be changed later if not apply.
-  if toElem.idClass = eleFuncImp then begin
-    //For implementation of functions, the caller are added directly.
-    funimp := TAstFunImp(toElem);
-    //Declaration "funimp.declar" must always exist.
-    funimp.declar.lstCallers.Add(fc);
-  end else if toElem.idClass = eleFuncDec then begin
-    {Functions declaration (INTERFACE or FORWARD), receives always the caller.}
-    fundec := TAstFunDec(toElem);
-    fundec.lstCallers.Add(fc);
-  end else begin
-    //Other elements
-    toElem.lstCallers.Add(fc);
-  end;
-  exit(fc);
-end;
-function TCompilerBase.AddCallerToFromCurr(toElem: TAstElement): TAstEleCaller;
-{Add a call to the element "toElem", from the current Code container (If there is one).
-Returns the reference to the caller class: TAstEleCaller. }
-begin
-  Result := AddCallerToFrom(toElem, ast.curCodCont);
-end;
 //Miscellaneous
 function TCompilerBase.GenerateUniqName(base: string): string;
 {Generate a unique name using the string "base" as prefix.}

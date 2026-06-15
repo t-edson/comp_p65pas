@@ -154,7 +154,7 @@ begin
   //Init compiler
   msgManager := TMessageManager.Create;
   msgManager.OnMessage     := @CompilerMsg;
-  msgManager.OnMessageBox  := @CompilerMessageBox;
+  //msgManager.OnMessageSys  := ;  //No se usa en consola
 
   Compiler:= TCompiler_PIC16.Create(msgManager);
 end;
