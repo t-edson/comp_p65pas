@@ -3,11 +3,13 @@ unit Analyzer;
 interface
 uses
   Classes, SysUtils, Types, alexiaLex, CompBase,
-  ParserASM_6502, CompGlobals, AstElemP65, AstTree, ASTunit;
+  ParserASM_6502, CompGlobals, AstElemP65, AstTree, ASTunit, MirList;
 type
 
   { TAnalyzer }
   TAnalyzer = class(TCompilerBase)
+  public
+    mirRep: TMirList;    //Container for MIR representation
   public    //Access to CPU hardware.
     function PICName: string; virtual; abstract;
     function RAMmax: integer; virtual; abstract;
@@ -199,7 +201,7 @@ function TAnalyzer.GetUnitDeclaration: boolean;
 {Indica si el archivo del contexto actual, es una unidad. Debe llamarse al inico de la
 exploración del archivo.}
 begin
-  ProcCommentsNoExec;  //Solo es validación, así que no debe ejecutar nada
+{  ProcCommentsNoExec;  //Solo es validación, así que no debe ejecutar nada
   //Busca UNIT
   if lowercase(lex.token) = 'unit' then begin
     lex.curCtx.StartScan;   //retorna al inicio
@@ -207,7 +209,7 @@ begin
   end;
   lex.curCtx.StartScan;   //retorna al inicio
   exit(false);
-end;
+}end;
 //Compilación de secciones
 procedure TAnalyzer.DoAnalyzeUnit(uni: TASTNode);
 {Realiza la compilación de una unidad}

@@ -37,6 +37,7 @@ TBootloader = (
   bldC64,   //Insert a bootlaoder for run from Commodore64 system
   bldCustom //Insert a custom bootlaoder
 );
+
 { TCompilerBase }
 {Clase base para crear a los objetos compiladores.
 Esta clase debe ser el ancestro común de todos los compialdores a usar en PicPas.
@@ -46,7 +47,6 @@ public  //Componentes principales del compilador
   lex   : TAleLexer;
   msg   : TMessageManager;    //Referencia al gestor de mensajes
   Prog  : TProgram;    //Nuevo AST
-  mirRep: TMirList;    //Container for MIR representation
 public    //Public attributes of compiler
   ID        : integer;     //Identificador para el compilador.
   IsUnit    : boolean;     //Flag to identify a Unit
@@ -74,35 +74,18 @@ public  //Messages
   procedure GenInfo(txt: string);
   //Rutinas de generación de advertencias
   procedure GenWarn(txt: string; const srcPos: TSrcPos);
-  procedure GenWarn(txt: string; const Args: array of const; const srcPos: TSrcPos);
   procedure GenWarn(txt: string);
-  procedure GenWarn(txt: string; const Args: array of const);
   //Rutinas de generación de error. Envolturas para llamar al gestor de mensajes.
   procedure GenError(txt: string; const srcPos: TSrcPos);
   procedure GenError(txt: String; const Args: array of const; const srcPos: TSrcPos);
   procedure GenError(txt: string);
   procedure GenError(txt: String; const Args: array of const);
-protected  //Parser routines
-  ExprLevel  : Integer;  //Nivel de anidamiento de la rutina de evaluación de expresiones
-  function EOExpres: boolean;
-  function EOBlock: boolean;
-  function CaptureDelExpres: boolean;
-  procedure ProcCommentsNoExec;
-  procedure ProcComments;
-protected //Calls to Directive Module (ParserDirec.pas)
-  callProcDIRline  : procedure(const AsmLin: string; out ctxChanged: boolean) of object;
-public    //Types to implement
-//  typByte : TAstTypeDec;
-//  typBool : TAstTypeDec;
-//  typChar : TAstTypeDec;
-//  typWord : TAstTypeDec;
-//  typDWord : TAstTypeDec;
-//  typTriplet: TAstTypeDec;
 public    //Files
   function hexFilePath: string;
   function mainFilePath: string;
   function ExpandRelPathToMain(FileName: string): string;
   procedure setHexFile(newHexFile: string);
+
 public    //Initialization
   constructor Create(msg0: TMessageManager);
   destructor Destroy; override;
@@ -132,8 +115,6 @@ resourcestring
   ER_NOTYPDEF_NU  = 'No type defined to allocate this number.';
 
 {TCompilerBase}
-//Errors and warnings
-//Messages
 {%region "Messages"}
 procedure TCompilerBase.ClearError;
 {Limpia la bandera de errores. Tomar en cuenta que solo se debe usar para iniciar el
@@ -167,19 +148,10 @@ procedure TCompilerBase.GenWarn(txt: string; const srcPos: TSrcPos);
 begin
   msg.warn(lex.GetMsgInfo(txt, srcPos));
 end;
-procedure TCompilerBase.GenWarn(txt: string; const Args: array of const; const srcPos: TSrcPos);
-begin
-  msg.warn(lex.GetMsgInfo(Format(txt, Args), srcPos));
-end;
 procedure TCompilerBase.GenWarn(txt: string);
 {Genera un mensaje de Advertencia, en la posición actual del contexto. }
 begin
   msg.warn(lex.GetMsgInfo(txt));
-end;
-procedure TCompilerBase.GenWarn(txt: string; const Args: array of const);
-{Genera un mensaje de Advertencia, en la posición actual del contexto. }
-begin
-  msg.warn(lex.GetMsgInfo(Format(txt, Args)));
 end;
 procedure TCompilerBase.GenError(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de error en la posición indicada.}
@@ -200,73 +172,6 @@ procedure TCompilerBase.GenError(txt: String; const Args: array of const);
 {Genera un mensaje de error en la posición actual del contexto.}
 begin
   msg.error(lex.GetMsgInfoE(Format(txt, Args)));
-end;
-{%EndRegion}
-{%region "Parser routines"}
-function TCompilerBase.EOExpres: boolean; inline;
-//Indica si se ha llegado al final de una expresión.
-begin
-  Result := lex.token = ';';  //en este caso de ejemplo, usamos punto y coma
-  {En la práctica, puede ser conveniente definir un tipo de token como "tkExpDelim", para
-   mejorar el tiempo de respuesta del procesamiento, de modo que la condición sería:
-     Result := tokType = tkExpDelim;
-  }
-end;
-function TCompilerBase.EOBlock: boolean; inline;
-//Indica si se ha llegado el final de un bloque
-begin
-  Result := lex.tokType = tkBlkDelim;
-end;
-function TCompilerBase.CaptureDelExpres: boolean;
-//Verifica si sigue un delimitador de expresión. Si encuentra devuelve false.
-begin
-  lex.SkipWhites;
-  if EOExpres then begin //encontró
-    lex.Next;   //pasa al siguiente
-    exit(true);
-  end else begin   //es un error
-    GenError(ER_SEMIC_EXPEC);
-    exit(false);  //sale con error
-  end;
-
-end;
-procedure TCompilerBase.ProcComments;
-{Procesa comentarios y directivas.
-Notar que este procedimiento puede detectar varios errores en el mismo bloque, y que
-pasa al siguiente token, aún cuando detecta errores. }
-var
-  ctxChanged: Boolean;  //Manejamos variables locales para permitir recursividad
-begin
-  lex.SkipWhites;
-  while (lex.tokType = tkDirective) do begin
-    //Es una directiva
-    callProcDIRline(lex.token, ctxChanged);  //procesa línea
-    if HayError then begin
-      lex.Next;   //Pasa, porque es un error ya ubicado, y mejor buscamos otros
-      lex.SkipWhites;
-      continue;
-    end;
-    if ctxChanged then begin
-      {Hubo cambio de contexto. Procesamos nuevamente, porque ahora estamos ya en
-      otro contexto y se supone que esta llamada a ProcComments(), se hace precisamente
-      para saltar blancos, comentarios, directivas.}
-      ProcComments;   {En el nuevo contexto puede haber nuevos comentarios.}
-      exit;
-    end;
-  //Pasa a siguiente
-    lex.Next;
-    lex.SkipWhites;  //limpia blancos
-  end;
-end;
-procedure TCompilerBase.ProcCommentsNoExec;
-{Similar a ProcComments(), pero no ejecuta directivas.}
-begin
-  lex.SkipWhites;
-  while (lex.tokType = tkDirective) do begin
-    //Pasa a siguiente
-    lex.Next;
-    lex.SkipWhites;  //limpia blancos
-  end;
 end;
 {%EndRegion}
 {%region "Files"}
@@ -300,12 +205,10 @@ begin
   Prog := TProgram.Create('test', lex.GetSrcPos);
   ClearError;   //inicia motor de errores
   //Crea arbol de elementos y listas
-  mirRep    := TMirList.Create;
   ejecProg := false;
 end;
 destructor TCompilerBase.Destroy;
 begin
-  mirRep.Destroy;
   Prog.Destroy;
   lex.Destroy;
   inherited Destroy;

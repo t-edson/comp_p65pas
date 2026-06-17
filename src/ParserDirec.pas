@@ -5,7 +5,7 @@ unit ParserDirec;
 interface
 uses
   Classes, SysUtils, fgl, math, LazLogger, FileUtil,
-  alexiaLex, CompBase, CompGlobals, Analyzer;
+  alexiaLex, CompBase, CompGlobals, Analyzer, MirList;
 type  //Tipos para manejo de expresiones
   TDirDatType = (ddtNumber, ddtString);
 
@@ -1847,10 +1847,12 @@ begin
   varsList := TDirVar_list.Create(true);
   instList := TDirInstruc_list.Create(true);
   //Initialize events and functions of Compiler
-  callProcDIRline := @ProcDIRline;
+//  callProcDIRline := @ProcDIRline;
+  mirRep    := TMirList.Create;
 end;
 destructor TParserDirecBase.Destroy;
 begin
+  mirRep.Destroy;
   instList.Destroy;
   varsList.Destroy;
   macroList.Destroy;
