@@ -9,7 +9,7 @@ unit ParserASM_6502;
 interface
 uses
   Classes, SysUtils, fgl, alexiaLex, CompBase, P65C02utils, CompGlobals,
-  AstElemP65;
+  AstElemP65, ASTunit;
 type
   { TParserAsm_6502 }
   TParserAsm_6502 = class
@@ -235,14 +235,14 @@ If not operand eas found error is generated and returns FALSE.}
     end;
   end;
 var
-  ele: TAstElement;
+  ele: TASTNode;
   xfun: TAstFunImp;
   xvar: TAstVarDec;
   xcon: TAstConsDec;
   positOper: char;
   lblEle: TAstAsmInstr;
 begin
-  Result := false;
+{  Result := false;
   operand.used := false;
   undefLabel := false;
   lex.SkipWhitesNoEOL;
@@ -277,7 +277,7 @@ begin
       operand.used := true;
       exit(true);
     end;
-    ele := cpx.ast.FindFirst(lex.token);  //identifica elemento
+    ele := cpx.Prog.FindFirst(lex.token);  //identifica elemento
     if ele=nil then begin
       //Es un identificador no definido (como una etiqueta). Puede definirse luego.
       operand.Val := -1;        //Indicates to use "operRef"
@@ -343,7 +343,7 @@ begin
     cpx.GenError(ER_EXP_CON_VAL);
     exit(false);
   end;
-end;
+}end;
 procedure TParserAsm_6502.StartASM; //Inicia el procesamiento de código ASM
 begin
   labels.Clear;   //limpia etiquetas
@@ -684,84 +684,84 @@ procedure TParserAsm_6502.AddInstruction(const inst: TP6502Inst;
 {Add a new instruction to the current ASM block element. Set "curInst" pointing
 to the instruction added.}
 begin
-  if curInst <> nil then begin
+{  if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.ast.CloseElement;
+    cpx.Prog.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := '<inst>';
   curInst.srcDec := srcDec;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itOpcode;   //Marca como instrucción de salto.
-  cpx.ast.AddElementAndOpen(curInst);
+  cpx.Prog.AddElementAndOpen(curInst);
   //Actualiza propiedades de la instrucción
   curInst.opcode := ord(inst);
   curInst.addMode := ord(addMode);
   curInst.operand.Val := param;
-end;
+}end;
 procedure TParserAsm_6502.AddInstructionLabel(lblName: string);
 {Add a new instruction to the current ASM block element. Set "curInst" pointing
 to the instruction added.
 If operand of the instruction is expression, it mus be added in the child nodes.}
 begin
-  if curInst <> nil then begin
+{  if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.ast.CloseElement;
+    cpx.Prog.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := lblName;
   curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itLabel;   //Marca como instrucción de salto.
-  cpx.ast.AddElementAndOpen(curInst);
-  labels.add(curInst);  //Agrega a la lista de etiquetas
+  cpx.Prog.AddElementAndOpen(curInst);
+  labels.add(curInst);  //Agrega a la lista de etiquetas}
 end;
 procedure TParserAsm_6502.AddDirectiveORG(param: word);
 begin
-  if curInst <> nil then begin
+{  if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.ast.CloseElement;
+    cpx.Prog.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := 'ORG';
   curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itOrgDir;  //Represents ORG
-  cpx.ast.AddElementAndOpen(curInst);
-  curInst.operand.Val := param;
+  cpx.Prog.AddElementAndOpen(curInst);
+  curInst.operand.Val := param;}
 end;
 procedure TParserAsm_6502.AddDirectiveDB;
 begin
-  if curInst <> nil then begin
+{  if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.ast.CloseElement;
+    cpx.Prog.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := 'DB';
   curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itDefByte;  //Represents DB
-  cpx.ast.AddElementAndOpen(curInst);
+  cpx.Prog.AddElementAndOpen(curInst);}
 end;
 procedure TParserAsm_6502.AddDirectiveDW;
 begin
-  if curInst <> nil then begin
+{  if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.ast.CloseElement;
+    cpx.Prog.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := 'DW';
   curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itDefWord;  //Represents DB
-  cpx.ast.AddElementAndOpen(curInst);
+  cpx.Prog.AddElementAndOpen(curInst);}
 end;
 //Inicialización
 procedure TParserAsm_6502.ProcessASMblock(cpx0: TCompilerBase);
 var
   blkEnd: boolean;
 begin
-  cpx := cpx0;  //Reference to compiler.
+{  cpx := cpx0;  //Reference to compiler.
   lex := cpx.lex; //Actualiza referencia al lexer
   msg := cpx.msg;
   lex.Next;     //Get ASM
@@ -769,7 +769,7 @@ begin
   curBlock := TAstAsmBlock.Create;
   curBlock.srcDec := lex.GetSrcPos;
   curBlock.name := 'ASMblk';
-  cpx.ast.AddElementAndOpen(curBlock);
+  cpx.Prog.AddElementAndOpen(curBlock);
   StartASM;
   curInst := nil;
   repeat
@@ -781,12 +781,12 @@ begin
   EndASM;
   if curInst <> nil then begin
     //There are an instruction opened
-    cpx.ast.CloseElement;
+    cpx.Prog.CloseElement;
   end;
   //Current token is delimiter END.
   lex.curCtx.OnDecodeNext := nil;   //Restore lexer here, in order to take the "END" with the new lexer and avoid problems of syntax.
   lex.Next;   //Take END with default lexer.
-  cpx.ast.CloseElement;  //Close ASM block
+  cpx.Prog.CloseElement;  //Close ASM block}
 end;
 function TParserAsm_6502.DecodeNext: boolean;
 {Decode the token in the current position, indicated by (frow, fcol), and returns:

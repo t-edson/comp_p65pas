@@ -163,6 +163,8 @@ function Trans(const strEn, strEs, strQu, strDe, strUk, strRu, strFr: string): s
 function NombDifArc(nomBase: String): String;
 procedure AddLine(var baseStr: string; newStr: string);
 
+function ExpandRelPathTo(BaseFile, FileName: string): string;
+
 implementation
 var
   ET : TEpikTimer;
@@ -300,6 +302,28 @@ function TConsValue.valuesAsString: string;
 {Returns a string containing the abstract of values stored.}
 begin
   Result := 'int=' + IntToStr(ValInt) + ',bool=' + IfThen(ValBool,'T','F');
+end;
+
+function ExpandRelPathTo(BaseFile, FileName: string): string;
+{Convierte una ruta relativa (FileName), a una absoluta, usnado como base la ruta de
+otro archivo (BaseFile)}
+var
+  BasePath: RawByteString;
+begin
+   //if pos(DirectorySeparator, FileName)=0 then begin
+   if (pos('/', FileName)=0) and (pos('\', FileName)=0) then begin
+     //Ruta relativa. Se completa
+     BasePath := ExtractFileDir(BaseFile);
+     if BasePath = '' then begin
+       //No hay de donde completar, usa la ruta actual
+       Result := ExpandFileName(FileName);
+     end else  begin
+       Result := ExtractFileDir(BaseFile) + DirectorySeparator + FileName;
+     end;
+   end else begin
+     //Tiene "DirectorySeparator", se asume que es ruta absoluta, y no se cambia.
+     Result := FileName;
+   end;
 end;
 
 initialization

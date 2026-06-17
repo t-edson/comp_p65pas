@@ -70,11 +70,6 @@ type
 //    procedure DoGenerateCode;
   public      //Events
     OnAfterCompile: procedure of object;   //Al finalizar la compilación.
-  public      //Override methods
-    procedure DumpCode(lins: TSTrings); override;
-    function RAMusedStr: string; override;
-    procedure GetResourcesUsed(out ramUse, romUse, stkUse: single); override;
-    procedure GenerateListReport(lins: TStrings); override;
   public      //Interfaz for IDE
     procedure Exec(srcFile, outFile: string; pars: string);
   public      //Inicialización
@@ -1002,71 +997,71 @@ var
   mirConDec: TMirConDec;
   mirTypDec: TMirTypDec;
 begin
-  //Agrega variables globales
-//  for astVardec in ast.AllVars do begin
-//    if astVardec.Parent.idClass = eleFuncImp then continue;  //Las variables de funciones ya se crearon
-////debugln('Verificando: ' + astVardec.name);
-//    if (astVardec.nCalled>0) or astVardec.required then begin
-//      mirVarDec := AddMirVarDec(mirRep.root, astVardec); //Agrega declaración en el MIR
+//  //Agrega variables globales
+////  for astVardec in ast.AllVars do begin
+////    if astVardec.Parent.idClass = eleFuncImp then continue;  //Las variables de funciones ya se crearon
+//////debugln('Verificando: ' + astVardec.name);
+////    if (astVardec.nCalled>0) or astVardec.required then begin
+////      mirVarDec := AddMirVarDec(mirRep.root, astVardec); //Agrega declaración en el MIR
+////      astVardec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.;
+////    end;
+////  end;
+//  for elem in prog.elements do begin
+//    if elem.idClass = eleConsDec then begin
+//      astConDec := TAstConsDec(elem);
+//      mirConDec := AddMirConDec(mirRep.root.declars, astConDec);
+//    end else if elem.idClass = eleVarDec then begin
+//      astVardec := TAstVarDec(elem);
+//      mirVarDec := AddMirVarDec(mirRep.root.declars, astVardec); //Agrega declaración en el MIR
 //      astVardec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.;
+//    end else if elem.idClass = eleTypeDec then begin
+//      astTypdec := TAstTypeDec(elem);
+//      mirTypDec := AddMirTypDec(mirRep.root.declars, astTypdec); //Agrega declaración en el MIR
+//      astTypdec.mirTypDec := mirTypDec;  //Guarda referencia al MIR.
 //    end;
 //  end;
-  for elem in ast.main.elements do begin
-    if elem.idClass = eleConsDec then begin
-      astConDec := TAstConsDec(elem);
-      mirConDec := AddMirConDec(mirRep.root.declars, astConDec);
-    end else if elem.idClass = eleVarDec then begin
-      astVardec := TAstVarDec(elem);
-      mirVarDec := AddMirVarDec(mirRep.root.declars, astVardec); //Agrega declaración en el MIR
-      astVardec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.;
-    end else if elem.idClass = eleTypeDec then begin
-      astTypdec := TAstTypeDec(elem);
-      mirTypDec := AddMirTypDec(mirRep.root.declars, astTypdec); //Agrega declaración en el MIR
-      astTypdec.mirTypDec := mirTypDec;  //Guarda referencia al MIR.
-    end;
-  end;
-  for astFunDec in usedFuncs do begin
-    if astFunDec.callType = ctUsrNormal then begin
-      //Agrega al MIR y guarda referencia.
-      mirFunDec := AddMirFunDecUNF(mirRep.root.declars, astFunDec);
-      astFunDec.mirFunDec := mirFunDec;  //Guarda referencia al MIR.
-      //Explora sus elementos internos.
-      for elem In astFunDec.elemImplem do begin
-          if elem.idClass = eleVarDec then begin
-            astVarDec := TAstVarDec(elem);  //Guarda referencia
-            //Agrega al MIR y guarda referencia.
-            mirVarDec := AddMirVarDec(mirFunDec.declars, astVarDec);
-            astVarDec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.
-          end else if elem.idClass = eleBody then begin
-            ConvertBody(mirFunDec.instrucs, TAstBody(elem));
-            //if HayError then exit;   //Puede haber error
-          end;
-      end;
-      //Actualizmos los parámetros MIR después de explorar los elementos
-      //internas AST (que incluye a los parámetros).
-      mirFunDec.ReadParamsFromAST(astFunDec);
-    end else if astFunDec.callType = ctSysNormal then begin
-      mirFunDec := AddMirFunDecSNF(mirRep.root.declars, astFunDec);
-      //System function doesn't have body.
-    end;
-  end;
-  //Split body
-  bod := ast.BodyNode;  //lee Nodo del cuerpo principal
-  ConvertBody(mirRep.root.instrucs, bod);
+//  for astFunDec in usedFuncs do begin
+//    if astFunDec.callType = ctUsrNormal then begin
+//      //Agrega al MIR y guarda referencia.
+//      mirFunDec := AddMirFunDecUNF(mirRep.root.declars, astFunDec);
+//      astFunDec.mirFunDec := mirFunDec;  //Guarda referencia al MIR.
+//      //Explora sus elementos internos.
+//      for elem In astFunDec.elemImplem do begin
+//          if elem.idClass = eleVarDec then begin
+//            astVarDec := TAstVarDec(elem);  //Guarda referencia
+//            //Agrega al MIR y guarda referencia.
+//            mirVarDec := AddMirVarDec(mirFunDec.declars, astVarDec);
+//            astVarDec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.
+//          end else if elem.idClass = eleBody then begin
+//            ConvertBody(mirFunDec.instrucs, TAstBody(elem));
+//            //if HayError then exit;   //Puede haber error
+//          end;
+//      end;
+//      //Actualizmos los parámetros MIR después de explorar los elementos
+//      //internas AST (que incluye a los parámetros).
+//      mirFunDec.ReadParamsFromAST(astFunDec);
+//    end else if astFunDec.callType = ctSysNormal then begin
+//      mirFunDec := AddMirFunDecSNF(mirRep.root.declars, astFunDec);
+//      //System function doesn't have body.
+//    end;
+//  end;
+//  //Split body
+//  bod := prog.BodyNode;  //lee Nodo del cuerpo principal
+//  ConvertBody(mirRep.root.instrucs, bod);
 end;
 procedure TCompiler_PIC16.DoOptimize;
 {Usa la información del árbol de sintaxis, para optimizar su estructura con
 miras a la síntesis.
 Se debe llamar después de llamar a DoAnalyzeProgram().}
 begin
-  if IsUnit then exit;
-  ExprLevel := 0;
-  ClearError;
-  //Detecting unused elements
-  ast.RefreshAllUnits; //Actualiza lista de unidades
-  //Genera la representación MIR
-  GenerateMIR;
-  //Evaluate declared constants
+//  if IsUnit then exit;
+//  ExprLevel := 0;
+//  ClearError;
+//  //Detecting unused elements
+//  ast.RefreshAllUnits; //Actualiza lista de unidades
+//  //Genera la representación MIR
+//  GenerateMIR;
+//  //Evaluate declared constants
 //  EvaluateConstantDeclare;
 //  if HayError then exit;
 //  //Simplify expressions
@@ -1085,7 +1080,7 @@ se inicializan correctamente las configuraiones.}
 var
   p: SizeInt;
 begin
-  if comp_level = clNull then exit;
+{  if comp_level = clNull then exit;
   debugln('');
   StartCountElapsed;  //Start timer
   DefCompiler;   //Debe hacerse solo una vez al inicio
@@ -1156,7 +1151,7 @@ begin
         EndCountElapsed('-- Output generated in: ');
       end;
     end;
-    {-------------------------------------------------}
+    //-------------------------------------------------
     //ClearAll;//es necesario por dejar limpio
   finally
     StartCountElapsed;
@@ -1165,247 +1160,11 @@ begin
     if OnAfterCompile<>nil then OnAfterCompile;
     EndCountElapsed('-- OnAfterCompile in: ');
   end;
-end;
+}end;
 function AdrStr(absAdr: word): string;
 {formatea una dirección en cadena.}
 begin
   Result := '$' + IntToHex(AbsAdr, 4);
-end;
-procedure TCompiler_PIC16.DumpCode(lins: TSTrings);
-{Genera el código ensamblador en el StringList "lins", con las configuraciones
-actuales del compilador.
-Se debe llamar despues de llamar a pic.GenHex(), para que se actualicen las variables
-minUsed y maxUsed.}
-const
-  SPACEPAD = '          ';
-  ASMPAD = '  ';
-  LSPC = length(SPACEPAD);
-
-  procedure VariablesLocation(lins: TStrings; ExcUnused: boolean);
-  {Return a string with information about all variables location.}
-  var
-    v: TAstVarDec;
-    subUsed: string;
-  begin
-    { *** Completar luego
-    for v in ast.AllVars do begin   //Se supone que "AllVars" ya se actualizó.
-        //debugln('AllVars['+IntToStr(i)+']='+v.name+','+v.Parent.name);
-        if ExcUnused and (v.nCalled = 0) then continue;
-        if v.storage in [stRegister, stRegistX, stRegistY] then continue;
-        if v.nCalled = 0 then subUsed := '; <Unused>' else subUsed := '';
-        if v.typ.IsByteSize then begin
-          lins.Add(PadRight(v.name, LSPC) + ' EQU ' + AdrStr(v.addr)+ subUsed +
-                   '       ;' + v.typ.name);
-        end else if v.typ.IsWordSize then begin
-          lins.Add(PadRight(v.name, LSPC) + ' EQU ' +  AdrStr(v.addrL)+ subUsed +
-                   '       ;' + v.typ.name);
-          lins.Add(SPACEPAD + ' EQU ' +  AdrStr(v.addrH)+ subUsed);
-        end else if v.typ.catType = tctArray then begin   //It's an array
-          lins.Add(PadRight(v.name, LSPC) + ' EQU ' +  AdrStr(v.addrL) + '~' +
-                   AdrStr(v.addr + v.typ.size-1) + subUsed + ' ;' + v.typ.name);
-        end else begin
-          lins.Add(PadRight(v.name, LSPC) + ' EQU ' +  AdrStr(v.addr) + subUsed +
-                   '       ;' + v.typ.name);
-        end;
-    end;
-    }
-  end;
-
-var
-  i: word;
-  minUsed: integer;
-  lblLin, comLin, lin: String;
-  nBytes: byte;
-
-  procedure DumpVar(const InitStr: string);
-    var n: integer;
-        s: string;
-
-  begin
-    s := InitStr;
-    n := 7;
-    inc(i);
-    while pic.ram[i].name = ''  do begin
-      s := s + ' ' + IntToHEx(pic.ram[i].value,2);
-      dec(n);
-      if n = 0 then begin
-        lins.Add(s);
-        n := 8;
-        //s := SPACEPAD;
-        s := PadRight('', LSPC) + '$'+IntToHex(i,4) + ' DB';
-      end;
-      inc(i);
-    end;
-    if n < 8 then lins.Add(s);
-  end;
-
-begin
-  if asmOutType=0 then begin  //Normal Assembler output
-    //Include header
-    lins.Add('      ;Code generated by P65Pas compiler');
-    lins.Add('      processor ' + PICName);
-    //Variables location section
-    if IncVarDec then begin
-       lins.Add('__all_variables:');
-       VariablesLocation(lins, ExcUnused);
-    end;
-    //Se supone que minUsed y maxUsed, ya deben haber sido actualizados.
-    if IncAddress then begin  //ORG title
-      lins.Add(SPACEPAD + '      ORG $' + IntToHex(pic.minUsed, 4));
-    end else begin
-      lins.Add(SPACEPAD + 'ORG $' + IntToHex(pic.minUsed, 4));
-    end;
-    //Write the RAM content.
-    i := pic.minUsed;
-    while i <= pic.maxUsed do begin
-      if (i=addBootldr) and (addBootldr<>addVariab) then lins.Add('__bootloader:');
-      if (i=addVariab) and (addVariab<>addFuncts) then lins.Add('__var_section:');
-      //Read label and comments.
-      lblLin := pic.ram[i].name;
-      comLin := pic.ram[i].topComment;
-      //Check RAM position.
-      if pic.ram[i].used in [ruData, ruAbsData] then begin
-        //Must be a variable.
-        if IncAddress then begin
-          if comLin<>'' then lins.add(comLin);
-          DumpVar( PadRight(lblLin, LSPC) + '$'+IntToHex(i,4) + ' DB ' +
-                    IntToHEx(pic.ram[i].value,2) );
-        end else begin
-          lins.Add( PadRight(lblLin, LSPC) + 'DB ' + IntToHEx(pic.ram[i].value,2) );
-        end;
-        //i := i + 1;
-      end else begin
-        //Debe ser código o memoria sin usar.
-        if lblLin<>'' then lins.Add(lblLin+':');  //Etiqueta al inicio de línea
-        //Escribe comentario al inicio de línea
-        if asmIncComm and (comLin<>'') then  begin
-          lins.Add(comLin);
-        end;
-        lin := pic.GetASMlineAt(i, IncAddress, IncAddress, asmIncComm, incVarName, nBytes);
-        lins.Add(ASMPAD + lin);
-        i := i + nBytes;   //Incrementa a siguiente instrucción
-      end;
-    end;
-    lins.Add(';--------------------');
-    lins.Add('      END');
-  end else begin  //Generate POKE's BASIC code.
-    minUsed := pic.CPUMAXRAM;
-    i := pic.minUsed;
-    while i <= pic.maxUsed do begin
-      if pic.ram[i].used <> ruUnused then begin
-        if i<minUsed then minUsed := i;  //Calcula mínimo
-        lins.Add('poke ' +  IntToStr(i) + ',' + IntToStr(pic.ram[i].value));
-      end;
-      inc(i);
-    end;
-    lins.Add('sys ' +  IntToStr(minUsed) );
-  end;
-end;
-function TCompiler_PIC16.RAMusedStr: string;
-var
-  usedRAM, totRAM: integer;
-begin
-  totRAM := pic.TotalMemRAM;
-  if totRAM=0 then exit;  //protección
-  usedRAM := pic.UsedMemRAM;
-  Result := MSG_RAM_USED + IntToStr(usedRAM) +'/'+ IntToStr(totRAM) + 'B (' +
-        FloatToStrF(100*usedRAM/totRAM, ffGeneral, 1, 3) + '%)';
-end;
-procedure TCompiler_PIC16.GetResourcesUsed(out ramUse, romUse, stkUse: single);
-var
-  usedRAM, totRAM: integer;
-begin
-  //Calcula RAM
-  ramUse := 0;  //valor por defecto
-  totRAM := pic.TotalMemRAM;
-  if totRAM = 0 then exit;  //protección
-  usedRAM := pic.UsedMemRAM;
-  ramUse := usedRAM/totRAM;
-  //Calcula STACK
-//  nes := ast.main.UpdateCalledAll;   //Debe haberse llenado ast.main.lstCalled
-  //No considera el anidamiento por interrupciones
-  stkUse := ast.maxNesting/STACK_SIZE;
-end;
-procedure TCompiler_PIC16.GenerateListReport(lins: TStrings);
-{Genera un reporte detallado de la compilación}
-var
-  curInst, opc: TP6502Inst;
-  i: word;
-  OpCodeCoun: array[low(TP6502Inst)..high(TP6502Inst)] of integer;
-  tmpList: TStringList;
-  txt, OpCode, Times, state: String;
-
-  fun: TAstFunDec;
-  caller : TAstEleCaller;
-  called : TAstElement;
-  curNesting, maxNesting: Integer;
-  lstCalledAll: TAstListCalled;
-  //exitCall: TExitCall;
-begin
-  ////////////////////////////////////////////////////////////
-  //////////// Reporte de uso de memeoria  ///////////
-  ////////////////////////////////////////////////////////////
-  lins.Add(RAMusedStr);
-  ////////////////////////////////////////////////////////////
-  //////////// Reporte de cuenta de instrucciones  ///////////
-  ////////////////////////////////////////////////////////////
-  //Limpia contadores
-  for opc := low(TP6502Inst) to high(TP6502Inst) do begin
-    OpCodeCoun[opc] := 0;
-  end;
-  //Cuenta apariciones
-  for i:=0 to high(pic.ram) do begin
-    if pic.ram[i].used <> ruUnused then begin
-       pic.PC.W := i;
-       curInst := pic.CurInstruction;
-       Inc(OpCodeCoun[curInst]);  //Acumula
-    end;
-  end;
-  //Carga en lista para ordenar
-  tmpList:= TStringList.Create;
-  for opc := low(TP6502Inst) to high(TP6502Inst) do begin
-    tmpList.Add(Format('%.4d', [OpCodeCoun[Opc]]) + '-' + PIC16InstName[opc].name);
-  end;
-  tmpList.Sort;  //Ordena
-  //Muestra lista ordenada
-  lins.Add(';INSTRUCTION COUNTER');
-  lins.Add(';===================');
-  for i:=tmpList.Count-1 downto 0 do begin
-    txt := tmpList[i];
-    OpCode := copy(txt , 6, 10);
-    Times  := copy(txt , 1, 4);
-    if Times = '0000' then continue;
-    lins.Add(copy(OpCode + '    ',1,7) + '->'+ Times);
-  end;
-  tmpList.Destroy;
-
-  ////////////////////////////////////////////////////////////
-  ////////////////// Reporte de Funciones   ///////////
-  ////////////////////////////////////////////////////////////
-  lins.Add('');
-  lins.Add(';PROCEDURE LIST');
-  lins.Add(';===================');
-
-  ////////////////////////////////////////////////////////////
-  ////////////////// Detalle de Funciones   ///////////
-  ////////////////////////////////////////////////////////////
-  lins.Add('');
-  lins.Add(';PROCEDURE DETAIL');
-  lins.Add(';===================');
-  for fun in ast.AllFuncs do begin
-
-  end;
-  //Detalles del programa principal
-
-  lins.Add('------------------------------------');
-  lins.Add('----- Main Program');
-  lins.Add('------------------------------------');
-  lins.Add('  Called Procedures:');
-
-  lins.Add('');
-  //Muestra el máximo nivel de anidamiento.
-  lins.Add('Max. Nesting = ' + IntToSTr(ast.maxNesting));
-
 end;
 //Interfaz for IDE
 procedure TCompiler_PIC16.Exec(srcFile, outFile: string; pars: string);
@@ -1518,7 +1277,7 @@ var
    funimp: TAstFunImp;
    tmpLoc: TElemLocation;
 begin
-  tmpLoc := lex.curLocation;     //Save current location. We are going to change it.
+{  tmpLoc := lex.curLocation;     //Save current location. We are going to change it.
   {Note that we add declaration e implementation at the interface section. This is not
   the normal but the compiler works OK}
   lex.curLocation := locInterface;
@@ -1533,7 +1292,7 @@ begin
   ast.CloseElement;  //Close body
   ast.CloseElement;  //Close function implementation
   lex.curLocation := tmpLoc;   //Restore current location
-end;
+}end;
 function TCompiler_PIC16.AddSNFtoUnit(name: string; retType: TAstTypeDec; const srcPos: TSrcPos;
                var pars: TAstParamArray; codSys: TCodSysNormal): TAstFunDec;
 {Create a new system function in the current element of the Syntax Tree.
@@ -1570,7 +1329,7 @@ var
    locvar: TAstVarDec;
    i: Integer;
 begin
-  extract_local_vars();
+{  extract_local_vars();
   tmpLoc := lex.curLocation;     //Save current location. We are going to change it.
   //Add declaration
   lex.curLocation := locInterface;
@@ -1599,7 +1358,7 @@ begin
   ast.CloseElement;  //Close function implementation
   lex.curLocation := tmpLoc;   //Restore current location
   exit(fundec);
-end;
+}end;
 procedure TCompiler_PIC16.AddParam(var pars: TAstParamArray; parName: string; const srcPos: TSrcPos;
                    typ0: TAstTypeDec; adicDec: TAdicDeclar);
 //Create a new parameter to the function.
@@ -1628,7 +1387,7 @@ function TCompiler_PIC16.CreateInUOMethod(
 var
   pars: TAstParamArray;     //Array of parameters
 begin
-  setlength(pars, 0);        //Reset parameters
+{  setlength(pars, 0);        //Reset parameters
 //  AddParam(pars, 'b', srcPosNull, clsType, decNone);  //Base object
   //Add declaration
   Result      := AddFunctionUNI(name, retType, srcPosNull, pars, false, true);
@@ -1640,7 +1399,7 @@ begin
   if opr = '' then Result.operTyp := opkNone
   else Result.operTyp := operTyp; //Must be pre or post
   ast.CloseElement;    //Close function implementation
-end;
+}end;
 function TCompiler_PIC16.CreateInBOMethod(
                       clsType: TAstTypeDec;   //Base type where the method bellow.
                       opr     : string;      //Opertaor associated to the method
@@ -1654,7 +1413,7 @@ function TCompiler_PIC16.CreateInBOMethod(
 var
   pars: TAstParamArray;     //Array of parameters
 begin
-  setlength(pars, 0);        //Reset parameters
+{  setlength(pars, 0);        //Reset parameters
   AddParam(pars, 'b', srcPosNull, clsType, decNone);  //Base object
   AddParam(pars, 'n', srcPosNull, parType, decNone);  //Parameter
   //Add declaration
@@ -1670,7 +1429,7 @@ begin
   else Result.operTyp := opkBinary;
   ast.CloseElement;  //Close body
   ast.CloseElement;  //Close function implementation
-end;
+}end;
 function TCompiler_PIC16.CreateInTerMethod(clsType: TAstTypeDec;
   name: string; parType1, parType2: TAstTypeDec; retType: TAstTypeDec
   ): TAstFunDec;
@@ -1680,7 +1439,7 @@ function TCompiler_PIC16.CreateInTerMethod(clsType: TAstTypeDec;
 var
   pars: TAstParamArray;     //Array of parameters
 begin
-  setlength(pars, 0);        //Reset parameters
+{  setlength(pars, 0);        //Reset parameters
   AddParam(pars, 'b', srcPosNull, clsType, decNone);  //Base object
   AddParam(pars, 'i', srcPosNull, parType1, decNone);  //Parameter
   AddParam(pars, 'n', srcPosNull, parType2, decNone);  //Parameter
@@ -1695,14 +1454,14 @@ begin
   Result.operTyp := opkNone;   //Could be a ternary operator
   ast.CloseElement;  //Close body
   ast.CloseElement;  //Close function implementation
-end;
+}end;
 procedure TCompiler_PIC16.DefineArray(etyp: TAstTypeDec);
 var
   consDec: TAstConsDec;
   expr: TAstExpress;
   f, f1, f2: TAstFunDec;
 begin
-  //Create assigement method
+{  //Create assigement method
   f := CreateInBOMethod(etyp, ':=', '_set', etyp, AstTree.typNull);
   f.asgMode := asgSimple;
   //Create attribute "low" as constant.
@@ -1712,13 +1471,13 @@ begin
   CreateInUOMethod(etyp, '', 'high'  , typByte, opkNone);
   CreateInUOMethod(etyp, '', 'clear' , AstTree.typNull, opkNone);
 //  CreateInBOMethod(etyp, '', 'fill' , typByte, typNull, @SIF_ArrayFill);
-end;
+}end;
 procedure TCompiler_PIC16.DefinePointer(etyp: TAstTypeDec);
 {Set operations that defines pointers aritmethic.}
 var
   f, f1: TAstFunDec;
 begin
-  //Asignación desde word y Puntero
+{  //Asignación desde word y Puntero
   f := CreateInBOMethod(etyp, ':=', '_set', typWord, AstTree.typNull);
   f.asgMode := asgSimple;
   f := CreateInBOMethod(etyp, ':=', '_set', etyp, AstTree.typNull);
@@ -1744,7 +1503,7 @@ begin
   f.asgMode := asgOperat;
   f.getset := gsSetInSimple;
 //  etyp.CreateUnaryPostOperator('^',6, 'deref', @SIF_derefPointer);  //dereferencia
-end;
+}end;
 procedure TCompiler_PIC16.DefineObject(etyp: TAstTypeDec);
 var
   consDec: TAstConsDec;
@@ -1759,7 +1518,7 @@ end;
 //Creació de la unidad System
 procedure TCompiler_PIC16.CreateSystemTypesAndVars;
 begin
-  /////////////// System types ////////////////////
+{  /////////////// System types ////////////////////
   typBool := CreateEleTypeDec('boolean', srcPosNull, 1, tctAtomic, t_boolean);
   typBool.location := locInterface;   //Location for type (Interface/Implementation/...)
   ast.AddElementAndOpen(typBool);  //Open to create "elements" list.
@@ -1820,12 +1579,12 @@ begin
   IX.adicPar.hasAdic := decNone;
   IX.adicPar.hasInit := nil;
   IX.location := locInterface;  //make visible
-end;
+}end;
 procedure TCompiler_PIC16.CreateBooleanOperations;
 var
   f: TAstFunDec;
 begin
-  /////////////// Boolean type ////////////////////
+{  /////////////// Boolean type ////////////////////
   //Methods-Operators
   ast.OpenElement(typBool);
   f:=CreateInBOMethod(typBool, ':=',  '_set', typBool, AstTree.typNull);
@@ -1843,12 +1602,12 @@ begin
   f:=CreateInBOMethod(typBool, '<>',  '_dif', typBool, typBool);
   f.fConmutat := true;
   ast.CloseElement;   //Close Type
-end;
+}end;
 procedure TCompiler_PIC16.CreateByteOperations;
 var
   f, f1, f2: TAstFunDec;
 begin
-  //Methods-Operators
+{  //Methods-Operators
   ast.OpenElement(typByte);
   //Simple Assignment
   f:=CreateInBOMethod(typByte, ':=', '_set', typByte, AstTree.typNull);
@@ -1909,12 +1668,12 @@ begin
   f:=CreateInBOMethod(typByte, '>>', '_shr', typByte, typByte);  { TODO : Definir bien la precedencia }
   f:=CreateInBOMethod(typByte, '<<', '_shl', typByte, typByte);
   ast.CloseElement;   //Close Type
-end;
+}end;
 procedure TCompiler_PIC16.CreateCharOperations;
 var
   f: TAstFunDec;
 begin
-  /////////////// Char type ////////////////////
+{  /////////////// Char type ////////////////////
   ast.OpenElement(typChar);
   f:=CreateInBOMethod(typChar, ':=', '_set', typChar, AstTree.typNull);
   f.asgMode := asgSimple;
@@ -1925,12 +1684,12 @@ begin
   f:=CreateInBOMethod(typChar, '<>', '_dif', typChar, typBool);
   f.fConmutat := true;
   ast.CloseElement;   //Close Type
-end;
+}end;
 procedure TCompiler_PIC16.CreateWordOperations;
 var
   f: TAstFunDec;
 begin
-  /////////////// Word type ////////////////////
+{  /////////////// Word type ////////////////////
   ast.OpenElement(typWord);
   f:=CreateInBOMethod(typWord, ':=' ,'_set' , typWord, AstTree.typNull);
   f.asgMode := asgSimple;
@@ -1995,12 +1754,12 @@ begin
   f:=CreateInUOMethod(typWord, '', 'high', typByte);
 
   ast.CloseElement;   //Close Type
-end;
+}end;
 procedure TCompiler_PIC16.CreateDWordOperations;
 var
   f: TAstFunDec;
 begin
-  /////////////// DWord type ////////////////////
+{  /////////////// DWord type ////////////////////
   ast.OpenElement(typDWord);
   f:=CreateInBOMethod(typDWord, ':=' ,'_set' , typDWord, AstTree.typNull);
   f.asgMode := asgSimple;
@@ -2070,7 +1829,7 @@ begin
 //  f:=CreateInUOMethod(typDWord, '', 'high', typByte, @word_High);
 
   ast.CloseElement;   //Close Type
-end;
+}end;
 procedure TCompiler_PIC16.CreateSystemUnitInAST;
 {Initialize the system elements. Must be executed just one time when compiling.}
 var
@@ -2079,7 +1838,7 @@ var
   pars1null: TAstParamArray;  //Array of parameters with one Null parameter
   f, sifDelayMs, sifWord: TAstFunDec;
 begin
-  //////// Funciones del sistema ////////////
+{  //////// Funciones del sistema ////////////
   //Implement calls to Code Generator
   callDefineArray  := @DefineArray;
   callDefineObject := @DefineObject;
@@ -2192,7 +1951,7 @@ begin
 }
   //Close Unit
   ast.CloseElement;
-end;
+}end;
 
 procedure TCompiler_PIC16.cbSetGeneralORG(value: integer);
 begin
