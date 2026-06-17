@@ -9,7 +9,7 @@ unit CompBase;
 interface
 uses
   Classes, SysUtils, Types, LazLogger, alexiaLex,
-  AstElemP65, AstTree, MirList, CompGlobals;
+  AstElemP65, AstTree, MirList, CompGlobals, ASTunit;
 type
 //Expression type, according the position it appears.  ***¿Se usa?
 TPosExpres = (pexINDEP,  //Expresión independiente
@@ -119,6 +119,7 @@ protected //Element set
 
 public    //Containers
   ast     : TAstTree;    //Abstract syntax tree.
+  Prog: TProgram;  //Nuevo AST
   mirRep        : TMirList;     //Container for MIR representation
   usedFuncs     : TAstFunDecs; //Store only used functions
   unusedFuncs   : TAstFunDecs; //Store only unused functions
@@ -1872,6 +1873,7 @@ begin
   //inherited;
   lex := TAleLexer.Create(msg0);
   msg := msg0;
+  Prog := TProgram.Create('test', lex.GetSrcPos);
   ClearError;   //inicia motor de errores
   //Crea arbol de elementos y listas
   ast  := TAstTree.Create;
@@ -1887,6 +1889,7 @@ begin
   usedFuncs.Destroy;
   mirRep.Destroy;
   ast.Destroy;
+  Prog.Destroy;
   lex.Destroy;
   inherited Destroy;
 end;

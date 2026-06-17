@@ -8,8 +8,6 @@ type
 
   { TAnalyzer }
   TAnalyzer = class(TCompilerBase)
-  public
-    Prog: TProgram;  //Nuevo AST
   public    //Access to CPU hardware.
     function PICName: string; virtual; abstract;
     function RAMmax: integer; virtual; abstract;
@@ -61,9 +59,6 @@ type
     procedure DoAnalyzeUnit(uni: TAstElement);
     procedure DoAnalyzeProgram;
     procedure DoAnalyze;
-  public      //Inicialización
-    constructor Create(msg0: TMessageManager);
-    destructor Destroy; override;
   end;
 
 implementation
@@ -2343,261 +2338,106 @@ begin
   TestAllConstructs;
 end;
 
-constructor TAnalyzer.Create(msg0: TMessageManager);
-begin
-  inherited Create(msg0);
-  Prog := TProgram.Create('test', lex.GetSrcPos);
-
-end;
-
-destructor TAnalyzer.Destroy;
-begin
-  Prog.Free;  // Ahora todo se libera correctamente
-  inherited Destroy;
-end;
-
 //********************** CÓDIGO DE PRUEBA DEL NUEVO LEXER *****************************
 procedure TAnalyzer.TestAllConstructs;
 var
   SrcPos: TSrcPos;
-  MainBlock: TBlock;
-  VarDecl: TVarDecl;
-
-  // Variables para los ejemplos - SOLO para declaraciones, NO para reutilizar
-  iVarDecl, jVarDecl, xVarDecl: TVarDecl;
-
-  // Para asignaciones y expresiones - CREAR NUEVOS NODOS CADA VEZ
+  VarDeclX, VarDeclY: TVarDecl;
+  Proc: TProcDecl;
+  Func: TFunctionDecl;
   Assign1, Assign2: TAssignment;
-  Literal1, Literal5, Literal10, Literal0, Literal2, Literal20: TNumberLiteral;
+  VarRef1, VarRef2: TVariableRef;
+  Literal1, Literal2: TNumberLiteral;
+  Param: TVarDecl;
+  ProcBody, FuncBody: TBlock;
+  begin
+    Prog.Clear;
+    // Inicializar posición (simulando la del lexer)
+    SrcPos.idCtx := 1;
+    SrcPos.row := 1;
+    SrcPos.col := 1;
 
-  // Para IF
-  IfCondition: TBinaryOp;
-  IfThenBlock, IfElseBlock: TBlock;
-  IfStatement: TIfStatement;
+    // ============================================================
+    // 1. Declarar variables globales (orden preservado)
+    // ============================================================
+    SrcPos.row := 3;
+    SrcPos.col := 1;
+    VarDeclX := TVarDecl.Create('x', dtByte, 'byte', SrcPos);
+    Prog.AddGlobalDecl(VarDeclX);
 
-  // Para FOR
-  ForLoop: TForLoop;
-  ForBody: TBlock;
+    SrcPos.row := 3;
+    SrcPos.col := 7;
+    VarDeclY := TVarDecl.Create('y', dtByte, 'byte', SrcPos);
+    Prog.AddGlobalDecl(VarDeclY);
 
-  // Para REPEAT
-  RepeatBody: TBlock;
-  RepeatCondition: TBinaryOp;
-  RepeatUntil: TRepeatUntil;
+    // ============================================================
+    // 2. Declarar procedimiento: procedure Sumar(a: byte);
+    // ============================================================
+    SrcPos.row := 5;
+    SrcPos.col := 1;
+    Proc := TProcDecl.Create('Sumar', SrcPos);
 
-  // Para CASE
-  CaseSelector: TVariableRef;
-  CaseStatement: TCaseStatement;
-  Branch1, Branch2: TCaseBranch;
-  BranchBody1, BranchBody2: TBlock;
-  Const1, Const2: TNumberLiteral;
+    // Añadir parámetro
+    SrcPos.row := 5;
+    SrcPos.col := 15;
+    Param := TVarDecl.Create('a', dtByte, 'byte', SrcPos);
+    Param.IsParameter := True;
+    Proc.AddParameter(Param);
 
-  i: Integer;
-begin
-  SrcPos.idCtx := 1;
-  SrcPos.row := 1;
-  SrcPos.col := 1;
+    // Cuerpo del procedimiento (vacío)
+    SrcPos.row := 6;
+    SrcPos.col := 3;
+    ProcBody := TBlock.Create(SrcPos);
+    Proc.Body := ProcBody;
 
-  // Declarar variable global i: integer;
-  SrcPos.row := 3;
-  SrcPos.col := 1;
-  iVarDecl := TVarDecl.Create('i', dtInteger, 'integer', SrcPos);
-  Prog.AddGlobalDecl(iVarDecl);
+    Prog.AddProcedure(Proc);
 
-  SrcPos.row := 3;
-  SrcPos.col := 1;
-  jVarDecl := TVarDecl.Create('j', dtInteger, 'integer', SrcPos);
-  Prog.AddGlobalDecl(jVarDecl);
+    // ============================================================
+    // 3. Declarar función: function Calcular: integer;
+    // ============================================================
+    SrcPos.row := 8;
+    SrcPos.col := 1;
+    Func := TFunctionDecl.Create('Calcular', dtInteger, 'integer', SrcPos);
 
-  MainBlock := Prog.MainBody;   //Toma la referencia al cuerpo
+    // Cuerpo de la función (vacío)
+    SrcPos.row := 9;
+    SrcPos.col := 3;
+    FuncBody := TBlock.Create(SrcPos);
+    Func.Body := FuncBody;
 
-  // ============================================================
-  // 1. Asignación: i := 1;
-  // ============================================================
-  SrcPos.row := 5;
-  SrcPos.col := 3;
-  Literal1 := TNumberLiteral.Create(1, SrcPos);
-  Assign1 := TAssignment.Create(
-    TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo
-    Literal1,
-    SrcPos
-  );
-  MainBlock.AddStatement(Assign1);
+    Prog.AddFunction(Func);
 
-  // ============================================================
-  // 2. IF i > 0 THEN i := i + 5 ELSE i := i - 2;
-  // ============================================================
-  SrcPos.row := 7;
-  SrcPos.col := 3;
-  Literal0 := TNumberLiteral.Create(0, SrcPos);
+    // ============================================================
+    // 4. Cuerpo principal: x := 1; y := 2;
+    // ============================================================
+    // NOTA: Prog.MainBody ya existe, solo añadimos instrucciones
 
-  // Condición: i > 0 (crea NUEVOS nodos para cada 'i')
-  IfCondition := TBinaryOp.Create('>',
-    TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo
-    Literal0,
-    SrcPos
-  );
+    // x := 1;
+    SrcPos.row := 12;
+    SrcPos.col := 3;
+    VarRef1 := TVariableRef.Create('x', SrcPos);
+    Literal1 := TNumberLiteral.Create(1, SrcPos);
+    Assign1 := TAssignment.Create(VarRef1, Literal1, SrcPos);
+    Prog.MainBody.AddStatement(Assign1);
 
-  // Then branch: i := i + 5
-  SrcPos.row := 7;
-  SrcPos.col := 3;
-  Literal5 := TNumberLiteral.Create(5, SrcPos);
-  Assign2 := TAssignment.Create(
-    TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo destino
-    TBinaryOp.Create('+',
-      TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo fuente
-      Literal5,
-      SrcPos
-    ),
-    SrcPos
-  );
-  IfThenBlock := TBlock.Create(SrcPos);
-  IfThenBlock.AddStatement(Assign2);
+    // y := 2;
+    SrcPos.row := 13;
+    SrcPos.col := 3;
+    VarRef2 := TVariableRef.Create('y', SrcPos);
+    Literal2 := TNumberLiteral.Create(2, SrcPos);
+    Assign2 := TAssignment.Create(VarRef2, Literal2, SrcPos);
+    Prog.MainBody.AddStatement(Assign2);
 
-  // Else branch: i := i - 2
-  SrcPos.row := 7;
-  SrcPos.col := 3;
-  Literal2 := TNumberLiteral.Create(2, SrcPos);
-  IfElseBlock := TBlock.Create(SrcPos);
-  IfElseBlock.AddStatement(
-    TAssignment.Create(
-      TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo destino
-      TBinaryOp.Create('-',
-        TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo fuente
-        Literal2,
-        SrcPos
-      ),
-      SrcPos
-    )
-  );
+    // ============================================================
+    // 5. Imprimir el AST
+    // ============================================================
+    WriteLn('=== AST DEL PROGRAMA ===');
+    Prog.PrintDebug;
 
-  IfStatement := TIfStatement.Create(IfCondition, IfThenBlock, IfElseBlock, SrcPos);
-  MainBlock.AddStatement(IfStatement);
-
-  // ============================================================
-  // 3. FOR i := 1 TO 10 DO i := i + 1;
-  // ============================================================
-  SrcPos.row := 9;
-  SrcPos.col := 3;
-
-  ForBody := TBlock.Create(SrcPos);
-  Literal1 := TNumberLiteral.Create(1, SrcPos);
-  ForBody.AddStatement(
-    TAssignment.Create(
-      TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo destino
-      TBinaryOp.Create('+',
-        TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo fuente
-        Literal1,
-        SrcPos
-      ),
-      SrcPos
-    )
-  );
-
-  ForLoop := TForLoop.Create(
-    TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo variable control
-    fdUpTo,
-    TNumberLiteral.Create(1, SrcPos),
-    TNumberLiteral.Create(10, SrcPos),
-    ForBody,
-    SrcPos
-  );
-  MainBlock.AddStatement(ForLoop);
-
-  // ============================================================
-  // 4. REPEAT i := i - 1; UNTIL i = 0;
-  // ============================================================
-  SrcPos.row := 11;
-  SrcPos.col := 3;
-  RepeatBody := TBlock.Create(SrcPos);
-  Literal1 := TNumberLiteral.Create(1, SrcPos);
-  RepeatBody.AddStatement(
-    TAssignment.Create(
-      TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo destino
-      TBinaryOp.Create('-',
-        TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo fuente
-        Literal1,
-        SrcPos
-      ),
-      SrcPos
-    )
-  );
-
-  SrcPos.row := 12;
-  SrcPos.col := 3;
-  Literal0 := TNumberLiteral.Create(0, SrcPos);
-  RepeatCondition := TBinaryOp.Create('=',
-    TVariableRef.Create('i', SrcPos),  // ← NUEVO nodo
-    Literal0,
-    SrcPos
-  );
-
-  RepeatUntil := TRepeatUntil.Create(RepeatBody, RepeatCondition, SrcPos);
-  MainBlock.AddStatement(RepeatUntil);
-
-  // ============================================================
-  // 5. CASE i OF 1: j:=10; 2: j:=20; ELSE j:=0; END;
-  // ============================================================
-  SrcPos.row := 14;
-  SrcPos.col := 3;
-  CaseSelector := TVariableRef.Create('i', SrcPos);  // ← NUEVO nodo
-  CaseStatement := TCaseStatement.Create(CaseSelector, SrcPos);
-
-  // Rama 1: 1: j := 10;
-  BranchBody1 := TBlock.Create(SrcPos);
-  BranchBody1.AddStatement(
-    TAssignment.Create(
-      TVariableRef.Create('j', SrcPos),  // ← NUEVO nodo
-      TNumberLiteral.Create(10, SrcPos),
-      SrcPos
-    )
-  );
-
-  Branch1 := TCaseBranch.Create(SrcPos);
-  Const1 := TNumberLiteral.Create(1, SrcPos);
-  Branch1.AddConstant(Const1);
-  Branch1.Statement := BranchBody1;
-  CaseStatement.AddBranch(Branch1);
-
-  // Rama 2: 2: j := 20;
-  BranchBody2 := TBlock.Create(SrcPos);
-  BranchBody2.AddStatement(
-    TAssignment.Create(
-      TVariableRef.Create('j', SrcPos),  // ← NUEVO nodo
-      TNumberLiteral.Create(20, SrcPos),
-      SrcPos
-    )
-  );
-
-  Branch2 := TCaseBranch.Create(SrcPos);
-  Const2 := TNumberLiteral.Create(2, SrcPos);
-  Branch2.AddConstant(Const2);
-  Branch2.Statement := BranchBody2;
-  CaseStatement.AddBranch(Branch2);
-
-  // ELSE: j := 0;
-  SrcPos.row := 14;
-  SrcPos.col := 3;
-  CaseStatement.ElseBranch := TBlock.Create(SrcPos);
-  CaseStatement.ElseBranch.AddStatement(
-    TAssignment.Create(
-      TVariableRef.Create('j', SrcPos),  // ← NUEVO nodo
-      TNumberLiteral.Create(0, SrcPos),
-      SrcPos
-    )
-  );
-
-  MainBlock.AddStatement(CaseStatement);
-
-  Prog.MainBody := MainBlock;
-
-  // Imprimir AST
-  WriteLn('=== AST COMPLETO ===');
-  Prog.PrintDebug;
-
-  WriteLn;
-  WriteLn('Presiona Enter para salir...');
-//  ReadLn;
-end;
+    WriteLn;
+    WriteLn('Presiona Enter para salir...');
+//    ReadLn;
+  end;
 
 end.
 
