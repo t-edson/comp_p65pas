@@ -201,7 +201,12 @@ function TAnalyzer.GetUnitDeclaration: boolean;
 {Indica si el archivo del contexto actual, es una unidad. Debe llamarse al inico de la
 exploración del archivo.}
 begin
-{  ProcCommentsNoExec;  //Solo es validación, así que no debe ejecutar nada
+  lex.SkipWhites;
+  while (lex.tokType = tkDirective) do begin
+    //Pasa a siguiente
+    lex.Next;
+    lex.SkipWhites;  //limpia blancos
+  end;
   //Busca UNIT
   if lowercase(lex.token) = 'unit' then begin
     lex.curCtx.StartScan;   //retorna al inicio
@@ -209,7 +214,7 @@ begin
   end;
   lex.curCtx.StartScan;   //retorna al inicio
   exit(false);
-}end;
+end;
 //Compilación de secciones
 procedure TAnalyzer.DoAnalyzeUnit(uni: TASTNode);
 {Realiza la compilación de una unidad}
@@ -463,12 +468,12 @@ Input: The current context.
 Output: The AST.}
 begin
   if IsUnit then begin
-    DoAnalyzeUnit(prog);
+    DoAnalyzeUnit(FAst);
   end else begin
-    DoAnalyzeProgram;    //puede dar error
+    //DoAnalyzeProgram;    //puede dar error
+    ParseProgram;
   end;
-  //********************** CÓDIGO DE PRUEBA DEL NUEVO LEXER *****************************
-  TestAllConstructs;
+  //TestAllConstructs;  //Llena el AST con código de ejemplo
 end;
 
 //********************** CÓDIGO DE PRUEBA DEL NUEVO LEXER *****************************
@@ -484,7 +489,7 @@ var
   Param: TVarDecl;
   ProcBody, FuncBody: TBlock;
   begin
-    Prog.Clear;
+    FAst.Clear;
     // Inicializar posición (simulando la del lexer)
     SrcPos.idCtx := 1;
     SrcPos.row := 1;
@@ -495,13 +500,13 @@ var
     // ============================================================
     SrcPos.row := 3;
     SrcPos.col := 1;
-    VarDeclX := TVarDecl.Create('x', dtByte, 'byte', SrcPos);
-    Prog.AddGlobalDecl(VarDeclX);
+    VarDeclX := TVarDecl.Create('x', 'byte', SrcPos);
+    FAst.AddGlobalDecl(VarDeclX);
 
     SrcPos.row := 3;
     SrcPos.col := 7;
-    VarDeclY := TVarDecl.Create('y', dtByte, 'byte', SrcPos);
-    Prog.AddGlobalDecl(VarDeclY);
+    VarDeclY := TVarDecl.Create('y', 'byte', SrcPos);
+    FAst.AddGlobalDecl(VarDeclY);
 
     // ============================================================
     // 2. Declarar procedimiento: procedure Sumar(a: byte);
@@ -513,7 +518,7 @@ var
     // Añadir parámetro
     SrcPos.row := 5;
     SrcPos.col := 15;
-    Param := TVarDecl.Create('a', dtByte, 'byte', SrcPos);
+    Param := TVarDecl.Create('a', 'byte', SrcPos);
     Param.IsParameter := True;
     Proc.AddParameter(Param);
 
@@ -523,14 +528,14 @@ var
     ProcBody := TBlock.Create(SrcPos);
     Proc.Body := ProcBody;
 
-    Prog.AddProcedure(Proc);
+    FAst.AddProcedure(Proc);
 
     // ============================================================
     // 3. Declarar función: function Calcular: integer;
     // ============================================================
     SrcPos.row := 8;
     SrcPos.col := 1;
-    Func := TFunctionDecl.Create('Calcular', dtInteger, 'integer', SrcPos);
+    Func := TFunctionDecl.Create('Calcular', 'integer', SrcPos);
 
     // Cuerpo de la función (vacío)
     SrcPos.row := 9;
@@ -538,12 +543,12 @@ var
     FuncBody := TBlock.Create(SrcPos);
     Func.Body := FuncBody;
 
-    Prog.AddFunction(Func);
+    FAst.AddFunction(Func);
 
     // ============================================================
     // 4. Cuerpo principal: x := 1; y := 2;
     // ============================================================
-    // NOTA: Prog.MainBody ya existe, solo añadimos instrucciones
+    // NOTA: FAst.MainBody ya existe, solo añadimos instrucciones
 
     // x := 1;
     SrcPos.row := 12;
@@ -551,7 +556,7 @@ var
     VarRef1 := TVariableRef.Create('x', SrcPos);
     Literal1 := TNumberLiteral.Create(1, SrcPos);
     Assign1 := TAssignment.Create(VarRef1, Literal1, SrcPos);
-    Prog.MainBody.AddStatement(Assign1);
+    FAst.MainBody.AddStatement(Assign1);
 
     // y := 2;
     SrcPos.row := 13;
@@ -559,13 +564,13 @@ var
     VarRef2 := TVariableRef.Create('y', SrcPos);
     Literal2 := TNumberLiteral.Create(2, SrcPos);
     Assign2 := TAssignment.Create(VarRef2, Literal2, SrcPos);
-    Prog.MainBody.AddStatement(Assign2);
+    FAst.MainBody.AddStatement(Assign2);
 
     // ============================================================
     // 5. Imprimir el AST
     // ============================================================
     WriteLn('=== AST DEL PROGRAMA ===');
-    Prog.PrintDebug;
+    FAst.PrintDebug;
 
     WriteLn;
     WriteLn('Presiona Enter para salir...');

@@ -1006,7 +1006,7 @@ begin
 ////      astVardec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.;
 ////    end;
 ////  end;
-//  for elem in prog.elements do begin
+//  for elem in FAst.elements do begin
 //    if elem.idClass = eleConsDec then begin
 //      astConDec := TAstConsDec(elem);
 //      mirConDec := AddMirConDec(mirRep.root.declars, astConDec);
@@ -1046,7 +1046,7 @@ begin
 //    end;
 //  end;
 //  //Split body
-//  bod := prog.BodyNode;  //lee Nodo del cuerpo principal
+//  bod := FAst.BodyNode;  //lee Nodo del cuerpo principal
 //  ConvertBody(mirRep.root.instrucs, bod);
 end;
 procedure TCompiler_PIC16.DoOptimize;
@@ -1080,7 +1080,7 @@ se inicializan correctamente las configuraiones.}
 var
   p: SizeInt;
 begin
-{  if comp_level = clNull then exit;
+  if comp_level = clNull then exit;
   debugln('');
   StartCountElapsed;  //Start timer
   DefCompiler;   //Debe hacerse solo una vez al inicio
@@ -1106,18 +1106,17 @@ begin
     {-------------------------------------------------}
     ast.Clear;
     mirRep.Clear;
-    //Asigna nombre y archivo a elemento
-    ast.main.name := ExtractFileName(mainFile);
-    p := pos('.',ast.main.name);
-    if p <> 0 then ast.main.name := copy(ast.main.name, 1, p-1);
-    ast.main.srcDec := lex.GetSrcPos;
+    //Asigna nombre y ubicación al nodo principal del AST
+    ast.name := ExtractFileName(mainFile);
+    p := pos('.',ast.name);
+    if p <> 0 then ast.name := copy(ast.name, 1, p-1);
+    ast.srcDec := lex.GetSrcPos;
     //Continúa con preparación
 //    EndCountElapsed('** Setup in: ');
 //    StartCountElapsed;  //Start timer
     CreateSystemUnitInAST;  //Crea los elementos del sistema. 3ms aprox.
     ClearMacros;           //Limpia las macros
     //Initiate CPU
-    ExprLevel := 0;
     pic.dataAddr1 := -1;  //Reset flag
     pic.MsjError := '';
     //Compila el archivo actual como programa o como unidad
@@ -1160,7 +1159,7 @@ begin
     if OnAfterCompile<>nil then OnAfterCompile;
     EndCountElapsed('-- OnAfterCompile in: ');
   end;
-}end;
+end;
 function AdrStr(absAdr: word): string;
 {formatea una dirección en cadena.}
 begin

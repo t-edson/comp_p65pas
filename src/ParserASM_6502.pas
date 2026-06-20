@@ -277,7 +277,7 @@ begin
       operand.used := true;
       exit(true);
     end;
-    ele := cpx.Prog.FindFirst(lex.token);  //identifica elemento
+    ele := cpx.FAst.FindFirst(lex.token);  //identifica elemento
     if ele=nil then begin
       //Es un identificador no definido (como una etiqueta). Puede definirse luego.
       operand.Val := -1;        //Indicates to use "operRef"
@@ -686,14 +686,14 @@ to the instruction added.}
 begin
 {  if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.Prog.CloseElement;
+    cpx.FAst.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := '<inst>';
   curInst.srcDec := srcDec;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itOpcode;   //Marca como instrucción de salto.
-  cpx.Prog.AddElementAndOpen(curInst);
+  cpx.FAst.AddElementAndOpen(curInst);
   //Actualiza propiedades de la instrucción
   curInst.opcode := ord(inst);
   curInst.addMode := ord(addMode);
@@ -706,55 +706,55 @@ If operand of the instruction is expression, it mus be added in the child nodes.
 begin
 {  if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.Prog.CloseElement;
+    cpx.FAst.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := lblName;
   curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itLabel;   //Marca como instrucción de salto.
-  cpx.Prog.AddElementAndOpen(curInst);
+  cpx.FAst.AddElementAndOpen(curInst);
   labels.add(curInst);  //Agrega a la lista de etiquetas}
 end;
 procedure TParserAsm_6502.AddDirectiveORG(param: word);
 begin
 {  if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.Prog.CloseElement;
+    cpx.FAst.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := 'ORG';
   curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itOrgDir;  //Represents ORG
-  cpx.Prog.AddElementAndOpen(curInst);
+  cpx.FAst.AddElementAndOpen(curInst);
   curInst.operand.Val := param;}
 end;
 procedure TParserAsm_6502.AddDirectiveDB;
 begin
 {  if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.Prog.CloseElement;
+    cpx.FAst.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := 'DB';
   curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itDefByte;  //Represents DB
-  cpx.Prog.AddElementAndOpen(curInst);}
+  cpx.FAst.AddElementAndOpen(curInst);}
 end;
 procedure TParserAsm_6502.AddDirectiveDW;
 begin
 {  if curInst <> nil then begin
     //We need to close the current instruction.
-    cpx.Prog.CloseElement;
+    cpx.FAst.CloseElement;
   end;
   curInst := TAstAsmInstr.Create;
   curInst.name := 'DW';
   curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itDefWord;  //Represents DB
-  cpx.Prog.AddElementAndOpen(curInst);}
+  cpx.FAst.AddElementAndOpen(curInst);}
 end;
 //Inicialización
 procedure TParserAsm_6502.ProcessASMblock(cpx0: TCompilerBase);
@@ -769,7 +769,7 @@ begin
   curBlock := TAstAsmBlock.Create;
   curBlock.srcDec := lex.GetSrcPos;
   curBlock.name := 'ASMblk';
-  cpx.Prog.AddElementAndOpen(curBlock);
+  cpx.FAst.AddElementAndOpen(curBlock);
   StartASM;
   curInst := nil;
   repeat
@@ -781,12 +781,12 @@ begin
   EndASM;
   if curInst <> nil then begin
     //There are an instruction opened
-    cpx.Prog.CloseElement;
+    cpx.FAst.CloseElement;
   end;
   //Current token is delimiter END.
   lex.curCtx.OnDecodeNext := nil;   //Restore lexer here, in order to take the "END" with the new lexer and avoid problems of syntax.
   lex.Next;   //Take END with default lexer.
-  cpx.Prog.CloseElement;  //Close ASM block}
+  cpx.FAst.CloseElement;  //Close ASM block}
 end;
 function TParserAsm_6502.DecodeNext: boolean;
 {Decode the token in the current position, indicated by (frow, fcol), and returns:
