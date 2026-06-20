@@ -201,12 +201,8 @@ function TAnalyzer.GetUnitDeclaration: boolean;
 {Indica si el archivo del contexto actual, es una unidad. Debe llamarse al inico de la
 exploración del archivo.}
 begin
-  lex.SkipWhites;
-  while (lex.tokType = tkDirective) do begin
-    //Pasa a siguiente
-    lex.Next;
-    lex.SkipWhites;  //limpia blancos
-  end;
+  //Salta blancos sin ejecutar directivas
+  SkipWhitesNoDirect;
   //Busca UNIT
   if lowercase(lex.token) = 'unit' then begin
     lex.curCtx.StartScan;   //retorna al inicio

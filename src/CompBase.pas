@@ -94,11 +94,13 @@ public    //Files
 protected //Calls to Directive Module (ParserDirec.pas)
   callProcDIRline  : procedure(const AsmLin: string; out ctxChanged: boolean) of object;
   function CaptureDelExpres: boolean;
-  procedure ProcComments;
+  procedure SkipWhites;
+  procedure NextAndSkipWhites;
+  procedure SkipWhitesNoDirect;
+
 
 protected
   // Métodos auxiliares para el parser
-  function GetSrcPos: TSrcPos;
   procedure CheckToken(Expected: TTokenKind; const txt: string = '');
   procedure CheckKeyword(const Expected: string; const txt: string = '');
   procedure Consume(Expected: TTokenKind; const txt: string = '');
@@ -277,12 +279,6 @@ end;
 // ============================================================
 // MÉTODOS AUXILIARES DEL PARSER
 // ============================================================
-
-function TCompilerBase.GetSrcPos: TSrcPos;
-begin
-  Result := lex.GetSrcPos;
-end;
-
 procedure TCompilerBase.CheckToken(Expected: TTokenKind; const txt: string);
 begin
   if lex.tokType <> Expected then
@@ -335,7 +331,7 @@ begin
   lex.SkipWhites;
   if lex.curCtx.tokIdent = tiSemic then begin //encontró
     lex.Next;   //pasa al siguiente
-    ProcComments;
+    SkipWhites;
     exit(true);
   end else begin   //es un error
     GenError(ER_SEMIC_EXPEC);
@@ -343,8 +339,8 @@ begin
   end;
 end;
 
-procedure TCompilerBase.ProcComments;
-{Procesa comentarios y directivas.
+procedure TCompilerBase.SkipWhites;
+{Consume comentarios y directivas del código fuente.
 Notar que este procedimiento puede detectar varios errores en el mismo bloque, y que
 pasa al siguiente token, aún cuando detecta errores. }
 var
@@ -363,9 +359,48 @@ begin
       {Hubo cambio de contexto. Procesamos nuevamente, porque ahora estamos ya en
       otro contexto y se supone que esta llamada a ProcComments(), se hace precisamente
       para saltar blancos, comentarios, directivas.}
-      ProcComments;   {En el nuevo contexto puede haber nuevos comentarios.}
+      SkipWhites;   {En el nuevo contexto puede haber nuevos comentarios.}
       exit;
     end;
+    //Pasa a siguiente
+    lex.Next;
+    lex.SkipWhites;  //limpia blancos
+  end;
+end;
+procedure TCompilerBase.NextAndSkipWhites;
+{Versión de SkipWhites() que primero consume un token con lex.Next. Se evita llamar a
+SkipWhites(), y se duplica parte del código,  para evitar la sobrecarga de una llamada
+adiconal.}
+var
+  ctxChanged: Boolean;  //Manejamos variables locales para permitir recursividad
+begin
+  lex.Next;
+  lex.SkipWhites;
+  while (lex.tokType = tkDirective) do begin
+    //Es una directiva
+    callProcDIRline(lex.token, ctxChanged);  //procesa línea
+    if HayError then begin
+      lex.Next;   //Pasa, porque es un error ya ubicado, y mejor buscamos otros
+      lex.SkipWhites;
+      continue;
+    end;
+    if ctxChanged then begin
+      {Hubo cambio de contexto. Procesamos nuevamente, porque ahora estamos ya en
+      otro contexto y se supone que esta llamada a ProcComments(), se hace precisamente
+      para saltar blancos, comentarios, directivas.}
+      SkipWhites;   {En el nuevo contexto puede haber nuevos comentarios.}
+      exit;
+    end;
+    //Pasa a siguiente
+    lex.Next;
+    lex.SkipWhites;  //limpia blancos
+  end;
+end;
+procedure TCompilerBase.SkipWhitesNoDirect;
+{Similar a SkipWhites(), pero no ejecuta directivas.}
+begin
+  lex.SkipWhites;
+  while (lex.tokType = tkDirective) do begin
     //Pasa a siguiente
     lex.Next;
     lex.SkipWhites;  //limpia blancos
@@ -395,7 +430,7 @@ var
   i: Integer;
 begin
   lex.Next;  //Pasa al siguiente token.
-  ProcComments;
+  SkipWhites;
   VarNames := TStringList.Create;  //**** Se podría usar una lista estática en TCompilerBase, para evitar construir objetos
   try
     // Leer lista de identificadores
@@ -406,11 +441,11 @@ begin
       end;
       VarNames.Add(lex.token);
       lex.Next;
-      ProcComments;
+      SkipWhites;
       // Verificar si hay más variables
       if lex.curCtx.tokIdent = tiComma then begin
         lex.Next;  // Consumir coma
-        ProcComments;
+        SkipWhites;
         if lex.tokType<>tkIdentifier then
           GenError('Se esperaba un identificador después de ","');
         // Continuar con la siguiente variable
@@ -425,7 +460,7 @@ begin
       Exit;
     end;
     lex.Next;
-    ProcComments;
+    SkipWhites;
     // Leer el tipo
     if lex.tokType<>tkIdentifier then begin
       GenError('Se esperaba un tipo de dato');
@@ -433,16 +468,16 @@ begin
     end;
     DataTypeName := lex.token;
     // Crear declaraciones para cada variable
-    SrcPos := GetSrcPos;   //Usa una sola ubicación
+    SrcPos := lex.GetSrcPos;   //Usa una sola ubicación
     for i := 0 to VarNames.Count - 1 do begin
       FAst.AddGlobalDecl(TVarDecl.Create(VarNames[i], DataTypeName, SrcPos));
     end;
     // Consumir ';' opcional
     lex.Next;  //Pasa el nombre del tipo
-    ProcComments;
+    SkipWhites;
     if lex.curCtx.tokIdent = tiSemic then begin
       lex.Next;
-      ProcComments;
+      SkipWhites;
     end;
   finally
     VarNames.Free;
@@ -454,7 +489,7 @@ var
   Proc: TProcDecl;
   SrcPos: TSrcPos;
 begin
-  SrcPos := GetSrcPos;
+  SrcPos := lex.GetSrcPos;
   ConsumeKeyword('procedure', 'Se esperaba "procedure"');
 
   if HayError then Exit;
@@ -500,7 +535,7 @@ var
   SrcPos: TSrcPos;
   ReturnTypeName: string;
 begin
-  SrcPos := GetSrcPos;
+  SrcPos := lex.GetSrcPos;
   ConsumeKeyword('function', 'Se esperaba "function"');
 
   if HayError then Exit;
@@ -613,7 +648,7 @@ begin
       // Crear parámetros
       for i := 0 to VarNames.Count - 1 do
       begin
-        SrcPos := GetSrcPos;
+        SrcPos := lex.GetSrcPos;
         Param := TVarDecl.Create(VarNames[i], DataTypeName, SrcPos);
         Param.IsParameter := True;
         Param.IsByReference := IsVarParam;
@@ -654,7 +689,7 @@ begin
       Break;
     end;
 
-    SrcPos := GetSrcPos;
+    SrcPos := lex.GetSrcPos;
     TypeName := lex.token;
     lex.Next;
 
@@ -704,9 +739,9 @@ var
   SrcPos: TSrcPos;
 begin
   if Block = nil then
-    Block := TBlock.Create(GetSrcPos);
+    Block := TBlock.Create(lex.GetSrcPos);
 
-  SrcPos := GetSrcPos;
+  SrcPos := lex.GetSrcPos;
   // Identificar el tipo de instrucción
   if lex.tokType = tkIdentifier then begin
     // Guardar el identificador para verificar si es assignment o procedure call
@@ -739,7 +774,7 @@ begin
   // Opcional: ; después de la instrucción
   if lex.curCtx.tokIdent = tiSemic then begin
     lex.Next;
-    ProcComments;
+    SkipWhites;
   end;
 end;
 
@@ -754,10 +789,10 @@ begin
     Exit(nil);
   end;
 
-  SrcPos := GetSrcPos;
+  SrcPos := lex.GetSrcPos;
   Value := StrToInt(lex.token);
   lex.Next;
-  ProcComments;
+  SkipWhites;
   Result := TNumberLiteral.Create(Value, SrcPos);
 end;
 function TCompilerBase.ParseIdentifier: TVariableRef;
@@ -769,10 +804,10 @@ begin
     Exit(nil);
   end;
 
-  SrcPos := GetSrcPos;
+  SrcPos := lex.GetSrcPos;
   Result := TVariableRef.Create(lex.token, SrcPos);
   lex.Next;
-  ProcComments;
+  SkipWhites;
 end;
 function TCompilerBase.ParseStringLiteral: TStringLiteral;
 var
@@ -784,16 +819,16 @@ begin
     Exit(nil);
   end;
 
-  SrcPos := GetSrcPos;
+  SrcPos := lex.GetSrcPos;
   Result := TStringLiteral.Create(lex.token, SrcPos);
   lex.Next;
-  ProcComments;
+  SkipWhites;
 end;
 function TCompilerBase.ParseFactor: TExpression;
 var
   SrcPos: TSrcPos;
 begin
-  SrcPos := GetSrcPos;
+  SrcPos := lex.GetSrcPos;
 
   if Match(tkLitNumber) then begin
     Result := ParseNumberLiteral
@@ -803,22 +838,22 @@ begin
     Result := ParseStringLiteral
   end else if MatchKeyword('true') then begin
     lex.Next;
-    ProcComments;
+    SkipWhites;
     Result := TBooleanLiteral.Create(True, SrcPos);
   end else if MatchKeyword('false') then begin
     lex.Next;
-    ProcComments;
+    SkipWhites;
     Result := TBooleanLiteral.Create(False, SrcPos);
   end else if lex.curCtx.tokIdent = tiParOpen then begin  //'('
     lex.Next;
-    ProcComments;
+    SkipWhites;
     Result := ParseExpression;
     if not HayError then begin
       if lex.curCtx.tokIdent <> tiParClos then begin
         GenError('Se esperaba ")"');
       end;
       lex.Next;
-      ProcComments;
+      SkipWhites;
     end;
   end else begin
     GenError('Factor no reconocido', SrcPos);
@@ -843,9 +878,9 @@ begin
     end else begin
       Op := LowerCase(lex.token);
     end;
-    SrcPos := GetSrcPos;
+    SrcPos := lex.GetSrcPos;
     lex.Next;
-    ProcComments;
+    SkipWhites;
 
     Right := ParseFactor;
     if not HayError then begin
@@ -865,7 +900,7 @@ begin
   // Operador unario opcional
   if lex.curCtx.tokIdent in [tiPlus, tiMinus] then begin
     UnaryOp := lex.token;
-    SrcPos := GetSrcPos;
+    SrcPos := lex.GetSrcPos;
     lex.Next;
     Left := ParseTerm;
     if not HayError then
@@ -883,7 +918,7 @@ begin
   // Operadores +, -, or
   while lex.curCtx.tokIdent in [tiPlus, tiMinus] do begin
     Op := lex.token;
-    SrcPos := GetSrcPos;
+    SrcPos := lex.GetSrcPos;
     lex.Next;
     Right := ParseTerm;
     if not HayError then begin
@@ -911,7 +946,7 @@ begin
     (lex.token = '<>') or (lex.token = '<=') or (lex.token = '>=')
   ) then begin
     Op := lex.token;
-    SrcPos := GetSrcPos;
+    SrcPos := lex.GetSrcPos;
     lex.Next;
     Right := ParseSimpleExpression;
     if not HayError then
@@ -934,15 +969,15 @@ begin
     GenError('Se esperaba un identificador');
     Exit;
   end;
-  SrcPos := GetSrcPos;
+  SrcPos := lex.GetSrcPos;
   Target := TVariableRef.Create(lex.token, SrcPos);
   lex.Next;
-  ProcComments;
+  SkipWhites;
 
   // Verificar el operador de asignación :=
   if lex.curCtx.tokIdent = tiAssign then begin
     lex.Next;
-    ProcComments;
+    SkipWhites;
   end else begin
     GenError('Se esperaba ":=" en la asignación', SrcPos);
     Exit;
@@ -961,7 +996,7 @@ var
   ThenBranch, ElseBranch: TBlock;
   SrcPos: TSrcPos;
 begin
-  SrcPos := GetSrcPos;
+  SrcPos := lex.GetSrcPos;
   ConsumeKeyword('if', 'Se esperaba "if"');
 
   if HayError then Exit;
@@ -975,7 +1010,7 @@ begin
   if HayError then Exit;
 
   // Then branch
-  ThenBranch := TBlock.Create(GetSrcPos);
+  ThenBranch := TBlock.Create(lex.GetSrcPos);
   ParseStatement(ThenBranch);
 
   if HayError then Exit;
@@ -984,7 +1019,7 @@ begin
   if MatchKeyword('else') then
   begin
     lex.Next;
-    ElseBranch := TBlock.Create(GetSrcPos);
+    ElseBranch := TBlock.Create(lex.GetSrcPos);
     ParseStatement(ElseBranch);
   end
   else
@@ -1000,7 +1035,7 @@ var
   Body: TBlock;
   SrcPos: TSrcPos;
 begin
-  SrcPos := GetSrcPos;
+  SrcPos := lex.GetSrcPos;
   ConsumeKeyword('while', 'Se esperaba "while"');
 
   if HayError then Exit;
@@ -1013,7 +1048,7 @@ begin
 
   if HayError then Exit;
 
-  Body := TBlock.Create(GetSrcPos);
+  Body := TBlock.Create(lex.GetSrcPos);
   ParseStatement(Body);
 
   if not HayError then
@@ -1028,7 +1063,7 @@ var
   Body: TBlock;
   SrcPos: TSrcPos;
 begin
-  SrcPos := GetSrcPos;
+  SrcPos := lex.GetSrcPos;
   ConsumeKeyword('for', 'Se esperaba "for"');
 
   if HayError then Exit;
@@ -1039,7 +1074,7 @@ begin
     Exit;
   end;
 
-  ControlVar := TVariableRef.Create(lex.token, GetSrcPos);
+  ControlVar := TVariableRef.Create(lex.token, lex.GetSrcPos);
   lex.Next;
 
   if not (Match(tkSymbol) and (lex.token = ':=')) then
@@ -1077,7 +1112,7 @@ begin
 
   if HayError then Exit;
 
-  Body := TBlock.Create(GetSrcPos);
+  Body := TBlock.Create(lex.GetSrcPos);
   ParseStatement(Body);
 
   if not HayError then
@@ -1090,12 +1125,12 @@ var
   Condition: TExpression;
   SrcPos: TSrcPos;
 begin
-  SrcPos := GetSrcPos;
+  SrcPos := lex.GetSrcPos;
   ConsumeKeyword('repeat', 'Se esperaba "repeat"');
 
   if HayError then Exit;
 
-  Body := TBlock.Create(GetSrcPos);
+  Body := TBlock.Create(lex.GetSrcPos);
 
   // Parsear instrucciones hasta encontrar 'until'
   while not (HayError or MatchKeyword('until')) do
@@ -1120,7 +1155,7 @@ var
   Branch: TCaseBranch;
   SrcPos: TSrcPos;
 begin
-  SrcPos := GetSrcPos;
+  SrcPos := lex.GetSrcPos;
   ConsumeKeyword('case', 'Se esperaba "case"');
 
   if HayError then Exit;
@@ -1138,7 +1173,7 @@ begin
   // Parsear ramas
   while not (HayError or MatchKeyword('end')) do
   begin
-    Branch := TCaseBranch.Create(GetSrcPos);
+    Branch := TCaseBranch.Create(lex.GetSrcPos);
 
     // Leer constantes: 1, 2, 3:
     while not HayError do
@@ -1149,7 +1184,7 @@ begin
         Break;
       end;
 
-      Branch.AddConstant(TNumberLiteral.Create(StrToInt(lex.token), GetSrcPos));
+      Branch.AddConstant(TNumberLiteral.Create(StrToInt(lex.token), lex.GetSrcPos));
       lex.Next;
 
       if Match(tkSymbol) and (lex.token = ',') then
@@ -1193,7 +1228,7 @@ begin
     Exit;
   end;
 
-  SrcPos := GetSrcPos;
+  SrcPos := lex.GetSrcPos;
   ProcCall := TProcedureCall.Create(lex.token, SrcPos);
   lex.Next;
 
@@ -1222,13 +1257,13 @@ end;
 // Bloque y programa
 procedure TCompilerBase.ParseBlock(Block: TBlock; EndToken: TTokenKind = tkBlkDelim);
 begin
-  if Block = nil then Block := TBlock.Create(GetSrcPos);
+  if Block = nil then Block := TBlock.Create(lex.GetSrcPos);
   if lex.curCtx.tokIdent<>tiBegin then begin
     GenError('Se esperaba "begin"');
     exit;
   end;
   lex.Next;
-  ProcComments;
+  SkipWhites;
   // Parsear instrucciones hasta 'end'
   while not (HayError or (lex.curCtx.tokIdent=tiEnd)) do begin
     ParseStatement(Block);
@@ -1239,13 +1274,13 @@ begin
     GenError('Se esperaba "end"');
   end;
   lex.Next;   //Toma el "End".
-  ProcComments;
+  SkipWhites;
 
   if not HayError then begin
     // Si hay ';' después de "End" (opcional en Pascal).
     if lex.curCtx.tokIdent = tiSemic then begin
       lex.Next;
-      ProcComments;
+      SkipWhites;
     end;
   end;
 end;
@@ -1258,7 +1293,7 @@ debe haber sido limpiado}
     //Captura el encabezado, solo si existe.
     if lex.curCtx.tokIdent = tiProgram then begin
       lex.Next;  //pasa al nombre
-      ProcComments;
+      SkipWhites;
       if lex.atEof then begin
         GenError('Program name expected.');
         exit;
@@ -1275,7 +1310,7 @@ debe haber sido limpiado}
   end;
 begin
   // program <nombre> ;
-  ProcComments;
+  SkipWhites;
   ParseProgramHeader;
   if HayError then Exit;
   // Parse declarations
@@ -1299,7 +1334,7 @@ begin
   if lex.curCtx.tokIdent<>tiDot then
      GenError('Se esperaba "." al final del programa');
   lex.Next;
-  ProcComments;
+  SkipWhites;
   // Verificar que no queden tokens.
   if not HayError then begin
     if not lex.atEof then
