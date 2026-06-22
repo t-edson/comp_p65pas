@@ -235,7 +235,7 @@ begin
       exit;
     end;
     lex.Next;  //Toma el nombre y pasa al siguiente
-    if not CaptureDelExpres then exit;
+    if not CaptureSemicolon then exit;
   end else begin
     GenError('Expected: UNIT');
     exit;
@@ -378,7 +378,7 @@ begin
       exit;
     end;
     lex.Next;  //Toma el nombre y pasa al siguiente
-    if not CaptureDelExpres then exit;
+    if not CaptureSemicolon then exit;
   end;
   if lex.atEof then begin
     GenError('Expected "program", "begin", "var", "type" or "const".');
@@ -464,7 +464,7 @@ Input: The current context.
 Output: The AST.}
 begin
   if IsUnit then begin
-    DoAnalyzeUnit(FAst);
+    DoAnalyzeUnit(ast);
   end else begin
     //DoAnalyzeProgram;    //puede dar error
     ParseProgram;
@@ -485,7 +485,7 @@ var
   Param: TVarDecl;
   ProcBody, FuncBody: TBlock;
   begin
-    FAst.Clear;
+    ast.Clear;
     // Inicializar posición (simulando la del lexer)
     SrcPos.idCtx := 1;
     SrcPos.row := 1;
@@ -497,12 +497,12 @@ var
     SrcPos.row := 3;
     SrcPos.col := 1;
     VarDeclX := TVarDecl.Create('x', 'byte', SrcPos);
-    FAst.AddGlobalDecl(VarDeclX);
+    ast.AddGlobalDecl(VarDeclX);
 
     SrcPos.row := 3;
     SrcPos.col := 7;
     VarDeclY := TVarDecl.Create('y', 'byte', SrcPos);
-    FAst.AddGlobalDecl(VarDeclY);
+    ast.AddGlobalDecl(VarDeclY);
 
     // ============================================================
     // 2. Declarar procedimiento: procedure Sumar(a: byte);
@@ -524,7 +524,7 @@ var
     ProcBody := TBlock.Create(SrcPos);
     Proc.Body := ProcBody;
 
-    FAst.AddProcedure(Proc);
+    ast.AddProcedure(Proc);
 
     // ============================================================
     // 3. Declarar función: function Calcular: integer;
@@ -539,12 +539,12 @@ var
     FuncBody := TBlock.Create(SrcPos);
     Func.Body := FuncBody;
 
-    FAst.AddFunction(Func);
+    ast.AddFunction(Func);
 
     // ============================================================
     // 4. Cuerpo principal: x := 1; y := 2;
     // ============================================================
-    // NOTA: FAst.MainBody ya existe, solo añadimos instrucciones
+    // NOTA: ast.MainBody ya existe, solo añadimos instrucciones
 
     // x := 1;
     SrcPos.row := 12;
@@ -552,7 +552,7 @@ var
     VarRef1 := TVariableRef.Create('x', SrcPos);
     Literal1 := TNumberLiteral.Create(1, SrcPos);
     Assign1 := TAssignment.Create(VarRef1, Literal1, SrcPos);
-    FAst.MainBody.AddStatement(Assign1);
+    ast.MainBody.AddStatement(Assign1);
 
     // y := 2;
     SrcPos.row := 13;
@@ -560,13 +560,13 @@ var
     VarRef2 := TVariableRef.Create('y', SrcPos);
     Literal2 := TNumberLiteral.Create(2, SrcPos);
     Assign2 := TAssignment.Create(VarRef2, Literal2, SrcPos);
-    FAst.MainBody.AddStatement(Assign2);
+    ast.MainBody.AddStatement(Assign2);
 
     // ============================================================
     // 5. Imprimir el AST
     // ============================================================
     WriteLn('=== AST DEL PROGRAMA ===');
-    FAst.PrintDebug;
+    ast.PrintDebug;
 
     WriteLn;
     WriteLn('Presiona Enter para salir...');

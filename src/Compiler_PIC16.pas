@@ -1006,7 +1006,7 @@ begin
 ////      astVardec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.;
 ////    end;
 ////  end;
-//  for elem in FAst.elements do begin
+//  for elem in ast.elements do begin
 //    if elem.idClass = eleConsDec then begin
 //      astConDec := TAstConsDec(elem);
 //      mirConDec := AddMirConDec(mirRep.root.declars, astConDec);
@@ -1046,7 +1046,7 @@ begin
 //    end;
 //  end;
 //  //Split body
-//  bod := FAst.BodyNode;  //lee Nodo del cuerpo principal
+//  bod := ast.BodyNode;  //lee Nodo del cuerpo principal
 //  ConvertBody(mirRep.root.instrucs, bod);
 end;
 procedure TCompiler_PIC16.DoOptimize;
@@ -1106,7 +1106,7 @@ begin
     {-------------------------------------------------}
     ast.Clear;
     mirRep.Clear;
-    //Asigna nombre y ubicación al nodo principal del AST
+    //Asigna nombre y ubicación al nodo principal del ast
     ast.name := ExtractFileName(mainFile);
     p := pos('.',ast.name);
     if p <> 0 then ast.name := copy(ast.name, 1, p-1);

@@ -1847,7 +1847,7 @@ begin
   varsList := TDirVar_list.Create(true);
   instList := TDirInstruc_list.Create(true);
   //Initialize events and functions of Compiler
-//  callProcDIRline := @ProcDIRline;
+  callProcDIRline := @ProcDIRline;
   mirRep    := TMirList.Create;
 end;
 destructor TParserDirecBase.Destroy;
