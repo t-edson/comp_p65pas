@@ -1,11 +1,12 @@
 program muestra; 
 var 
-x,y: byte; 
-
+  a: bit;
 begin
-  //x :=   2  +  2;
+  //x := 1;
   //x := (2 + 1) and 123;
-  x := fun(1);
+  a := b[1];
+  x[i] := 1;
+//  x := fun(1);
 end. 
 
 
