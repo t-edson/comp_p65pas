@@ -14,7 +14,7 @@ type
   { TParserAsm_6502 }
   TParserAsm_6502 = class
   private
-    cpx     : TCompilerBase;   //Reference to compiler
+    cpx     : TParser;   //Reference to compiler
     lex     : TAleLexer;       //Reference to the compiler
     msg     : TMessageManager;    //Referencia al gestor de mensajes
     labels  : TAstAsmInstrs;   //Lista de etiquetas
@@ -37,7 +37,7 @@ type
       param: integer; srcDec: TSrcPos);
     procedure AddDirectiveORG(param: word);
   public //Inicialización
-    procedure ProcessASMblock(cpx0: TCompilerBase);
+    procedure ProcessASMblock(cpx0: TParser);
     function DecodeNext: boolean;
     constructor Create;
     destructor Destroy; override;
@@ -757,7 +757,7 @@ begin
   cpx.ast.AddElementAndOpen(curInst);}
 end;
 //Inicialización
-procedure TParserAsm_6502.ProcessASMblock(cpx0: TCompilerBase);
+procedure TParserAsm_6502.ProcessASMblock(cpx0: TParser);
 var
   blkEnd: boolean;
 begin

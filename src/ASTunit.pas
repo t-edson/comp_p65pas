@@ -203,17 +203,18 @@ type  //Nodos de expresiones
   end;
 
 type  //Nodos de sentencias
+  { TAssignment }
   // Asignación
   TAssignment = class(TASTNode)
   private
-    FTarget: TVariableRef;
+    FTarget: TExpression;
     FValue: TExpression;
   public
-    constructor Create(ATarget: TVariableRef; AValue: TExpression;
+    constructor Create(ATarget: TExpression; AValue: TExpression;
                        const ASrcPos: TSrcPos);
     destructor Destroy; override;
 
-    property Target: TVariableRef read FTarget;
+    property Target: TExpression read FTarget;
     property Value: TExpression read FValue;
 
     function ToString: string; override;
@@ -699,8 +700,8 @@ end;
 {$endregion}
 {$region "Nodos de sentencias"}
 // TAssignment
-constructor TAssignment.Create(ATarget: TVariableRef; AValue: TExpression;
-                               const ASrcPos: TSrcPos);
+constructor TAssignment.Create(ATarget: TExpression; AValue: TExpression;
+  const ASrcPos: TSrcPos);
 begin
   inherited Create(ntAssignment, ASrcPos);
   FTarget := ATarget;
@@ -714,8 +715,12 @@ begin
 end;
 function TAssignment.ToString: string;
 begin
-  Result := Format('Assignment: %s := ...', [FTarget.Name]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+  if FTarget.NodeType = ntVariableRef then begin
+    Result := Format('Assignment: %s := ...', [TVariableRef(FTarget).Name]);
+    Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+  end else begin
+    Result := 'Assignment: <Expression> := ...';
+  end;
 end;
 procedure TAssignment.PrintDebug(Indent: Integer = 0);
 begin

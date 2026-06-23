@@ -7,7 +7,30 @@ uses
 type
 
   { TAnalyzer }
-  TAnalyzer = class(TCompilerBase)
+  TAnalyzer = class(TParser)
+  public    //Public attributes of compiler
+    ID        : integer;     //Identificador para el compilador.
+    IsUnit    : boolean;     //Flag to identify a Unit
+    //Variables públicas del compilador
+    ejecProg  : boolean;     //Indicates the compiler is working
+    stopEjec  : boolean;     //To stop compilation
+  protected //Compiling Options. Set by directives.
+    syntaxMode  : (modPascal, modPicPas);
+    bootloader  : TBootloader;  //Bootloader code for the compiled binary.
+    loaderBytes : array of integer; //Custom Bootloader bytes.
+    str_nullterm: boolean;   //Flag to activate the Null-terminated string for literals.
+  protected //Command line options.
+    mainFile    : string;    //Archivo inicial que se compila.
+    hexFile     : string;    //Nombre de archivo de salida.
+    comp_level  : TCompileLevel; //Compilation level.
+    ForToRepeat : boolean;   //COnvert FOR loop to REPEAT loop.
+    //  incDetComm  : boolean;   //Incluir Comentarios detallados.
+    enabDirMsgs : boolean;   //Bandera para permitir generar mensajes desde las directivas.
+  public    //Files
+    function hexFilePath: string;
+    function mainFilePath: string;
+    function ExpandRelPathToMain(FileName: string): string;
+    procedure setHexFile(newHexFile: string);
   public
     mirRep: TMirList;    //Container for MIR representation
   public    //Access to CPU hardware.
@@ -25,6 +48,8 @@ type
     procedure DoAnalyzeUnit(uni: TASTNode);
     procedure DoAnalyzeProgram;
     procedure DoAnalyze;
+  public
+    constructor Create(msg0: TMessageManager);
   end;
 
 implementation
@@ -56,6 +81,29 @@ resourcestring
   ER_VARIAB_EXPEC = 'Variable expected.'         ;
   ER_ONL_BYT_WORD = 'Only BYTE or WORD index is allowed in FOR.';
   ER_UNKNOWN_IDE_ = 'Unknown identifier: %s'    ;
+
+{$region "Files"}
+function TAnalyzer.hexFilePath: string;
+begin
+  Result := ExpandRelPathTo(mainFile, hexfile); //Convierte a ruta absoluta
+end;
+function TAnalyzer.mainFilePath: string;
+begin
+  Result := mainFile;
+end;
+function TAnalyzer.ExpandRelPathToMain(FileName: string): string;
+{Convert a relative path to absolute path, considering the base path is "mainFile".}
+begin
+  Result := ExpandRelPathTo(mainFile, FileName);
+end;
+procedure TAnalyzer.setHexFile(newHexFile: string);
+var
+  filPath: String;
+begin
+  filPath := ExpandRelPathTo(mainFile, newHexFile);  //Completa ruta, si es relativa
+  hexfile := filPath;
+end;
+{$endregion}
 
 function TAnalyzer.StartOfSection: boolean;
 var
@@ -470,6 +518,12 @@ begin
     ParseProgram;
   end;
   //TestAllConstructs;  //Llena el AST con código de ejemplo
+end;
+
+constructor TAnalyzer.Create(msg0: TMessageManager);
+begin
+  inherited Create(msg0);
+  ejecProg := false;
 end;
 
 //********************** CÓDIGO DE PRUEBA DEL NUEVO LEXER *****************************
