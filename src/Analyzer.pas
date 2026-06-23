@@ -2,8 +2,8 @@ unit Analyzer;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, alexiaLex, CompBase,
-  ParserASM_6502, CompGlobals, AstElemP65, AstTree, ASTunit, MirList;
+  Classes, SysUtils, Types, alexiaLex, Parser,
+  ParserASM_6502, CompGlobals, AstElemP65, ASTunit, MirList;
 type
 
   { TAnalyzer }

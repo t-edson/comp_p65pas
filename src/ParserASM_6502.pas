@@ -8,7 +8,7 @@ unit ParserASM_6502;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fgl, alexiaLex, CompBase, P65C02utils, CompGlobals,
+  Classes, SysUtils, fgl, alexiaLex, Parser, P65C02utils, CompGlobals,
   AstElemP65, ASTunit;
 type
   { TParserAsm_6502 }

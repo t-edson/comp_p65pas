@@ -148,6 +148,20 @@ type  //Type categories and declaration styles
     function valuesAsString: string;
   end;
 
+type  //Parámetros de compilación
+TCompileLevel = (
+  clNull,        //Do nothing
+  clAnalys,      //Only Analysis
+  clAnalOptim,   //Analysis and Optimization
+  clComplete     //Analysis, Optimization and Synthesis
+);
+TBootloader = (
+  bldNone,  //No bootloader code
+  bldJMP,   //Insert a JMP to the start of the code
+  bldC64,   //Insert a bootlaoder for run from Commodore64 system
+  bldCustom //Insert a custom bootlaoder
+);
+
 var
   //Esta propiedad tal vez deba estar junto a las demás opciones del compilador.
   unitPaths   : TStringList; //Lista de rutas donde buscar unidades.
