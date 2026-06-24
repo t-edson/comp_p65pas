@@ -22,7 +22,7 @@ type
     //Nodos de sentencias
     ntAssignment,    //Asignación de valor a variable.
     ntIfStatement,   //Condicional IF-THEN-ELSE.
-    ntProcedureCall, //Llamada a un procedimiento
+    //ntProcedureCall, //Llamada a un procedimiento
     ntWhileLoop,     //Bucle WHILE-DO.
     ntRepeatUntil,   //Bucle REPEAT-UNTIL.
     ntForLoop,       //Bucle FOR-TO/DOWNTO-DO.
@@ -30,6 +30,7 @@ type
     ntCaseBranch,    //Rama individual de un CASE.
     //Nodos de declaraciones
     ntVarDecl,       //Declaración de variable: var x: byte;
+    ntConstDecl,     //Declaración de constantes: const PI=3;
     ntProcDecl,      //Declaración de procedimiento: procedure algo; begin ... end;
     ntFunction,      //Declaración de función.
     ntParamDecl,     //Parámetro de procedimiento/función: var x: byte
@@ -60,17 +61,16 @@ type //Declaraciones y clases base: TASTNode y TExpression
   TBinaryOp = class;
   TUnaryOp = class;
   TFunctionCall = class;
-  TProcedureCall = class;
   TCaseBranch = class;
   TProcDecl = class;
-  TFunctionDecl = class;
+  TFunctDecl = class;
   TDeclarations = class;
 
   // Listas genéricas especializadas
   TASTNodeList = specialize TFPGObjectList<TASTNode>;
   TVarDeclList = specialize TFPGObjectList<TVarDecl>;
   TProcDeclList = specialize TFPGObjectList<TProcDecl>;
-  TFunctionDeclList = specialize TFPGObjectList<TFunctionDecl>;
+  TFunctionDeclList = specialize TFPGObjectList<TFunctDecl>;
   TExpressionList = specialize TFPGObjectList<TExpression>;
   TCaseBranchList = specialize TFPGObjectList<TCaseBranch>;
 
@@ -238,23 +238,6 @@ type  //Nodos de sentencias
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
-  // Llamada a procedimiento (sentencia)
-  TProcedureCall = class(TASTNode)
-  private
-    FName: string;
-    FArguments: TExpressionList;
-  public
-    constructor Create(const AName: string; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
-    procedure AddArgument(Arg: TExpression);
-
-    property Name: string read FName;
-    property Arguments: TExpressionList read FArguments;
-
-    function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
-  end;
   // Sentencia WHILE
   TWhileLoop = class(TASTNode)
   private
@@ -366,6 +349,24 @@ type  //Nodos de declaraciones
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
+  // Declaraciones de constantes
+  TConstDecl = class(TASTNode)
+  private
+    FName: string;
+    FValue: TExpression;  // La expresión que define el valor
+    FConstType: string;   // Tipo opcional (si se especifica)
+  public
+    constructor Create(const AName: string; AValue: TExpression;
+                       const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+
+    property Name: string read FName;
+    property Value: TExpression read FValue;
+    property ConstType: string read FConstType write FConstType;
+
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
   // Declaración de procedimiento
   TProcDecl = class(TASTNode)
   private
@@ -388,9 +389,9 @@ type  //Nodos de declaraciones
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
-  { TFunctionDecl }
+  { TFunctDecl }
   // Declaración de función
-  TFunctionDecl = class(TASTNode)
+  TFunctDecl = class(TASTNode)
   private
     FName: string;
     //FReturnType: TDataType;
@@ -493,9 +494,10 @@ type  //Nodos estructurales
     destructor Destroy; override;
     procedure Clear;
     // Métodos de conveniencia para añadir declaraciones
-    procedure AddGlobalDecl(Decl: TVarDecl);
+    procedure AddVarDecl(Decl: TVarDecl);
+    procedure AddConstDecl(Decl: TConstDecl);
     procedure AddProcedure(Proc: TProcDecl);
-    procedure AddFunction(Func: TFunctionDecl);
+    procedure AddFunction(Func: TFunctDecl);
     procedure AddTypeDecl(Decl: TTypeDecl);
 
     property Name: string read FName write FName;
@@ -762,39 +764,6 @@ begin
     FElseBranch.PrintDebug(Indent + 4);
   end;
 end;
-// TProcedureCall
-constructor TProcedureCall.Create(const AName: string; const ASrcPos: TSrcPos);
-begin
-  inherited Create(ntProcedureCall, ASrcPos);
-  FName := AName;
-  FArguments := TExpressionList.Create(True);
-end;
-destructor TProcedureCall.Destroy;
-begin
-  FArguments.Free;
-  inherited;
-end;
-procedure TProcedureCall.AddArgument(Arg: TExpression);
-begin
-  FArguments.Add(Arg);
-end;
-function TProcedureCall.ToString: string;
-begin
-  Result := Format('ProcedureCall: %s (%d args)', [FName, FArguments.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TProcedureCall.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  if FArguments.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Arguments:');
-    for i := 0 to FArguments.Count - 1 do
-      FArguments[i].PrintDebug(Indent + 4);
-  end;
-end;
 // TWhileLoop
 constructor TWhileLoop.Create(ACondition: TExpression; ABody: TBlock;
                               const ASrcPos: TSrcPos);
@@ -1013,6 +982,40 @@ procedure TVarDecl.PrintDebug(Indent: Integer = 0);
 begin
   WriteLn(StringOfChar(' ', Indent), ToString);
 end;
+// TConstDecl
+constructor TConstDecl.Create(const AName: string; AValue: TExpression;
+                              const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntConstDecl, ASrcPos);
+  FName := AName;
+  FValue := AValue;
+  FConstType := '';
+end;
+destructor TConstDecl.Destroy;
+begin
+  FValue.Free;
+  inherited;
+end;
+function TConstDecl.ToString: string;
+begin
+  Result := Format('ConstDecl: %s = ', [FName]);
+  if FConstType <> '' then
+    Result := Result + Format(':%s ', [FConstType]);
+  if FValue <> nil then
+    Result := Result + FValue.ToString
+  else
+    Result := Result + '(nil)';
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TConstDecl.PrintDebug(Indent: Integer = 0);
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+  if FValue <> nil then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Value:');
+    FValue.PrintDebug(Indent + 4);
+  end;
+end;
 // TBlock
 constructor TBlock.Create(const ASrcPos: TSrcPos);
 begin
@@ -1098,8 +1101,8 @@ begin
     FBody.PrintDebug(Indent + 4);
   end;
 end;
-// TFunctionDecl
-constructor TFunctionDecl.Create(const AName: string;
+// TFunctDecl
+constructor TFunctDecl.Create(const AName: string;
   const AReturnTypeName: string; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntFunction, ASrcPos);
@@ -1109,29 +1112,29 @@ begin
   FLocalDeclarations := TVarDeclList.Create(True);
   FBody := nil;
 end;
-destructor TFunctionDecl.Destroy;
+destructor TFunctDecl.Destroy;
 begin
   FParameters.Free;
   FLocalDeclarations.Free;
   FreeAndNil(FBody);
   inherited;
 end;
-procedure TFunctionDecl.AddParameter(Param: TVarDecl);
+procedure TFunctDecl.AddParameter(Param: TVarDecl);
 begin
   Param.IsParameter := True;
   FParameters.Add(Param);
 end;
-procedure TFunctionDecl.AddLocalDecl(Decl: TVarDecl);
+procedure TFunctDecl.AddLocalDecl(Decl: TVarDecl);
 begin
   FLocalDeclarations.Add(Decl);
 end;
-function TFunctionDecl.ToString: string;
+function TFunctDecl.ToString: string;
 begin
   Result := Format('Function: %s: %s (%d params, %d locals)',
                    [FName, FReturnTypeName, FParameters.Count, FLocalDeclarations.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TFunctionDecl.PrintDebug(Indent: Integer = 0);
+procedure TFunctDecl.PrintDebug(Indent: Integer = 0);
 var
   i: Integer;
 begin
@@ -1331,7 +1334,11 @@ begin
   //    por lo que los elementos se liberan automáticamente
   FMainBody.Statements.Clear;
 end;
-procedure TProgram.AddGlobalDecl(Decl: TVarDecl);
+procedure TProgram.AddVarDecl(Decl: TVarDecl);
+begin
+  FDeclarations.AddDeclaration(Decl);
+end;
+procedure TProgram.AddConstDecl(Decl: TConstDecl);
 begin
   FDeclarations.AddDeclaration(Decl);
 end;
@@ -1339,7 +1346,7 @@ procedure TProgram.AddProcedure(Proc: TProcDecl);
 begin
   FDeclarations.AddDeclaration(Proc);
 end;
-procedure TProgram.AddFunction(Func: TFunctionDecl);
+procedure TProgram.AddFunction(Func: TFunctDecl);
 begin
   FDeclarations.AddDeclaration(Func);
 end;

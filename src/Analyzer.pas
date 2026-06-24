@@ -532,7 +532,7 @@ var
   SrcPos: TSrcPos;
   VarDeclX, VarDeclY: TVarDecl;
   Proc: TProcDecl;
-  Func: TFunctionDecl;
+  Func: TFunctDecl;
   Assign1, Assign2: TAssignment;
   VarRef1, VarRef2: TVariableRef;
   Literal1, Literal2: TNumberLiteral;
@@ -551,12 +551,12 @@ var
     SrcPos.row := 3;
     SrcPos.col := 1;
     VarDeclX := TVarDecl.Create('x', 'byte', SrcPos);
-    ast.AddGlobalDecl(VarDeclX);
+    ast.AddVarDecl(VarDeclX);
 
     SrcPos.row := 3;
     SrcPos.col := 7;
     VarDeclY := TVarDecl.Create('y', 'byte', SrcPos);
-    ast.AddGlobalDecl(VarDeclY);
+    ast.AddVarDecl(VarDeclY);
 
     // ============================================================
     // 2. Declarar procedimiento: procedure Sumar(a: byte);
@@ -585,7 +585,7 @@ var
     // ============================================================
     SrcPos.row := 8;
     SrcPos.col := 1;
-    Func := TFunctionDecl.Create('Calcular', 'integer', SrcPos);
+    Func := TFunctDecl.Create('Calcular', 'integer', SrcPos);
 
     // Cuerpo de la función (vacío)
     SrcPos.row := 9;
