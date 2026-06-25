@@ -1,25 +1,22 @@
 program muestra; 
-const
-  consName = 0+1*2; 
-const
-  MAX = 100;                    // Constante numérica
-  MIN = 1;                      // Constante numérica
-  PI = 3.14;                    // Constante real (si soportas reales)
-  NOMBRE = 'Juan';              // Constante string
-  ACTIVO = true;                // Constante booleana
-  LIMITE = MAX - MIN;           // Constante calculada (expresión constante)
-  TAMANO = 2 * MAX + 50;        // Constante calculada
-  FECHA = '2024-01-01';
+type 
+  TPersona = record
+    Nombre, aa: string;
+    Edad: TEdad;
+    ColorFav: TColor;
+    Activo: boolean;
+  end;
 var 
   a: bit;
 begin
-//  x := aaa(123);
+  x := -1 + 2;
 //  aaa(12) := 1;
 //  x := (2 + 1) and 123;
 //  a := b[1][1];
-  x[i][2] := 1;
-  x := fun(1);
-  a[i] := b[j];
+//  x[i][2] := 1;
+//  x := fun(1);
+//  a[i] := b[j];
+//  a := 'abc';
 end. 
 
 

@@ -19,6 +19,7 @@ type
     ntUnaryOp,       //Operación unaria (un operando). Ej. -x, not a
     ntFunctionCall,  //Llamada a función: max(a, b)
     ntArrayIndex,    //Acceso a arreglo (variable[index])
+    ntFieldAccess,  // Acceso a campo (persona.nombre)
     //Nodos de sentencias
     ntAssignment,    //Asignación de valor a variable.
     ntIfStatement,   //Condicional IF-THEN-ELSE.
@@ -37,6 +38,8 @@ type
     ntTypeDecl,      //Declaración de tipo: type mi_tipo = byte;
     ntArrayType,     //Declaración de tipo arreglo
     ntArrayRange,    //Rango de arreglo (1..10)
+    ntRecordType,   // Declaración de tipo RECORD
+    ntFieldDecl,    // Declaración de campo dentro de un RECORD
     //Nodos estructurales
     ntProgram,       //Nodo raíz del programa completo: program MiPrograma;
     ntDeclarations,  //Sección de declaraciones de variables, tipos, o procedimientos.
@@ -114,14 +117,30 @@ type  //Nodos de expresiones
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Literal numérico
+  TNumberKind = (
+    nkInteger,   // Número entero
+    nkFloat      // Número de coma flotante
+  );
   TNumberLiteral = class(TExpression)
   private
-    FValue: Integer;
-    //FDataType: TDataType;
+    FKind: TNumberKind;
+    FIntValue: Int64;           // Valor entero
+    FFloatValue: Double;        // Valor flotante
   public
-    constructor Create(AValue: Integer; const ASrcPos: TSrcPos);
+    // Constructores
+    constructor Create(AValue: Int64; const ASrcPos: TSrcPos); overload;
+    constructor Create(AValue: Double; const ASrcPos: TSrcPos); overload;
 
-    property Value: Integer read FValue;
+    // Propiedades
+    property Kind: TNumberKind read FKind;
+    property IntValue: Int64 read FIntValue;
+    property FloatValue: Double read FFloatValue;
+
+    // Métodos de conveniencia
+    function IsInteger: Boolean;
+    function IsFloat: Boolean;
+    function AsString: string;
+    function AsVariant: Variant;
 
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
@@ -184,7 +203,7 @@ type  //Nodos de expresiones
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
-  // Llamada a función (expresión)
+  // Llamada a función
   TFunctionCall = class(TExpression)
   private
     FName: string;
@@ -201,7 +220,22 @@ type  //Nodos de expresiones
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
+  // Acceso a campo: persona.edad
+  TFieldAccess = class(TExpression)
+  private
+    FRecordVar: TExpression;   // La variable registro (puede ser simple o acceso a campo)
+    FFieldName: string;        // Nombre del campo
+  public
+    constructor Create(ARecordVar: TExpression; const AFieldName: string;
+                       const ASrcPos: TSrcPos);
+    destructor Destroy; override;
 
+    property RecordVar: TExpression read FRecordVar;
+    property FieldName: string read FFieldName;
+
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
 type  //Nodos de sentencias
   { TAssignment }
   // Asignación
@@ -481,6 +515,38 @@ type  //Nodos de declaraciones
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
+
+  // Declaración de campo dentro de un RECORD
+  TFieldDecl = class(TASTNode)
+  private
+    FName: string;
+    FTypeName: string;
+  public
+    constructor Create(const AName, ATypeName: string; const ASrcPos: TSrcPos);
+
+    property Name: string read FName;
+    property TypeName: string read FTypeName;
+
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+  TFieldDeclList = specialize TFPGObjectList<TFieldDecl>;
+
+  // Declaración de tipo RECORD
+  TRecordType = class(TASTNode)
+  private
+    FFields: TFieldDeclList;  // Lista de TFieldDecl
+  public
+    constructor Create(const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+
+    procedure AddField(Field: TFieldDecl);
+    property Fields: TFieldDeclList read FFields;
+
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+
 type  //Nodos estructurales
   { TProgram }
   // Programa completo
@@ -570,14 +636,61 @@ begin
   WriteLn(StringOfChar(' ', Indent), ToString);
 end;
 // TNumberLiteral
-constructor TNumberLiteral.Create(AValue: Integer; const ASrcPos: TSrcPos);
+constructor TNumberLiteral.Create(AValue: Int64; const ASrcPos: TSrcPos);
+// Constructor para enteros
 begin
   inherited Create(ntNumberLiteral, ASrcPos);
-  FValue := AValue;
+  FKind := nkInteger;
+  FIntValue := AValue;
+end;
+constructor TNumberLiteral.Create(AValue: Double; const ASrcPos: TSrcPos);
+// Constructor para flotantes
+begin
+  inherited Create(ntNumberLiteral, ASrcPos);
+  FKind := nkFloat;
+  FFloatValue := AValue;
+end;
+function TNumberLiteral.IsInteger: Boolean;
+begin
+  Result := FKind = nkInteger;
+end;
+function TNumberLiteral.IsFloat: Boolean;
+begin
+  Result := FKind = nkFloat;
+end;
+function TNumberLiteral.AsString: string;
+begin
+  case FKind of
+    nkInteger:
+      Result := IntToStr(FIntValue);
+    nkFloat:
+      Result := FloatToStr(FFloatValue);
+    else
+      Result := '';
+  end;
+end;
+function TNumberLiteral.AsVariant: Variant;
+begin
+  case FKind of
+    nkInteger:
+      Result := FIntValue;
+    nkFloat:
+      Result := FFloatValue;
+    else
+      Result := Null;
+  end;
 end;
 function TNumberLiteral.ToString: string;
 begin
-  Result := Format('NumberLiteral: %d', [FValue]);
+  case FKind of
+    nkInteger:
+      Result := Format('NumberLiteral: %d', [FIntValue]);
+    nkFloat:
+      Result := Format('NumberLiteral: %g', [FFloatValue]);
+    else
+      Result := 'NumberLiteral: (unknown)';
+  end;
+
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 procedure TNumberLiteral.PrintDebug(Indent: Integer = 0);
@@ -698,6 +811,30 @@ begin
     for i := 0 to FArguments.Count - 1 do
       FArguments[i].PrintDebug(Indent + 4);
   end;
+end;
+// TFieldAccess
+constructor TFieldAccess.Create(ARecordVar: TExpression; const AFieldName: string;
+                                const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntFieldAccess, ASrcPos);
+  FRecordVar := ARecordVar;
+  FFieldName := AFieldName;
+end;
+destructor TFieldAccess.Destroy;
+begin
+  FRecordVar.Free;
+  inherited;
+end;
+function TFieldAccess.ToString: string;
+begin
+  Result := Format('FieldAccess: %s.%s', [FRecordVar.ToString, FFieldName]);
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TFieldAccess.PrintDebug(Indent: Integer = 0);
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+  WriteLn(StringOfChar(' ', Indent + 2), 'Record variable:');
+  FRecordVar.PrintDebug(Indent + 4);
 end;
 {$endregion}
 {$region "Nodos de sentencias"}
@@ -1264,9 +1401,7 @@ begin
   end;
   WriteLn(StringOfChar(' ', Indent + 2), 'Element type: ', FElementType);
 end;
-
 { TArrayIndex }
-
 constructor TArrayIndex.Create(AArrayVar: TVariableRef; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntArrayIndex, ASrcPos);
@@ -1303,6 +1438,55 @@ begin
       FIndices[i].PrintDebug(Indent + 4);
   end;
 end;
+// TFieldDecl -
+constructor TFieldDecl.Create(const AName, ATypeName: string; const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntFieldDecl, ASrcPos);
+  FName := AName;
+  FTypeName := ATypeName;
+end;
+function TFieldDecl.ToString: string;
+begin
+  Result := Format('FieldDecl: %s: %s', [FName, FTypeName]);
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TFieldDecl.PrintDebug(Indent: Integer = 0);
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+end;
+// TRecordType
+constructor TRecordType.Create(const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntRecordType, ASrcPos);
+  FFields := TFieldDeclList.Create(True);  // True = owns objects
+end;
+destructor TRecordType.Destroy;
+begin
+  FFields.Free;
+  inherited;
+end;
+procedure TRecordType.AddField(Field: TFieldDecl);
+begin
+  FFields.Add(Field);
+end;
+function TRecordType.ToString: string;
+begin
+  Result := Format('RecordType (%d fields)', [FFields.Count]);
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TRecordType.PrintDebug(Indent: Integer = 0);
+var
+  i: Integer;
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+  if FFields.Count > 0 then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Fields:');
+    for i := 0 to FFields.Count - 1 do
+      TFieldDecl(FFields[i]).PrintDebug(Indent + 4);
+  end;
+end;
+
 // TProgram
 constructor TProgram.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
