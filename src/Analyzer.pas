@@ -551,12 +551,12 @@ var
     SrcPos.row := 3;
     SrcPos.col := 1;
     VarDeclX := TVarDecl.Create('x', 'byte', SrcPos);
-    ast.AddVarDecl(VarDeclX);
+    ast.AddDeclaration(VarDeclX);
 
     SrcPos.row := 3;
     SrcPos.col := 7;
     VarDeclY := TVarDecl.Create('y', 'byte', SrcPos);
-    ast.AddVarDecl(VarDeclY);
+    ast.AddDeclaration(VarDeclY);
 
     // ============================================================
     // 2. Declarar procedimiento: procedure Sumar(a: byte);
@@ -578,7 +578,7 @@ var
     ProcBody := TBlock.Create(SrcPos);
     Proc.Body := ProcBody;
 
-    ast.AddProcedure(Proc);
+    ast.AddDeclaration(Proc);
 
     // ============================================================
     // 3. Declarar función: function Calcular: integer;
@@ -593,7 +593,7 @@ var
     FuncBody := TBlock.Create(SrcPos);
     Func.Body := FuncBody;
 
-    ast.AddFunction(Func);
+    ast.AddDeclaration(Func);
 
     // ============================================================
     // 4. Cuerpo principal: x := 1; y := 2;

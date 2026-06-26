@@ -45,7 +45,7 @@ type
     ntDeclarations,  //Sección de declaraciones de variables, tipos, o procedimientos.
     ntBlock          //Bloque de instrucciones (begin...end)
   );
-type //Declaraciones y clases base TASTNode y TExpression
+type //Declaraciones y clases base para el AST
   // Dirección del bucle FOR
   TForDirection = (
     fdUpTo,    // to (ascendente)
@@ -102,6 +102,16 @@ type //Declaraciones y clases base TASTNode y TExpression
     constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
   end;
 
+  // Clase base para contenedores de código (procedimientos, funciones y programa principal)
+  TDeclContainer = class(TASTNode)
+  private
+    FDeclarations: TDeclarations;
+  public
+    constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    procedure AddDeclaration(Decl: TASTNode);
+    property Declarations: TDeclarations read FDeclarations;
+  end;
 type  //Nodos de expresiones
   // Referencia a variable
   TVariableRef = class(TExpression)
@@ -420,53 +430,43 @@ type  //Nodos de declaraciones
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Declaración de procedimiento
-  TProcDecl = class(TASTNode)
+  TProcDecl = class(TDeclContainer)
   private
     FName: string;
     FParameters: TVarDeclList;
-    FLocalDeclarations: TVarDeclList;
     FBody: TBlock;
   public
-    constructor Create(const AName: string; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
-    procedure AddParameter(Param: TVarDecl);
-    procedure AddLocalDecl(Decl: TVarDecl);
-
     property Name: string read FName;
+    procedure AddParameter(Param: TVarDecl);
     property Parameters: TVarDeclList read FParameters;
-    property LocalDeclarations: TVarDeclList read FLocalDeclarations;
     property Body: TBlock read FBody write FBody;
-
+  public  //Inicialización y depuración
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
+    constructor Create(const AName: string; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
   end;
   { TFunctDecl }
   // Declaración de función
-  TFunctDecl = class(TASTNode)
+  TFunctDecl = class(TDeclContainer)
   private
     FName: string;
     //FReturnType: TDataType;
     FReturnTypeName: string;
     FParameters: TVarDeclList;
-    FLocalDeclarations: TVarDeclList;
     FBody: TBlock;
   public
+    property Name: string read FName;
+    procedure AddParameter(Param: TVarDecl);
+    property ReturnTypeName: string read FReturnTypeName;
+    property Parameters: TVarDeclList read FParameters;
+    property Body: TBlock read FBody write FBody;
+  public  //Inicialización y depuración
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
     constructor Create(const AName: string;
                        const AReturnTypeName: string; const ASrcPos: TSrcPos);
     destructor Destroy; override;
-
-    procedure AddParameter(Param: TVarDecl);
-    procedure AddLocalDecl(Decl: TVarDecl);
-
-    property Name: string read FName;
-    property ReturnTypeName: string read FReturnTypeName;
-    property Parameters: TVarDeclList read FParameters;
-    property LocalDeclarations: TVarDeclList read FLocalDeclarations;
-    property Body: TBlock read FBody write FBody;
-
-    function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
 type  //Definiciones previas para declaraciones de tipos
   //Categoría de tipos
@@ -700,7 +700,7 @@ type  //Nodos de declaraciones de tipos
   end;
 }
 type  //Nodos estructurales
-  // Contenedor de declaraciones (UNIFICADO - mantiene orden)
+  // Contenedor de declaraciones
   TDeclarations = class(TASTNode)
   private
     FItems: TASTNodeList;  // Mezcla de VarDecl, ProcDecl, FunctionDecl
@@ -730,30 +730,21 @@ type  //Nodos estructurales
   end;
   { TProgram }
   // Programa completo
-  TProgram = class(TASTNode)
+  TProgram = class(TDeclContainer)
   private
     FName: string;
-    FDeclarations: TDeclarations;  // UNIFICADO: todas las declaraciones
     FMainBody: TBlock;
   public
-    constructor Create(const AName: string; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
     procedure Clear;
-    // Métodos de conveniencia para añadir declaraciones
-    procedure AddVarDecl(Decl: TVarDecl);
-    procedure AddConstDecl(Decl: TConstDecl);
-    procedure AddProcedure(Proc: TProcDecl);
-    procedure AddFunction(Func: TFunctDecl);
-    procedure AddTypeDecl(Decl: TTypeDecl);
 
     property Name: string read FName write FName;
     property srcDec: TSrcPos write FSrcPos;
-    property Declarations: TDeclarations read FDeclarations;
     property MainBody: TBlock read FMainBody write FMainBody;
-
+  public  //Inicialización y depuración
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
-
+    constructor Create(const AName: string; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
   end;
 
 // Funciones auxiliares
@@ -768,7 +759,7 @@ begin
     else       Result := 'unknown';
   end;
 end;
-{$region "Clases base TASTNode y TExpression"}
+{$region "Clases base para el AST"}
 // TASTNode
 constructor TASTNode.Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
 begin
@@ -787,6 +778,21 @@ end;
 constructor TExpression.Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
 begin
   inherited Create(ANodeType, ASrcPos);
+end;
+// TDeclContainer
+constructor TDeclContainer.Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
+begin
+  inherited Create(ANodeType, ASrcPos);
+  FDeclarations := TDeclarations.Create(ASrcPos);
+end;
+destructor TDeclContainer.Destroy;
+begin
+  FDeclarations.Free;
+  inherited;
+end;
+procedure TDeclContainer.AddDeclaration(Decl: TASTNode);
+begin
+  FDeclarations.AddDeclaration(Decl);
 end;
 {$endregion}
 {$region "Nodos de expresiones"}
@@ -1346,34 +1352,15 @@ begin
   end;
 end;
 // TProcDecl
-constructor TProcDecl.Create(const AName: string; const ASrcPos: TSrcPos);
-begin
-  inherited Create(ntProcDecl, ASrcPos);
-  FName := AName;
-  FParameters := TVarDeclList.Create(True);
-  FLocalDeclarations := TVarDeclList.Create(True);
-  FBody := nil;
-end;
-destructor TProcDecl.Destroy;
-begin
-  FParameters.Free;
-  FLocalDeclarations.Free;
-  FreeAndNil(FBody);
-  inherited;
-end;
 procedure TProcDecl.AddParameter(Param: TVarDecl);
 begin
   Param.IsParameter := True;
   FParameters.Add(Param);
 end;
-procedure TProcDecl.AddLocalDecl(Decl: TVarDecl);
-begin
-  FLocalDeclarations.Add(Decl);
-end;
 function TProcDecl.ToString: string;
 begin
   Result := Format('Procedure: %s (%d params, %d locals)',
-                   [FName, FParameters.Count, FLocalDeclarations.Count]);
+                   [FName, FParameters.Count, FDeclarations.Items.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 procedure TProcDecl.PrintDebug(Indent: Integer = 0);
@@ -1381,58 +1368,44 @@ var
   i: Integer;
 begin
   WriteLn(StringOfChar(' ', Indent), ToString);
-
-  if FParameters.Count > 0 then
-  begin
+  if FParameters.Count > 0 then begin
     WriteLn(StringOfChar(' ', Indent + 2), 'Parameters:');
     for i := 0 to FParameters.Count - 1 do
       FParameters[i].PrintDebug(Indent + 4);
   end;
-
-  if FLocalDeclarations.Count > 0 then
-  begin
+  if FDeclarations.Items.Count > 0 then begin
     WriteLn(StringOfChar(' ', Indent + 2), 'Local declarations:');
-    for i := 0 to FLocalDeclarations.Count - 1 do
-      FLocalDeclarations[i].PrintDebug(Indent + 4);
+    for i := 0 to FDeclarations.Items.Count - 1 do
+      FDeclarations.Items[i].PrintDebug(Indent + 4);
   end;
-
-  if FBody <> nil then
-  begin
+  if FBody <> nil then begin
     WriteLn(StringOfChar(' ', Indent + 2), 'Body:');
     FBody.PrintDebug(Indent + 4);
   end;
 end;
-// TFunctDecl
-constructor TFunctDecl.Create(const AName: string;
-  const AReturnTypeName: string; const ASrcPos: TSrcPos);
+constructor TProcDecl.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntFunction, ASrcPos);
+  inherited Create(ntProcDecl, ASrcPos);
   FName := AName;
-  FReturnTypeName := AReturnTypeName;
   FParameters := TVarDeclList.Create(True);
-  FLocalDeclarations := TVarDeclList.Create(True);
-  FBody := nil;
+  FBody := TBlock.Create(ASrcPos);
 end;
-destructor TFunctDecl.Destroy;
+destructor TProcDecl.Destroy;
 begin
+  FBody.Free;
   FParameters.Free;
-  FLocalDeclarations.Free;
-  FreeAndNil(FBody);
   inherited;
 end;
+// TFunctDecl
 procedure TFunctDecl.AddParameter(Param: TVarDecl);
 begin
   Param.IsParameter := True;
   FParameters.Add(Param);
 end;
-procedure TFunctDecl.AddLocalDecl(Decl: TVarDecl);
-begin
-  FLocalDeclarations.Add(Decl);
-end;
 function TFunctDecl.ToString: string;
 begin
   Result := Format('Function: %s: %s (%d params, %d locals)',
-                   [FName, FReturnTypeName, FParameters.Count, FLocalDeclarations.Count]);
+           [FName, FReturnTypeName, FParameters.Count, FDeclarations.Items.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 procedure TFunctDecl.PrintDebug(Indent: Integer = 0);
@@ -1440,26 +1413,35 @@ var
   i: Integer;
 begin
   WriteLn(StringOfChar(' ', Indent), ToString);
-
-  if FParameters.Count > 0 then
-  begin
+  if FParameters.Count > 0 then begin
     WriteLn(StringOfChar(' ', Indent + 2), 'Parameters:');
     for i := 0 to FParameters.Count - 1 do
       FParameters[i].PrintDebug(Indent + 4);
   end;
-
-  if FLocalDeclarations.Count > 0 then
-  begin
+  if FDeclarations.Items.Count > 0 then begin
     WriteLn(StringOfChar(' ', Indent + 2), 'Local declarations:');
-    for i := 0 to FLocalDeclarations.Count - 1 do
-      FLocalDeclarations[i].PrintDebug(Indent + 4);
+    for i := 0 to FDeclarations.Items.Count - 1 do
+      FDeclarations.Items[i].PrintDebug(Indent + 4);
   end;
-
-  if FBody <> nil then
-  begin
+  if FBody <> nil then begin
     WriteLn(StringOfChar(' ', Indent + 2), 'Body:');
     FBody.PrintDebug(Indent + 4);
   end;
+end;
+constructor TFunctDecl.Create(const AName: string;
+  const AReturnTypeName: string; const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntFunction, ASrcPos);
+  FName := AName;
+  FReturnTypeName := AReturnTypeName;
+  FParameters := TVarDeclList.Create(True);
+  FBody := TBlock.Create(ASrcPos);
+end;
+destructor TFunctDecl.Destroy;
+begin
+  FBody.Free;
+  FParameters.Free;
+  inherited;
 end;
 {$endregion}
 {$region "Definiciones previas para declaraciones de tipos"}
@@ -1538,6 +1520,7 @@ begin
   WriteLn(StringOfChar(' ', Indent), ToString);
 end;
 {$endregion}
+{$region "Nodos de declaraciones de tipos"}
 // TSimpleTypeDef
 constructor TSimpleTypeDef.Create(const ATypeName: string);
 begin
@@ -1731,100 +1714,7 @@ begin
   WriteLn(StringOfChar(' ', Indent), ToString);
   FTypeDef.PrintDebug(Indent + 2);
 end;
-
-{
-{ TArrayType }
-constructor TArrayType.Create(const ASrcPos: TSrcPos);
-begin
-  inherited Create(ntArrayType, ASrcPos);
-  FIndexRanges := TArrayRangeList.Create(True);  // True = owns objects
-  FElementType := '';
-end;
-destructor TArrayType.Destroy;
-begin
-  FIndexRanges.Free;
-  inherited Destroy;
-end;
-procedure TArrayType.AddRange(Range: TArrayRange);
-begin
-  FIndexRanges.Add(Range);
-end;
-function TArrayType.ToString: string;
-begin
-  Result := Format('ArrayType: [%d dims] of %s',
-                   [FIndexRanges.Count, FElementType]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TArrayType.PrintDebug(Indent: Integer);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  if FIndexRanges.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Index ranges:');
-    for i := 0 to FIndexRanges.Count - 1 do
-      FIndexRanges[i].PrintDebug(Indent + 4);
-  end;
-  WriteLn(StringOfChar(' ', Indent + 2), 'Element type: ', FElementType);
-end;
-// TFieldDecl
-constructor TFieldDecl.Create(const AName, ATypeName: string; const ASrcPos: TSrcPos);
-begin
-  inherited Create(ntFieldDecl, ASrcPos);
-  FName := AName;
-  FTypeName := ATypeName;
-end;
-function TFieldDecl.ToString: string;
-begin
-  Result := Format('FieldDecl: %s: %s', [FName, FTypeName]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TFieldDecl.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-end;
-// TRecordType
-constructor TRecordType.Create(const ASrcPos: TSrcPos);
-begin
-  inherited Create(ntRecordType, ASrcPos);
-  FFields := TFieldDeclList.Create(True);  // True = owns objects
-end;
-destructor TRecordType.Destroy;
-begin
-  FFields.Free;
-  inherited;
-end;
-procedure TRecordType.AddField(Field: TFieldDecl);
-begin
-  FFields.Add(Field);
-end;
-function TRecordType.ToString: string;
-begin
-  Result := Format('RecordType (%d fields)', [FFields.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TRecordType.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  if FFields.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Fields:');
-    for i := 0 to FFields.Count - 1 do
-      TFieldDecl(FFields[i]).PrintDebug(Indent + 4);
-  end;
-end;
-{ TTypeDecl }
-constructor TTypeDecl.Create(const AName, ATypeDefinition: string;
-  const ASrcPos: TSrcPos);
-begin
-  inherited Create(ntTypeDecl, ASrcPos);
-  FName := AName;
-  FTypeDefinition := ATypeDefinition
-end;
-}
+{$endregion}
 {$region "Nodos estructurales"}
 // TDeclarations
 constructor TDeclarations.Create(const ASrcPos: TSrcPos);
@@ -1883,55 +1773,13 @@ begin
     FStatements[i].PrintDebug(Indent + 2);
 end;
 // TProgram
-constructor TProgram.Create(const AName: string; const ASrcPos: TSrcPos);
-begin
-  inherited Create(ntProgram, ASrcPos);
-  FName := AName;
-  {Crea los elementos fijos del programa. Notar que FMainBody (que representa al cuerpo
-  del programa principal) se crea en la misma posición que el programa, lo cual no es
-  tan consistente porque FMainBody debería apuntar al BEGIN del programa principal,
-  pero se puede actualizar después.
-  Se crea aquí, al crear al programa, para controlar su construcción y destrucción.}
-  FDeclarations := TDeclarations.Create(ASrcPos);
-  FMainBody := TBlock.Create(ASrcPos);
-end;
-destructor TProgram.Destroy;
-begin
-  FDeclarations.Free;
-  FreeAndNil(FMainBody);
-  inherited;
-end;
 procedure TProgram.Clear;
+{Limpia al árbol de sintaxis y lo deja listo para inicia el llenado}
 begin
-  // 1. Limpiar declaraciones (eliminar todos los elementos)
-  //    TDeclarations.Items es TASTNodeList con OwnsObjects=True,
-  //    por lo que los elementos se liberan automáticamente
+  //Limpiar declaraciones (eliminar todos los elementos)
   FDeclarations.Items.Clear;
-
-  // 2. Limpiar cuerpo principal (eliminar todas las instrucciones)
-  //    TBlock.Statements es TASTNodeList con OwnsObjects=True,
-  //    por lo que los elementos se liberan automáticamente
+  //Limpiar cuerpo principal (eliminar todas las instrucciones)
   FMainBody.Statements.Clear;
-end;
-procedure TProgram.AddVarDecl(Decl: TVarDecl);
-begin
-  FDeclarations.AddDeclaration(Decl);
-end;
-procedure TProgram.AddConstDecl(Decl: TConstDecl);
-begin
-  FDeclarations.AddDeclaration(Decl);
-end;
-procedure TProgram.AddProcedure(Proc: TProcDecl);
-begin
-  FDeclarations.AddDeclaration(Proc);
-end;
-procedure TProgram.AddFunction(Func: TFunctDecl);
-begin
-  FDeclarations.AddDeclaration(Func);
-end;
-procedure TProgram.AddTypeDecl(Decl: TTypeDecl);
-begin
-  FDeclarations.AddDeclaration(Decl);
 end;
 function TProgram.ToString: string;
 begin
@@ -1943,18 +1791,30 @@ end;
 procedure TProgram.PrintDebug(Indent: Integer = 0);
 begin
   WriteLn(StringOfChar(' ', Indent), ToString);
-
-  if FDeclarations <> nil then
-  begin
+  if FDeclarations <> nil then begin
     WriteLn(StringOfChar(' ', Indent + 2), 'Declarations:');
     FDeclarations.PrintDebug(Indent + 4);
   end;
-
-  if FMainBody <> nil then
-  begin
+  if FMainBody <> nil then begin
     WriteLn(StringOfChar(' ', Indent + 2), 'Main body:');
     FMainBody.PrintDebug(Indent + 4);
   end;
+end;
+constructor TProgram.Create(const AName: string; const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntProgram, ASrcPos);
+  FName := AName;
+  {Crea los elementos fijos del programa. Notar que FMainBody (que representa al cuerpo
+  del programa principal) se crea en la misma posición que el programa, lo cual no es
+  tan consistente porque FMainBody debería apuntar al BEGIN del programa principal,
+  pero se puede actualizar después.
+  Se crea aquí, al crear al programa, para controlar su construcción y destrucción.}
+  FMainBody := TBlock.Create(ASrcPos);
+end;
+destructor TProgram.Destroy;
+begin
+  FreeAndNil(FMainBody);
+  inherited;
 end;
 {$endregion}
 end.
