@@ -551,12 +551,12 @@ var
     SrcPos.row := 3;
     SrcPos.col := 1;
     VarDeclX := TVarDecl.Create('x', 'byte', SrcPos);
-    ast.AddDeclaration(VarDeclX);
+    ast.Declarations.Add(VarDeclX);
 
     SrcPos.row := 3;
     SrcPos.col := 7;
     VarDeclY := TVarDecl.Create('y', 'byte', SrcPos);
-    ast.AddDeclaration(VarDeclY);
+    ast.Declarations.Add(VarDeclY);
 
     // ============================================================
     // 2. Declarar procedimiento: procedure Sumar(a: byte);
@@ -578,14 +578,15 @@ var
     ProcBody := TBlock.Create(SrcPos);
     Proc.Body := ProcBody;
 
-    ast.AddDeclaration(Proc);
+    ast.Declarations.Add(Proc);
 
     // ============================================================
     // 3. Declarar función: function Calcular: integer;
     // ============================================================
     SrcPos.row := 8;
     SrcPos.col := 1;
-    Func := TFunctDecl.Create('Calcular', 'integer', SrcPos);
+    Func := TFunctDecl.Create('Calcular', SrcPos);
+    Func.ReturnTypeName := 'integer';
 
     // Cuerpo de la función (vacío)
     SrcPos.row := 9;
@@ -593,12 +594,12 @@ var
     FuncBody := TBlock.Create(SrcPos);
     Func.Body := FuncBody;
 
-    ast.AddDeclaration(Func);
+    ast.Declarations.Add(Func);
 
     // ============================================================
     // 4. Cuerpo principal: x := 1; y := 2;
     // ============================================================
-    // NOTA: ast.MainBody ya existe, solo añadimos instrucciones
+    // NOTA: ast.Body ya existe, solo añadimos instrucciones
 
     // x := 1;
     SrcPos.row := 12;
@@ -606,7 +607,7 @@ var
     VarRef1 := TVariableRef.Create('x', SrcPos);
     Literal1 := TNumberLiteral.Create(1, SrcPos);
     Assign1 := TAssignment.Create(VarRef1, Literal1, SrcPos);
-    ast.MainBody.AddStatement(Assign1);
+    ast.Body.AddStatement(Assign1);
 
     // y := 2;
     SrcPos.row := 13;
@@ -614,7 +615,7 @@ var
     VarRef2 := TVariableRef.Create('y', SrcPos);
     Literal2 := TNumberLiteral.Create(2, SrcPos);
     Assign2 := TAssignment.Create(VarRef2, Literal2, SrcPos);
-    ast.MainBody.AddStatement(Assign2);
+    ast.Body.AddStatement(Assign2);
 
     // ============================================================
     // 5. Imprimir el AST

@@ -1,15 +1,8 @@
 program muestra; 
-type 
-  TPersona = record
-    Nombre, aa: string;
-    Edad: TEdad;
-    ColorFav: TColor;
-    Activo: boolean;
-  end;
-var 
-  a: bit;
 begin
-  x := -1 + 2;
+  y := aaa.bbb[1];
+//  empleado.Evaluaciones[1] := 5;
+//  x := -1 + 2;
 //  aaa(12) := 1;
 //  x := (2 + 1) and 123;
 //  a := b[1][1];
