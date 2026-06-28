@@ -1,6 +1,6 @@
 program muestra; 
 begin
-  y := aaa.bbb[1];
+  y := aaa.bbb;
 //  empleado.Evaluaciones[1] := 5;
 //  x := -1 + 2;
 //  aaa(12) := 1;

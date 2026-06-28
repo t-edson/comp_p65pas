@@ -1,0 +1,1459 @@
+{Parser
+
+Clase base para la creación de un compilador como el P65Pas.
+La idea es tener aquí todas las rutinas que en lo posible sean independientes del
+lenguaje y del modelo de CPU.
+}
+//{$Define LogExpres}
+unit Parser;
+interface
+uses
+  Classes, SysUtils, Types, LazLogger, alexiaLex,
+  CompGlobals, ASTunit;
+type
+{ TParser }
+{Clase base para crear a los objetos compiladores.
+Esta clase implementa al analizador sintáctico (Parser).}
+TParser = class
+public    //Componentes principales del compilador
+  lex  : TAleLexer;        //Analizador léxico
+  msg  : TMessageManager;  //Referencia al gestor de mensajes
+  ast  : TProgram;         //Árbol de sintaxis abstracto
+public    //Messages
+  procedure ClearError;
+  function HayError: boolean; inline;          //Flag for errors
+  //Rutinas de generación de mensajes
+  procedure GenInfo(txt: string; const srcPos: TSrcPos);
+  procedure GenInfo(txt: string);
+  //Rutinas de generación de advertencias
+  procedure GenWarn(txt: string; const srcPos: TSrcPos);
+  procedure GenWarn(txt: string);
+  //Rutinas de generación de error. Envolturas para llamar al gestor de mensajes.
+  procedure GenError(txt: string; const srcPos: TSrcPos);
+  procedure GenError(txt: String; const Args: array of const; const srcPos: TSrcPos);
+  procedure GenError(txt: string);
+  procedure GenError(txt: String; const Args: array of const);
+private   //Objetos auxiliares
+  NamesList: TStringList;
+protected //Calls to Directive Module (ParserDirec.pas)
+  callProcDIRline  : procedure(const AsmLin: string; out ctxChanged: boolean) of object;
+protected // Métodos auxiliares para el parser
+  function tokIdent: TTokenIdent; inline;
+  function CaptureSemicolon: boolean;
+  procedure SkipWhites;
+  procedure SkipWhitesNoDirect;
+  procedure Next;
+  function ConsumeTok(tokId: TTokenIdent; const msgErr: string): boolean;
+private  // Expresiones
+  function ParseNumberLiteral: TNumberLiteral;
+  function ParseIdentifier: TExpression;
+  function ParseStringLiteral: TStringLiteral;
+  function ParseFactor: TExpression;
+  function ParseTerm: TExpression;
+  function ParseSimpleExpression: TExpression;
+  function ParseExpression: TExpression;
+private  // Métodos auxiliares para las declaraciones
+  procedure ParseParameters(Params: TVarDeclList);
+  function ParseSubrangeType: TSubrangeTypeDef;
+  function ParseEnumType: TEnumTypeDef;
+  function ParseArrayTypeDef: TArrayTypeDef;
+  function ParseRecordTypeDef: TRecordTypeDef;
+  function ParsePointerType: TPointerTypeDef;
+  function ParseTypeDefinition: TTypeDef;
+private  // Declaraciones
+  procedure ParseVarDeclaration(declars: TDeclarations);
+  procedure ParseConstDeclaration(declars: TDeclarations);
+  procedure ParseProcedureDeclaration(declars: TDeclarations);
+  procedure ParseFunctionDeclaration(declars: TDeclarations);
+  procedure ParseTypeDeclaration(declars: TDeclarations);
+private  // Instrucciones
+  procedure ParseAssigOrProcedureCall(var Block: TBlock);
+  procedure ParseIfStatement(var Block: TBlock);
+  procedure ParseWhileLoop(var Block: TBlock);
+  procedure ParseForLoop(var Block: TBlock);
+  procedure ParseRepeatUntil(var Block: TBlock);
+  procedure ParseCaseStatement(var Block: TBlock);
+public   // Sentencia, bloque y programa
+  procedure ParseStatement(Body: TBlock);
+  procedure ParseDeclarations(Declars: TDeclarations);
+  procedure ParseBody(Body: TBlock);
+  procedure ParseProgram;
+public   // Inicialización
+  procedure Clear;  // Reinicia el compilador para un nuevo programa
+  constructor Create(msg0: TMessageManager);
+  destructor Destroy; override;
+end;
+
+implementation
+
+{TParser}
+{$region "Messages"}
+procedure TParser.ClearError;
+{Limpia la bandera de errores. Tomar en cuenta que solo se debe usar para iniciar el
+procesamiento de errores. Limpiar errores en medio de la compilación, podría hacer que
+se pierda el rastro de errores anteriores, y que inclusive, la compilación termine sin
+error, aún cuando haya generado errores intermedios.
+Como norma, se podría decir que solo se debe usar, después de haber procesado un posible
+error anterior.}
+begin
+  msg.nErrors := 0;
+  msg.nInfos := 0;
+  msg.nWarns := 0;
+end;
+function TParser.HayError: boolean;
+begin
+  exit(msg.nErrors>0);
+end;
+procedure TParser.GenInfo(txt: string; const srcPos: TSrcPos);
+{Genera un mensaje de información, en la posición indicada.}
+begin
+  msg.info(lex.GetMsgInfo(txt, srcPos));
+end;
+procedure TParser.GenInfo(txt: string);
+{Genera un mensaje de Información, en la posición actual del contexto. }
+begin
+  msg.info(lex.GetMsgInfo(txt));
+end;
+procedure TParser.GenWarn(txt: string; const srcPos: TSrcPos);
+{Genera un mensaje de advertencia en la posición indicada.}
+{ #todo : Considerar usar directamente un parámetro de tipo TMsgInfo}
+begin
+  msg.warn(lex.GetMsgInfo(txt, srcPos));
+end;
+procedure TParser.GenWarn(txt: string);
+{Genera un mensaje de Advertencia, en la posición actual del contexto. }
+begin
+  msg.warn(lex.GetMsgInfo(txt));
+end;
+procedure TParser.GenError(txt: string; const srcPos: TSrcPos);
+{Genera un mensaje de error en la posición indicada.}
+begin
+  msg.error(lex.GetMsgInfoE(txt, srcPos));
+end;
+procedure TParser.GenError(txt: String; const Args: array of const; const srcPos: TSrcPos);
+{Versión con parámetros de GenError.}
+begin
+  msg.error(lex.GetMsgInfoE(Format(txt, Args), srcPos));
+end;
+procedure TParser.GenError(txt: string);
+{Genera un mensaje de error en la posición actual a la posición del contexto actual.}
+begin
+  msg.error(lex.GetMsgInfoE(txt));
+end;
+procedure TParser.GenError(txt: String; const Args: array of const);
+{Genera un mensaje de error en la posición actual del contexto.}
+begin
+  msg.error(lex.GetMsgInfoE(Format(txt, Args)));
+end;
+{$EndRegion}
+{$region "Métodos auxiliares para el parser"}
+function TParser.tokIdent: TTokenIdent;
+begin
+  exit(lex.curCtx.tokIdent);
+end;
+function TParser.CaptureSemicolon: boolean;
+//Verifica si sigue el delimitador de expresión ";". Si no encuentra devuelve false.
+begin
+  lex.SkipWhites;
+  if tokIdent = tiSEMIC then begin //encontró
+    Next;   //pasa al siguiente
+    exit(true);
+  end else begin   //es un error
+    GenError('Se esperaba delimitador ";".');
+    exit(false);  //sale con error
+  end;
+end;
+procedure TParser.SkipWhites;
+{Consume comentarios y directivas del código fuente.
+Notar que este procedimiento puede detectar varios errores en el mismo bloque, y que
+pasa al siguiente token, aún cuando detecta errores. }
+var
+  ctxChanged: Boolean;  //Manejamos variables locales para permitir recursividad
+begin
+  lex.SkipWhites;
+  while (lex.tokType = tkDirective) do begin
+    //Es una directiva
+    callProcDIRline(lex.token, ctxChanged);  //procesa línea
+    if HayError then begin
+      lex.Next;   //Pasa, porque es un error ya ubicado, y mejor buscamos otros
+      lex.SkipWhites;
+      continue;
+    end;
+    if ctxChanged then begin
+      {Hubo cambio de contexto. Procesamos nuevamente, porque ahora estamos ya en
+      otro contexto y se supone que esta llamada a ProcComments(), se hace precisamente
+      para saltar blancos, comentarios, directivas.}
+      SkipWhites;   {En el nuevo contexto puede haber nuevos comentarios.}
+      exit;
+    end;
+    //Pasa a siguiente
+    lex.Next;
+    lex.SkipWhites;  //limpia blancos
+  end;
+end;
+procedure TParser.SkipWhitesNoDirect;
+{Similar a SkipWhites(), pero no ejecuta directivas.}
+begin
+  lex.SkipWhites;
+  while (lex.tokType = tkDirective) do begin
+    //Pasa a siguiente
+    Next;
+  end;
+end;
+procedure TParser.Next;
+{Versión de SkipWhites() que primero consume un token con lex.Next. Se evita llamar a
+SkipWhites(), y se duplica parte del código,  para evitar la sobrecarga de una llamada
+adiconal.}
+var
+  ctxChanged: Boolean;  //Manejamos variables locales para permitir recursividad
+begin
+  lex.Next;
+  lex.SkipWhites;
+  while (lex.tokType = tkDirective) do begin
+    //Es una directiva
+    callProcDIRline(lex.token, ctxChanged);  //procesa línea
+    if HayError then begin
+      lex.Next;   //Pasa, porque es un error ya ubicado, y mejor buscamos otros
+      lex.SkipWhites;
+      continue;
+    end;
+    if ctxChanged then begin
+      {Hubo cambio de contexto. Procesamos nuevamente, porque ahora estamos ya en
+      otro contexto y se supone que esta llamada a ProcComments(), se hace precisamente
+      para saltar blancos, comentarios, directivas.}
+      SkipWhites;   {En el nuevo contexto puede haber nuevos comentarios.}
+      exit;
+    end;
+    //Pasa a siguiente
+    lex.Next;
+    lex.SkipWhites;  //limpia blancos
+  end;
+end;
+function TParser.ConsumeTok(tokId: TTokenIdent; const msgErr: string): boolean;
+{Consume el token identificado por "tokIdent", y pasa al siguiente token saltando
+blancos, comentarios o directivas.
+Si no encuentra al token "tokIdent", genera el mensaje de error "msgErr", en la posición
+en donde se espera encontrar el token y devuelve el valor FALS.}
+begin
+  if lex.curCtx.tokIdent = tokId then begin
+    //Se ecnontró el token buscado
+    Next;
+    exit(True);
+  end else begin
+    GenError(msgErr);
+    exit(False);
+  end;
+end;
+{$endregion}
+{$region "Expresiones"}
+function TParser.ParseNumberLiteral: TNumberLiteral;
+var
+  Value: Integer;
+  ValueF: Double;
+begin
+  if tokIdent = tiLitNumbI then begin
+    //Es entero
+    Value := StrToInt(lex.token);
+    Result := TNumberLiteral.Create(Value, lex.GetSrcPos);
+  end else begin
+    //Es flotante
+    ValueF := StrToFloat(lex.token);
+    Result := TNumberLiteral.Create(ValueF, lex.GetSrcPos);
+  end;
+  Next;
+end;
+function TParser.ParseIdentifier: TExpression;
+{Extrae un identificador, en la posición actual del lexer. El identificador puede ser
+simple, como "var1", un arreglo, como "var1[<expresión>]", un método como "var_base.func"
+o puede ser una llamada a función, como "func1()".
+Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve NIL.}
+  function ParseFieldAccess(RecordVar: TExpression): TFieldAccess;
+  var
+    FieldName: string;
+    SrcPos: TSrcPos;
+  begin
+    SrcPos := lex.GetSrcPos;
+    //Ya estamos en '.'
+    Next;  //Consumir '.'
+    if lex.tokType <> tkIdentifier then begin
+      GenError('Se esperaba un nombre de campo');
+      Result := nil;
+      Exit;
+    end;
+    FieldName := lex.token;
+    Next;
+    Result := TFieldAccess.Create(RecordVar, FieldName, SrcPos);
+  end;
+var
+  SrcPos: TSrcPos;
+  token: String;
+  VarRef: TVariableRef;
+  ArrayAccess: TArrayIndex;
+  functCall: TFunctionCall;
+  FieldAccess: TFieldAccess;
+  RecordVar: TExpression;
+begin
+  SrcPos := lex.GetSrcPos;
+  token := lex.token;
+  Next;  //Pasamos al siguiente token para validar otros casos
+  if tokIdent = tiBRACK_OP then begin  //"[" -> Arreglo
+    //Es acceso a arreglo
+    // Leer el nombre de la variable
+    VarRef := TVariableRef.Create(token, SrcPos);
+    ArrayAccess := TArrayIndex.Create(VarRef, SrcPos);
+    // Parsear índices
+    while not HayError do begin
+      lex.Next;  // Consumir '['
+      // Parsear el índice
+      ArrayAccess.AddIndex(ParseExpression);
+      if HayError then begin
+        ArrayAccess.Free;
+        Exit(nil);
+      end;
+      // Verificar cierre
+      if tokIdent <> tiBRACK_CL then begin
+        GenError('Se esperaba "]" para cerrar el índice');
+        ArrayAccess.Free;
+        Exit(nil);
+      end;
+      Next;  // Consumir ']'
+      // Verificar si hay más dimensiones
+      if tokIdent <> tiBRACK_OP then Break;
+    end;
+    Result := ArrayAccess;
+  end else if tokIdent = tiDOT then begin // "." -> Acceso a campo
+    // Comenzar con la variable base (registro)
+    RecordVar := TVariableRef.Create(token, SrcPos);
+    // Parsear todos los accesos a campo encadenados
+    while tokIdent = tiDOT do begin
+      FieldAccess := ParseFieldAccess(RecordVar);
+      if HayError then begin
+        RecordVar.Free;
+        Result := nil;
+        Exit;
+      end;
+      RecordVar := FieldAccess;
+    end;
+    Result := RecordVar;
+  end else if tokIdent = tiPAREN_OP then begin  // "("
+    //Sigue "(", debe ser una llamada a función o procedimiento.
+    functCall := TFunctionCall.Create(token, SrcPos);
+    // Parsear argumentos
+    Next;  //Pasamos el "("
+    if tokIdent = tiPAREN_CL then begin  // ")", No hay parámetros
+      Next;
+    end else begin  //Hay al menos un parámetro
+      while true do begin
+        //Debe seguir una expresión
+        functCall.AddArgument(ParseExpression);
+        if HayError then break;
+        //Debe seguir "," o ")"
+        if tokIdent = tiCOMMA then Next else Break;
+      end;
+      if HayError then begin
+        functCall.Destroy;  //Elimina el objeto no usado
+        Exit(nil);
+      end;
+      if not ConsumeTok(tiPAREN_CL, 'Se esperaba ")"') then begin
+        functCall.Destroy;  //Elimina el objeto no usado
+        Exit(nil);
+      end;
+    end;
+    Result := functCall;
+  end else  if tokIdent = tiDOT then begin
+    // Crear variable simple y luego acceder al campo
+    VarRef := TVariableRef.Create(token, SrcPos);
+    FieldAccess := ParseFieldAccess(VarRef);
+    if HayError then begin
+      VarRef.Free;
+      Result := nil;
+    end else
+      Result := FieldAccess;
+  end else begin
+    //Es una variable simple
+    Result := TVariableRef.Create(token, SrcPos);
+  end;
+end;
+function TParser.ParseStringLiteral: TStringLiteral;
+var
+  SrcPos: TSrcPos;
+begin
+  if lex.tokType<> tkString then begin
+    GenError('Se esperaba una cadena');
+    Exit(nil);
+  end;
+
+  SrcPos := lex.GetSrcPos;
+  Result := TStringLiteral.Create(lex.token, SrcPos);
+  Next;
+end;
+function TParser.ParseFactor: TExpression;
+{Analiza un operando, o factor, que puede ser de diversos tipos.
+Si no reconoce al operando, devuelve NIL }
+var
+  SrcPos: TSrcPos;
+  UnaryOp: string;
+  Expr: TExpression;
+begin
+  SrcPos := lex.GetSrcPos;
+  //Detecta el operador unario, si existe.
+  if tokIdent in [tiPLUS, tiMINUS, tiNOT] then begin
+    UnaryOp := lex.token;
+    Next;   //Consume al operador
+    Expr := ParseFactor();  // Recursivo para manejar múltiples signos
+    if not HayError then
+      Result := TUnaryOp.Create(UnaryOp, Expr, SrcPos)
+    else
+      Result := nil;
+    Exit;
+  end;
+  //Caso de operando sin signo.
+  if lex.tokType = tkLitNumber then begin
+    Result := ParseNumberLiteral
+  end else if lex.tokType = tkIdentifier then begin
+    Result := ParseIdentifier;
+  end else if lex.tokType = tkString then begin
+    Result := ParseStringLiteral
+  end else if CompareText(lex.token, 'true')=0 then begin
+    Next;
+    Result := TBooleanLiteral.Create(True, SrcPos);
+  end else if CompareText(lex.token, 'false')=0 then begin
+    Next;
+    Result := TBooleanLiteral.Create(False, SrcPos);
+  end else if tokIdent = tiPAREN_OP then begin  //'('
+    Next;
+    Result := ParseExpression;
+    if not HayError then begin
+      if tokIdent <> tiPAREN_CL then begin
+        GenError('Se esperaba ")"');
+      end;
+      Next;
+    end;
+  end else begin
+    GenError('Operando no reconocido', SrcPos);
+    Result := nil;
+  end;
+end;
+function TParser.ParseTerm: TExpression;
+var
+  Left, Right: TExpression;
+  Op: string;
+  SrcPos: TSrcPos;
+begin
+  Left := ParseFactor;
+  if HayError then Exit(Left);
+
+  // Operadores *, /, div, mod, and
+  while tokIdent in [tiMULT, tiDIV, tiIDIV, tiMOD, tiAND] do begin
+    if tokIdent in [tiMULT, tiDIV] then begin
+      Op := lex.token;
+    end else begin
+      Op := LowerCase(lex.token);
+    end;
+    SrcPos := lex.GetSrcPos;
+    Next;
+
+    Right := ParseFactor;   //Toma un operando simple, arreglo, puntero, función, ...
+    if not HayError then begin
+      Left := TBinaryOp.Create(Op, Left, Right, SrcPos);
+    end;
+  end;
+
+  Result := Left;
+end;
+function TParser.ParseSimpleExpression: TExpression;
+var
+  Left, Right: TExpression;
+  Op: string;
+  SrcPos: TSrcPos;
+begin
+  // Operador unario opcional
+  //if tokIdent in [tiPLUS, tiMINUS] then begin
+  //  UnaryOp := lex.token;
+  //  SrcPos := lex.GetSrcPos;
+  //  lex.Next;
+  //  Left := ParseTerm;
+  //  if not HayError then
+  //    Result := TUnaryOp.Create(UnaryOp, Left, SrcPos)
+  //  else
+  //    Result := Left;
+  //end else begin
+    Left := ParseTerm;  //Toma expresiones que sean productos de factores
+  //end;
+
+  if HayError then begin
+    Exit(Left);
+  end;
+
+  // Operadores +, -, or
+  while tokIdent in [tiPLUS, tiMINUS, tiOR] do begin
+    Op := lex.token;
+    SrcPos := lex.GetSrcPos;
+    Next;
+    Right := ParseTerm;  //Toma expresiones que sean productos de factores
+    if not HayError then begin
+      Left := TBinaryOp.Create(Op, Left, Right, SrcPos);
+    end;
+  end;
+
+  Result := Left;
+end;
+function TParser.ParseExpression: TExpression;
+{Analiza una expresión y devuelve un objeto "TExpression" (un árbol sintáctico) que
+representa a la expresión analizada.}
+var
+  Left, Right: TExpression;
+  Op: string;
+  SrcPos: TSrcPos;
+begin
+  Left := ParseSimpleExpression;  //Toma expresiones que sean suma de términos.
+  if HayError then Exit(Left);
+  // Operadores relacionales
+  if tokIdent in [tiEQUAL, tiLESS, tiGREAT, tiNOT_EQ, tiLESS_E, tiGREAT_E] then begin
+    Op := lex.token;
+    SrcPos := lex.GetSrcPos;
+    Next;
+    Right := ParseSimpleExpression;  //Toma expresiones que sean suma de términos.
+    if not HayError then
+      Result := TBinaryOp.Create(Op, Left, Right, SrcPos)
+    else
+      Result := Left;
+  end else begin
+    Result := Left;
+  end;
+end;
+{$endregion}
+{$region "Métodos auxiliares para las declaraciones"}
+procedure TParser.ParseParameters(Params: TVarDeclList);
+var
+  Param: TVarDecl;
+  SrcPos: TSrcPos;
+  DataTypeName: string;
+  i: Integer;
+  IsVarParam: Boolean;
+begin
+  while not HayError do begin
+    // Verificar si es parámetro var
+    IsVarParam := False;
+    if tokIdent = tiVAR then begin
+      IsVarParam := True;
+      Next;
+    end;
+    // Leer lista de identificadores
+    NamesList.Clear;
+    while not HayError do begin
+      if lex.tokType <> tkIdentifier then begin
+        GenError('Se esperaba un identificador para el parámetro');
+        Break;
+      end;
+      NamesList.Add(lex.token);
+      Next;
+      if tokIdent = tiCOMMA then begin
+        Next;
+        if lex.tokType<>tkIdentifier then
+          GenError('Se esperaba un identificador después de ","');
+      end else
+        Break;
+    end;
+    if HayError then Exit;
+    // Verificar el tipo
+    if tokIdent <> tiCOLON then begin
+      GenError('Se esperaba ":" después de los parámetros');
+      Exit;
+    end;
+    Next;
+    if lex.tokType <> tkIdentifier then begin
+      GenError('Se esperaba un tipo de dato');
+      Exit;
+    end;
+    DataTypeName := lex.token;
+    Next;
+    SrcPos := lex.GetSrcPos;
+    // Crear parámetros
+    for i := 0 to NamesList.Count - 1 do begin
+      Param := TVarDecl.Create(NamesList[i], DataTypeName, SrcPos);
+      Param.IsParameter := True;
+      Param.IsByReference := IsVarParam;
+      Params.Add(Param);
+    end;
+    // Verificar si hay más parámetros
+    if tokIdent = tiSEMIC then begin
+      Next;
+      Continue;
+    end else begin
+      Break;
+    end;
+  end;
+end;
+function TParser.ParseSubrangeType: TSubrangeTypeDef;
+var
+  LowExpr, HighExpr: TExpression;
+begin
+  LowExpr := ParseExpression;
+  if HayError then begin
+    Result := nil;
+    Exit;
+  end;
+  if tokIdent <> tiDOTDOT then begin
+    GenError('Se esperaba ".." en el subrango');
+    LowExpr.Free;
+    Result := nil;
+    Exit;
+  end;
+  Next;
+  HighExpr := ParseExpression;
+  if HayError then begin
+    LowExpr.Free;
+    Result := nil;
+    Exit;
+  end;
+  Result := TSubrangeTypeDef.Create(LowExpr, HighExpr);
+end;
+function TParser.ParseEnumType: TEnumTypeDef;
+var
+  EnumType: TEnumTypeDef;
+begin
+  if tokIdent <> tiPAREN_OP then begin
+    GenError('Se esperaba "(" para el enumerado');
+    Result := nil;
+    Exit;
+  end;
+  Next;
+  EnumType := TEnumTypeDef.Create;
+  while not HayError do begin
+    if lex.tokType <> tkIdentifier then begin
+      GenError('Se esperaba un identificador en el enumerado');
+      EnumType.Free;
+      Result := nil;
+      Exit;
+    end;
+    EnumType.AddValue(lex.token);
+    Next;
+    if tokIdent = tiCOMMA then
+      Next
+    else
+      Break;
+  end;
+  if tokIdent <> tiPAREN_CL then begin
+    GenError('Se esperaba ")" para cerrar el enumerado');
+    EnumType.Free;
+    Result := nil;
+    Exit;
+  end;
+  Next;
+  Result := EnumType;
+end;
+function TParser.ParseArrayTypeDef: TArrayTypeDef;
+var
+  ArrayType: TArrayTypeDef;
+  LowExpr, HighExpr: TExpression;
+  SrcPos: TSrcPos;
+begin
+  SrcPos := lex.GetSrcPos;
+  ArrayType := TArrayTypeDef.Create;
+
+  if not ConsumeTok(tiARRAY, 'Se esperaba "array"') then
+  begin
+    ArrayType.Free;
+    Exit(nil);
+  end;
+
+  if tokIdent <> tiBRACK_OP then
+  begin
+    GenError('Se esperaba "[" después de "array"');
+    ArrayType.Free;
+    Exit(nil);
+  end;
+  Next;
+
+  while not HayError do
+  begin
+    LowExpr := ParseExpression;
+    if HayError then Break;
+
+    if tokIdent <> tiDOTDOT then
+    begin
+      GenError('Se esperaba ".." en el rango del arreglo');
+      LowExpr.Free;
+      ArrayType.Free;
+      Exit(nil);
+    end;
+    Next;
+
+    HighExpr := ParseExpression;
+    if HayError then
+    begin
+      LowExpr.Free;
+      ArrayType.Free;
+      Exit(nil);
+    end;
+
+    ArrayType.AddRange(TArrayRange.Create(LowExpr, HighExpr, SrcPos));
+
+    if tokIdent = tiCOMMA then
+      Next
+    else
+      Break;
+  end;
+
+  if tokIdent <> tiBRACK_CL then
+  begin
+    GenError('Se esperaba "]" después de los índices');
+    ArrayType.Free;
+    Exit(nil);
+  end;
+  Next;
+
+  if not ConsumeTok(tiOF, 'Se esperaba "of"') then
+  begin
+    ArrayType.Free;
+    Exit(nil);
+  end;
+
+  // Parsear el tipo de los elementos (puede ser cualquier tipo)
+  // Aquí llamamos a ParseTypeDefinition recursivamente
+  // Pero cuidado: podría causar recursión infinita con tipos mutuamente referenciados
+  // Para simplificar, leemos el nombre del tipo o una definición inline
+
+  if lex.tokType = tkIdentifier then
+  begin
+    ArrayType.ElementTypeName := lex.token;
+    Next;
+  end
+  else
+  begin
+    // Definición inline (ej: array[1..10] of record ... end)
+    ArrayType.ElementTypeDef := ParseTypeDefinition;
+    if HayError then
+    begin
+      ArrayType.Free;
+      Exit(nil);
+    end;
+  end;
+
+  Result := ArrayType;
+end;
+function TParser.ParseRecordTypeDef: TRecordTypeDef;
+var
+  RecordType: TRecordTypeDef;
+  Field: TFieldDef;
+  SrcPos: TSrcPos;
+  i: Integer;
+begin
+  SrcPos := lex.GetSrcPos;
+  RecordType := TRecordTypeDef.Create;
+  Next;  //Toma el token "RECORD"
+  while not (HayError or (tokIdent = tiEND)) do begin
+    NamesList.Clear;
+    while not HayError do begin
+      if lex.tokType <> tkIdentifier then begin
+        GenError('Se esperaba un identificador para el campo');
+        Break;
+      end;
+      NamesList.Add(lex.token);
+      Next;
+      if tokIdent = tiCOMMA then
+        Next
+      else
+        Break;
+    end;
+    if HayError then Break;
+    if tokIdent <> tiCOLON then begin
+      GenError('Se esperaba ":" después del nombre del campo');
+      Break;
+    end;
+    Next;  //Dejamos al lexer apuntando al tipo: string, array[], ...
+    SrcPos := lex.GetSrcPos;
+    // Crear los campos
+    for i := 0 to NamesList.Count - 1 do begin
+      Field := TFieldDef.Create(NamesList[i], SrcPos);
+      // Parsear el tipo del campo
+      if lex.tokType = tkIdentifier then begin
+        Field.TypeName := lex.token;
+        //Si estamos en el último ítem de la lista, tomamos el nombre del tipo, y así
+        //estamos listo para leer el siguiente campo del RECORD.
+        if i = NamesList.Count - 1 then Next;
+      end else begin
+        // Definición inline (ej: record ... end dentro de un campo)
+        Field.TypeDef := ParseTypeDefinition;  //*** Esto fallará si son varios campos: "a,b,c: ARRAY[1..3] OF char" porque no se puede parsear la misma definición de tipo varias veces.
+        if HayError then begin
+          Field.Free;
+          RecordType.Free;
+          Exit(nil);
+        end;
+      end;
+      RecordType.AddField(Field);
+    end;
+    if tokIdent = tiSEMIC then
+      Next
+    else
+      Break;
+  end;
+  if HayError then begin
+    RecordType.Free;
+    Exit(nil);
+  end;
+  if not ConsumeTok(tiEND, 'Se esperaba "end"') then begin
+    RecordType.Free;
+    Exit(nil);
+  end;
+  Result := RecordType;
+end;
+function TParser.ParsePointerType: TPointerTypeDef;
+var
+  TargetTypeName: string;
+begin
+  if tokIdent <> tiPOINTER then begin
+    GenError('Se esperaba "^" para puntero');
+    Result := nil;
+    Exit;
+  end;
+  Next;
+  if lex.tokType <> tkIdentifier then begin
+    GenError('Se esperaba el tipo al que apunta el puntero');
+    Result := nil;
+    Exit;
+  end;
+  TargetTypeName := lex.token;
+  Next;
+  Result := TPointerTypeDef.Create(TargetTypeName);
+end;
+function TParser.ParseTypeDefinition: TTypeDef;
+var
+  SrcPos: TSrcPos;
+  TypeName: string;
+begin
+  SrcPos := lex.GetSrcPos;
+  // 1. Tipo simple (integer, byte, TPersona, etc.)
+  if lex.tokType = tkIdentifier then begin
+    TypeName := lex.token;
+    Next;
+    Result := TSimpleTypeDef.Create(TypeName);
+    Exit;
+  end;
+  // 2. Subrango: 1..10, 'a'..'z'
+  if lex.tokType in [tkLitNumber, tkString] then begin
+    Result := ParseSubrangeType;
+    Exit;
+  end;
+  // 3. Enumerado: (Rojo, Verde, Azul)
+  if tokIdent = tiPAREN_OP then begin
+    Result := ParseEnumType;
+    Exit;
+  end;
+  // 4. Arreglo: array[1..10] of integer
+  if tokIdent = tiARRAY then begin
+    Result := ParseArrayTypeDef;
+    Exit;
+  end;
+  // 5. Registro: record ... end
+  if tokIdent = tiRECORD then begin
+    Result := ParseRecordTypeDef;
+    Exit;
+  end;
+  // 6. Puntero: ^integer
+  if tokIdent = tiPOINTER then begin
+    Result := ParsePointerType;
+    Exit;
+  end;
+  GenError('Definición de tipo no reconocida', SrcPos);
+  Result := nil;
+end;
+{$endregion}
+{$region "Declaraciones"}
+procedure TParser.ParseVarDeclaration(declars: TDeclarations);
+  procedure ReadNamesList;
+  //Lee una lista de identificadores en la lista "NamesList".
+  begin
+    NamesList.Clear;
+    // Leer lista de identificadores
+    while not HayError do begin
+      if lex.tokType<>tkIdentifier then begin
+        GenError('Se esperaba un identificador');
+        Break;
+      end;
+      NamesList.Add(lex.token);
+      Next;
+      // Verificar si hay más variables
+      if tokIdent = tiCOMMA then begin
+        Next;  // Consumir coma
+        if lex.tokType<>tkIdentifier then
+          GenError('Se esperaba un identificador después de ","');
+        // Continuar con la siguiente variable
+      end else
+        Break;  // No hay más variables en esta línea
+    end;
+  end;
+var
+  SrcPos: TSrcPos;
+  DataTypeName: string;
+  i: Integer;
+begin
+  Next;  //Pasa al siguiente token.
+  repeat
+    //Lee un bloque de declaraciones: VAR a, b, c: byte;
+    ReadNamesList;
+    if HayError then Exit;
+
+    if not ConsumeTok(tiCOLON, 'Se esperaba ":" después de las variables') then Exit;
+
+    // Leer el tipo
+    if lex.tokType<>tkIdentifier then begin
+      GenError('Se esperaba un tipo de dato');
+      Exit;
+    end;
+    DataTypeName := lex.token;
+    // Crear declaraciones para cada variable
+    SrcPos := lex.GetSrcPos;   //Usa una sola ubicación
+    for i := 0 to NamesList.Count - 1 do begin
+      declars.Add(TVarDecl.Create(NamesList[i], DataTypeName, SrcPos));
+    end;
+    Next;  //Pasa el nombre del tipo
+    if tokIdent = tiSEMIC then begin
+      // Consumir ';' opcional
+      Next;
+    end else begin
+      //Puede que siga otro tipo de declaración o sea un error.
+      Break;
+    end;
+  until lex.tokType = tkKeyword;  //Sige otra declaración o BEGIN
+end;
+procedure TParser.ParseConstDeclaration(declars: TDeclarations);
+var
+  ConstName: string;
+  ConstValue: TExpression;
+  SrcPos: TSrcPos;
+begin
+  Next;  //Pasa al siguiente token.
+  // Parsear constantes hasta que se acaben
+  while not HayError do begin
+    // Leer nombre de la constante
+    if lex.tokType <> tkIdentifier then begin
+      // Si no hay más identificadores, es porque terminaron las constantes
+      Break;
+    end;
+    SrcPos := lex.GetSrcPos;
+    ConstName := lex.token;
+    Next;  // Consumir el nombre
+    // Verificar '='
+    if tokIdent <> tiEQUAL then begin
+      GenError('Se esperaba "=" en la declaración de constante', SrcPos);
+      Break;
+    end;
+    Next;  // Consumir '='
+    // Parsear el valor de la constante (puede ser cualquier expresión constante)
+    ConstValue := ParseExpression;
+    if HayError then begin
+      ConstValue.Free;
+      Break;
+    end;
+    // Crear la declaración de constante
+    declars.Add(TConstDecl.Create(ConstName, ConstValue, SrcPos));
+    // Consumir ';' opcional
+    if tokIdent = tiSEMIC then
+      Next
+    else
+      Break;  // Si no hay ';', asumimos que terminaron las constantes
+  end;
+end;
+procedure TParser.ParseProcedureDeclaration(declars: TDeclarations);
+{Analiza la declaración de un procedimiento.}
+var
+  Proc: TProcDecl;
+begin
+  Next;  // Consume PROCEDURE
+  if lex.tokType <> tkIdentifier then begin
+    GenError('Se esperaba un identificador para el procedimiento');
+    Exit;
+  end;
+  Proc := TProcDecl.Create(lex.token, lex.GetSrcPos);
+  Next;
+  // Parsear parámetros
+  if tokIdent = tiPAREN_OP then begin   //"("
+    Next;
+    ParseParameters(Proc.Parameters);
+    if not HayError then begin
+      if tokIdent <> tiPAREN_CL then  //")"
+        GenError('Se esperaba ")" después de los parámetros');
+      Next;
+    end;
+  end;
+  if HayError then begin
+    Proc.Destroy;
+    Exit;
+  end;
+  if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then begin
+    Proc.Destroy;
+    Exit;
+  end;
+  //Procesar declaraciones
+  ParseDeclarations(Proc.Declarations);
+  if HayError then begin
+    Proc.Destroy;
+    Exit;
+  end;
+  //Parsear cuerpo
+  ParseBody(Proc.Body);
+  if HayError then begin
+    Proc.Destroy;
+  end else begin
+    declars.Add(Proc);
+  end;
+end;
+procedure TParser.ParseFunctionDeclaration(declars: TDeclarations);
+var
+  Func: TFunctDecl;
+begin
+  Next;  // Consume FUNCTION
+  if lex.tokType <> tkIdentifier then begin
+    GenError('Se esperaba un identificador para la función');
+    Exit;
+  end;
+  Func := TFunctDecl.Create(lex.token, lex.GetSrcPos);
+  Next;
+  // Parsear parámetros
+  if tokIdent = tiPAREN_OP then begin   //'('
+    Next;
+    ParseParameters(Func.Parameters);
+    if not HayError then begin
+      if tokIdent <> tiPAREN_CL then  //")"
+        GenError('Se esperaba ")" después de los parámetros');
+      Next;
+    end;
+  end;
+  if HayError then begin
+    Func.Destroy;
+    Exit;
+  end;
+  if tokIdent <> tiCOLON  then begin  //":"
+    GenError('Se esperaba ":" después del nombre');
+    Func.Destroy;
+    Exit;
+  end;
+  Next;
+  //Lee tipo devuelto
+  if lex.tokType <> tkIdentifier then begin
+    GenError('Se esperaba el tipo de retorno');
+    Func.Destroy;
+    Exit;
+  end;
+  Func.ReturnTypeName := lex.token;
+  Next;
+  if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then begin
+    Func.Destroy;
+    Exit;
+  end;
+  //Procesar declaraciones
+  ParseDeclarations(Func.Declarations);
+  if HayError then begin
+    Func.Destroy;
+    Exit;
+  end;
+  //Parsear cuerpo
+  ParseBody(Func.Body);
+  if HayError then begin
+    Func.Destroy;
+  end else begin
+    declars.Add(Func);
+  end;
+end;
+procedure TParser.ParseTypeDeclaration(declars: TDeclarations);
+var
+  TypeName: string;
+  TypeDef: TTypeDef;
+  SrcPos: TSrcPos;
+  TypeDecl: TTypeDecl;
+begin
+  if not ConsumeTok(tiTYPE, 'Se esperaba "type"') then
+    Exit;
+  while not HayError do begin
+    if lex.tokType <> tkIdentifier then
+      Break;  // No hay más declaraciones de tipo
+    SrcPos := lex.GetSrcPos;
+    TypeName := lex.token;
+    Next;
+    if tokIdent <> tiEQUAL then begin
+      GenError('Se esperaba "=" en la definición del tipo');
+      Break;
+    end;
+    Next;
+    TypeDef := ParseTypeDefinition;
+    if HayError then begin
+      TypeDef.Free;
+      Break;
+    end;
+    TypeDecl := TTypeDecl.Create(TypeName, TypeDef, SrcPos);
+    declars.Add(TypeDecl);
+    if tokIdent = tiSEMIC then  // ";"
+      Next
+    else
+      Break;
+  end;
+end;
+{$endregion}
+{$region "Instrucciones"}
+procedure TParser.ParseAssigOrProcedureCall(var Block: TBlock);
+var
+  Operand1, Value: TExpression;
+begin
+  Operand1 := ParseIdentifier;
+  if HayError then begin
+    if Operand1<> Nil then Operand1.Destroy;
+    Exit;
+  end;
+  if tokIdent = tiASSIGN then begin
+    //Se trata de una asignación.
+    Next;  //Pasamos el ":="
+    Value := ParseExpression;
+    if HayError then begin
+      Operand1.Destroy;
+      if Value<>nil then Value.Destroy;
+    end else begin
+      //Target := TVariableRef.Create(token, SrcPos);
+      Block.AddStatement(TAssignment.Create(Operand1, Value, Operand1.SrcPos));
+    end;
+  end else if tokIdent = tiSEMIC  then begin
+    //Sigue ";", debe ser una llamada a procedimiento, arreglo o puntero.
+    Block.AddStatement(Operand1);
+    //*** Se podría validar si el operando puede ser realmente un proced. o función.
+  end else begin
+    GenError('Se esperaba ":=" o ";".', lex.GetSrcPos);
+    Operand1.Destroy;
+    Exit;
+  end;
+end;
+procedure TParser.ParseIfStatement(var Block: TBlock);
+var
+  Condition: TExpression;
+  ThenBranch, ElseBranch: TBlock;
+  SrcPos: TSrcPos;
+begin
+  SrcPos := lex.GetSrcPos;
+  if not ConsumeTok(tiIF, 'Se esperaba "if"') then Exit;
+
+  Condition := ParseExpression;
+
+  if HayError then Exit;
+
+  if not ConsumeTok(tiTHEN, 'Se esperaba "then"') then Exit;
+
+  // Then branch
+  ThenBranch := TBlock.Create(lex.GetSrcPos);
+  ParseStatement(ThenBranch);
+
+  if HayError then Exit;
+
+  // Else branch (opcional)
+  if tokIdent = tiELSE then begin
+    Next;
+    ElseBranch := TBlock.Create(lex.GetSrcPos);
+    ParseStatement(ElseBranch);
+  end else
+    ElseBranch := nil;
+
+  if not HayError then
+    Block.AddStatement(TIfStatement.Create(Condition, ThenBranch, ElseBranch, SrcPos));
+end;
+procedure TParser.ParseWhileLoop(var Block: TBlock);
+var
+  Condition: TExpression;
+  Body: TBlock;
+  SrcPos: TSrcPos;
+begin
+  SrcPos := lex.GetSrcPos;
+  if not ConsumeTok(tiWHILE, 'Se esperaba "while"') then Exit;
+
+  Condition := ParseExpression;
+
+  if HayError then Exit;
+
+  if not ConsumeTok(tiDO, 'Se esperaba "do"') then Exit;
+
+  Body := TBlock.Create(lex.GetSrcPos);
+  ParseStatement(Body);
+
+  if not HayError then
+    Block.AddStatement(TWhileLoop.Create(Condition, Body, SrcPos));
+end;
+procedure TParser.ParseForLoop(var Block: TBlock);
+var
+  ControlVar: TVariableRef;
+  Direction: TForDirection;
+  StartExpr, EndExpr: TExpression;
+  Body: TBlock;
+  SrcPos: TSrcPos;
+begin
+  SrcPos := lex.GetSrcPos;
+  if not ConsumeTok(tiFOR, 'Se esperaba "for"') then Exit;
+
+  if lex.tokType <> tkIdentifier then begin
+    GenError('Se esperaba una variable de control');
+    Exit;
+  end;
+
+  ControlVar := TVariableRef.Create(lex.token, lex.GetSrcPos);
+  Next;
+
+  if tokIdent <> tiASSIGN then begin
+    GenError('Se esperaba ":=" en el bucle FOR');
+    Exit;
+  end;
+  Next;
+
+  StartExpr := ParseExpression;
+
+  if HayError then Exit;
+
+  if tokIdent = tiTO  then begin
+    Direction := fdUpTo;
+    Next;
+  end else if tokIdent = tiDOWNTO then begin
+    Direction := fdDownTo;
+    Next;
+  end else begin
+    GenError('Se esperaba "to" o "downto" en el bucle FOR');
+    Exit;
+  end;
+
+  EndExpr := ParseExpression;
+
+  if HayError then Exit;
+
+  if not ConsumeTok(tiDO, 'Se esperaba "do"') then Exit;
+
+  Body := TBlock.Create(lex.GetSrcPos);
+  ParseStatement(Body);
+
+  if not HayError then
+    Block.AddStatement(TForLoop.Create(ControlVar, Direction, StartExpr, EndExpr, Body, SrcPos));
+end;
+procedure TParser.ParseRepeatUntil(var Block: TBlock);
+var
+  Body: TBlock;
+  Condition: TExpression;
+  SrcPos: TSrcPos;
+begin
+  SrcPos := lex.GetSrcPos;
+  if not ConsumeTok(tiREPEAT, 'Se esperaba "repeat"') then Exit;
+
+  Body := TBlock.Create(lex.GetSrcPos);
+
+  // Parsear instrucciones hasta encontrar 'until'
+  while not (HayError or (tokIdent = tiUNTIL)) do
+    ParseStatement(Body);
+
+  if HayError then Exit;
+
+  if not ConsumeTok(tiUNTIL, 'Se esperaba "until"') then Exit;
+
+  Condition := ParseExpression;
+
+  if not HayError then
+    Block.AddStatement(TRepeatUntil.Create(Body, Condition, SrcPos));
+end;
+procedure TParser.ParseCaseStatement(var Block: TBlock);
+// CASE STATEMENT (Simplificado)
+var
+  Selector: TExpression;
+  CaseStmt: TCaseStatement;
+  Branch: TCaseBranch;
+  SrcPos: TSrcPos;
+  ElseBlock: TBlock;
+begin
+  SrcPos := lex.GetSrcPos;
+  Next;  //Consume "CASE".
+  Selector := ParseExpression;
+  if HayError then Exit;
+  if not ConsumeTok(tiOF, 'Se esperaba "of"') then Exit;
+  CaseStmt := TCaseStatement.Create(Selector, SrcPos);
+  // Parsear ramas
+  while not (HayError or (tokIdent = tiEND)) do begin
+    Branch := TCaseBranch.Create(lex.GetSrcPos);
+    //Abaliza cada rama
+    if tokIdent = tiELSE then begin
+      //Es la rama ELSE
+      Next;
+      ElseBlock := TBlock.Create(lex.GetSrcPos);
+      // Parsear la instrucción del ELSE
+      // Puede ser una sola instrucción o un bloque BEGIN...END
+      ParseStatement(ElseBlock);
+      if not HayError then
+        CaseStmt.ElseBranch := ElseBlock
+      else
+        ElseBlock.Free;
+    end else begin
+      // Leer constantes: 1, 2, 3:
+      while not HayError do begin
+        if lex.tokType <> tkLitNumber then begin
+          GenError('Se esperaba una constante en CASE');
+          Break;
+        end;
+        Branch.AddConstant(TNumberLiteral.Create(StrToInt(lex.token), lex.GetSrcPos));
+        Next;
+        if tokIdent = tiCOMMA then
+          Next
+        else
+          Break;
+      end;
+      if HayError then Break;
+      if not ConsumeTok(tiCOLON, 'Se esperaba ":"') then Break;
+      // Parsear instrucción
+      ParseStatement(Branch.Statement);
+      if not HayError then
+        CaseStmt.AddBranch(Branch);
+    end;
+  end;
+  if HayError then Exit;
+  ConsumeTok(tiEND, 'Se esperaba "end"');
+  if not HayError then begin
+    Block.AddStatement(CaseStmt);
+  end;
+end;
+{$endregion}
+{$region "Sentencia, bloque y programa"}
+procedure TParser.ParseStatement(Body: TBlock);
+begin
+  if Body = nil then begin
+    Body := TBlock.Create(lex.GetSrcPos);
+  end;
+  // Identificar el tipo de instrucción
+  if lex.tokType = tkIdentifier then begin
+    //Puede ser una asignación o una llamada a procedimiento.
+    ParseAssigOrProcedureCall(Body);
+  end else if tokIdent = tiIF then begin
+    ParseIfStatement(Body)
+  end else if tokIdent = tiWHILE then begin
+    ParseWhileLoop(Body)
+  end else if tokIdent = tiFOR then begin
+    ParseForLoop(Body)
+  end else if tokIdent = tiREPEAT then begin
+    ParseRepeatUntil(Body)
+  end else if tokIdent = tiCASE then begin
+    ParseCaseStatement(Body)
+  end else if tokIdent = tiBEGIN then begin
+    // Bloque anidado - se convierte en parte del bloque actual
+    ParseBody(Body);
+  end else if tokIdent = tiSEMIC then begin
+    // Instrucción vacía
+    Next;
+  end else begin
+    GenError('Instrucción no reconocida', lex.GetSrcPos);
+  end;
+  if HayError then Exit;
+
+  // Opcional: ; después de la instrucción
+  if tokIdent = tiSEMIC then begin
+    Next;
+  end;
+end;
+procedure TParser.ParseDeclarations(Declars: TDeclarations);
+begin
+  while not HayError do begin
+    if tokIdent = tiVAR then
+      ParseVarDeclaration(Declars)
+    else if tokIdent = tiCONST then
+      ParseConstDeclaration(Declars)
+    else if tokIdent = tiPROCED then
+      ParseProcedureDeclaration(Declars)
+    else if tokIdent = tiFUNCT  then
+      ParseFunctionDeclaration(Declars)
+    else if tokIdent = tiTYPE then
+      ParseTypeDeclaration(Declars)
+    else
+      Break;  // No hay más declaraciones
+  end;
+end;
+procedure TParser.ParseBody(Body: TBlock);
+begin
+  if tokIdent<>tiBEGIN then begin
+    GenError('Se esperaba "begin"');
+    exit;
+  end;
+  Next;
+  // Parsear instrucciones hasta 'end'
+  while not (HayError or (tokIdent=tiEND)) do begin
+    ParseStatement(Body);
+  end;
+  // end
+  if tokIdent<>tiEND then begin
+    GenError('Se esperaba "end"');
+  end;
+  Next;   //Toma el "End".
+  if not HayError then begin
+    // Si hay ';' después de "End" (opcional en Pascal).
+    if tokIdent = tiSEMIC then begin
+      Next;
+    end;
+  end;
+end;
+procedure TParser.ParseProgram;
+{Realiza en análisis sintáctico de un programa y construye el AST.
+El lexer debe haber sido cargado previamente con el código fuente del programa, y el AST
+debe haber sido limpiado}
+  procedure ParseProgramHeader;
+  begin
+    //Captura el encabezado, solo si existe.
+    if tokIdent = tiPROGRAM then begin
+      Next;  //pasa al nombre
+      if lex.atEof then begin
+        GenError('Program name expected.');
+        exit;
+      end;
+      ast.Name := lex.token;
+      ast.srcDec := lex.GetSrcPos;
+      Next;  //Toma el nombre y pasa al siguiente
+      if not CaptureSemicolon then exit;
+    end;
+    if lex.atEof then begin
+      GenError('Expected "program", "begin", "var", "type" or "const".');
+      exit;
+    end;
+  end;
+begin
+  // program <nombre> ;
+  SkipWhites;
+  ParseProgramHeader;
+  if HayError then Exit;
+  // Analizar las declaraciones
+  ParseDeclarations(ast.Declarations);
+  if HayError then Exit;
+
+  // Analizar el cuerpo principal
+  ParseBody(ast.Body);
+  if HayError then Exit;
+
+  // Consumir el punto final
+  if tokIdent<>tiDOT then
+     GenError('Se esperaba "." al final del programa');
+  Next;
+  // Verificar que no queden tokens.
+  if not HayError then begin
+    if not lex.atEof then
+      GenError('Código extra después del final del programa');
+  end;
+end;
+{$endregion}
+{$region "Inicialización"}
+procedure TParser.Clear;
+begin
+  ClearError;
+  ast.Clear;
+end;
+constructor TParser.Create(msg0: TMessageManager);
+begin
+  //inherited;
+  lex := TAleLexer.Create(msg0);
+  msg := msg0;
+  ast := TProgram.Create('test', lex.GetSrcPos);
+  NamesList := TStringList.Create;
+  ClearError;   //inicia motor de errores
+end;
+destructor TParser.Destroy;
+begin
+  NamesList.Destroy;
+  ast.Destroy;
+  lex.Destroy;
+  inherited Destroy;
+end;
+{$endregion}
+end.
