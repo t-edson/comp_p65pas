@@ -534,7 +534,7 @@ var
   Proc: TProcDecl;
   Func: TFunctDecl;
   Assign1, Assign2: TAssignment;
-  VarRef1, VarRef2: TVariableRef;
+  VarRef1, VarRef2: TExpression;
   Literal1, Literal2: TNumberLiteral;
   Param: TVarDecl;
   ProcBody, FuncBody: TBlock;

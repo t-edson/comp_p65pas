@@ -267,75 +267,104 @@ function TParser.ParseIdentifier: TExpression;
 simple, como "var1", un arreglo, como "var1[<expresión>]", un método como "var_base.func"
 o puede ser una llamada a función, como "func1()".
 Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve NIL.}
-  function ParseFieldAccess(RecordVar: TExpression): TFieldAccess;
+  function ParseFieldAccess(BaseExpr: TExpression): TExpression;
   var
     FieldName: string;
-    SrcPos: TSrcPos;
+    FieldAccess: TFieldAccess;
+    Expr: TExpression;
+    ArrayAccess: TArrayIndex;
   begin
-    SrcPos := lex.GetSrcPos;
-    //Ya estamos en '.'
-    Next;  //Consumir '.'
-    if lex.tokType <> tkIdentifier then begin
-      GenError('Se esperaba un nombre de campo');
-      Result := nil;
-      Exit;
+    if tokIdent = tiDOT then begin
+      Next;  // Consumir '.'
+      if lex.tokType <> tkIdentifier then begin
+        GenError('Se esperaba un nombre de campo');
+        Exit(nil);
+      end;
+      FieldName := lex.token;
+      Next;  // Consumir el nombre del campo
+      // Crear el acceso a campo actual
+      FieldAccess := TFieldAccess.Create(BaseExpr, FieldName, lex.GetSrcPos);
+      //Busca más modificadores del operando
+      Result := ParseFieldAccess(FieldAccess);
+      if HayError then begin
+        FieldAccess.Destroy;
+        Exit(nil);
+      end;
+    end else if tokIdent = tiBRACK_OP then begin  //"[" -> Arreglo
+      //Leer variable base
+      ArrayAccess := TArrayIndex.Create(BaseExpr, lex.GetSrcPos);
+      // Parsear índices
+      while not HayError do begin
+        lex.Next;  // Consumir '['
+        // Parsear el índice
+        ArrayAccess.AddIndex(ParseExpression);
+        if HayError then begin
+          ArrayAccess.Free;
+          Exit(nil);
+        end;
+        // Verificar cierre
+        if tokIdent <> tiBRACK_CL then begin
+          GenError('Se esperaba "]" para cerrar el índice');
+          ArrayAccess.Free;
+          Exit(nil);
+        end;
+        Next;  // Consumir ']'
+        // Verificar si hay más dimensiones
+        if tokIdent <> tiBRACK_OP then Break;
+      end;
+      //Busca más modificadores del operando
+      Result := ParseFieldAccess(ArrayAccess);
+      if HayError then begin
+        ArrayAccess.Destroy;
+        Exit(nil);
+      end;
+
+//      if not ConsumeTok(tiBRACK_OP, 'Se esperaba "[" después de "array"') then begin
+//        ArrayType.Free;
+//        Exit(nil);
+//      end;
+//      while not HayError do begin
+//        LowExpr := ParseExpression;
+//        if HayError then Break;
+//        if tokIdent <> tiDOTDOT then begin
+//          GenError('Se esperaba ".." en el rango del arreglo');
+//          LowExpr.Free;
+//          ArrayType.Free;
+//          Exit(nil);
+//        end;
+//        Next;
+//        HighExpr := ParseExpression;
+//        if HayError then begin
+//          LowExpr.Free;
+//          ArrayType.Free;
+//          Exit(nil);
+//        end;
+//        ArrayType.AddRange(TArrayRange.Create(LowExpr, HighExpr, SrcPos));
+//        if tokIdent = tiCOMMA then
+//          Next
+//        else
+//          Break;
+//      end;
+//      if not ConsumeTok(tiBRACK_CL, 'Se esperaba "]"') then begin
+//        ArrayType.Free;
+//        Exit(nil);
+//      end;
+
+    end else begin
+      // No hay más niveles, retornar el acceso actual
+      Result := BaseExpr;
     end;
-    FieldName := lex.token;
-    Next;
-    Result := TFieldAccess.Create(RecordVar, FieldName, SrcPos);
   end;
 var
   SrcPos: TSrcPos;
   token: String;
-  VarRef: TVariableRef;
-  ArrayAccess: TArrayIndex;
   functCall: TFunctionCall;
-  FieldAccess: TFieldAccess;
-  RecordVar: TExpression;
+  BaseExpr: TExpression;
 begin
-  SrcPos := lex.GetSrcPos;
-  token := lex.token;
+  token := lex.token;       //Guarda nombre del identificador.
+  SrcPos := lex.GetSrcPos;  //Guarda posición del identificador.
   Next;  //Pasamos al siguiente token para validar otros casos
-  if tokIdent = tiBRACK_OP then begin  //"[" -> Arreglo
-    //Es acceso a arreglo
-    // Leer el nombre de la variable
-    VarRef := TVariableRef.Create(token, SrcPos);
-    ArrayAccess := TArrayIndex.Create(VarRef, SrcPos);
-    // Parsear índices
-    while not HayError do begin
-      lex.Next;  // Consumir '['
-      // Parsear el índice
-      ArrayAccess.AddIndex(ParseExpression);
-      if HayError then begin
-        ArrayAccess.Free;
-        Exit(nil);
-      end;
-      // Verificar cierre
-      if tokIdent <> tiBRACK_CL then begin
-        GenError('Se esperaba "]" para cerrar el índice');
-        ArrayAccess.Free;
-        Exit(nil);
-      end;
-      Next;  // Consumir ']'
-      // Verificar si hay más dimensiones
-      if tokIdent <> tiBRACK_OP then Break;
-    end;
-    Result := ArrayAccess;
-  end else if tokIdent = tiDOT then begin // "." -> Acceso a campo
-    // Comenzar con la variable base (registro)
-    RecordVar := TVariableRef.Create(token, SrcPos);
-    // Parsear todos los accesos a campo encadenados
-    while tokIdent = tiDOT do begin
-      FieldAccess := ParseFieldAccess(RecordVar);
-      if HayError then begin
-        RecordVar.Free;
-        Result := nil;
-        Exit;
-      end;
-      RecordVar := FieldAccess;
-    end;
-    Result := RecordVar;
-  end else if tokIdent = tiPAREN_OP then begin  // "("
+  if tokIdent = tiPAREN_OP then begin  // "("
     //Sigue "(", debe ser una llamada a función o procedimiento.
     functCall := TFunctionCall.Create(token, SrcPos);
     // Parsear argumentos
@@ -359,20 +388,14 @@ begin
         Exit(nil);
       end;
     end;
-    Result := functCall;
-  end else  if tokIdent = tiDOT then begin
-    // Crear variable simple y luego acceder al campo
-    VarRef := TVariableRef.Create(token, SrcPos);
-    FieldAccess := ParseFieldAccess(VarRef);
-    if HayError then begin
-      VarRef.Free;
-      Result := nil;
-    end else
-      Result := FieldAccess;
+    BaseExpr := functCall;
   end else begin
-    //Es una variable simple
-    Result := TVariableRef.Create(token, SrcPos);
+    //No sigue "(", entonces debe ser una variable simple, aunque podría ser la llamada
+    //a un procedimiento/función. Asumiremos, por ahora, que es una variable.
+    BaseExpr := TVariableRef.Create(token, SrcPos);
   end;
+  //Busca si hay modificadores del operando ".", "[" o "^".
+  Result := ParseFieldAccess(BaseExpr);
 end;
 function TParser.ParseStringLiteral: TStringLiteral;
 var
@@ -651,86 +674,59 @@ var
 begin
   SrcPos := lex.GetSrcPos;
   ArrayType := TArrayTypeDef.Create;
-
-  if not ConsumeTok(tiARRAY, 'Se esperaba "array"') then
-  begin
+  if not ConsumeTok(tiARRAY, 'Se esperaba "array"') then begin
     ArrayType.Free;
     Exit(nil);
   end;
-
-  if tokIdent <> tiBRACK_OP then
-  begin
-    GenError('Se esperaba "[" después de "array"');
+  if not ConsumeTok(tiBRACK_OP, 'Se esperaba "[" después de "array"') then begin
     ArrayType.Free;
     Exit(nil);
   end;
-  Next;
-
-  while not HayError do
-  begin
+  while not HayError do begin
     LowExpr := ParseExpression;
     if HayError then Break;
-
-    if tokIdent <> tiDOTDOT then
-    begin
+    if tokIdent <> tiDOTDOT then begin
       GenError('Se esperaba ".." en el rango del arreglo');
       LowExpr.Free;
       ArrayType.Free;
       Exit(nil);
     end;
     Next;
-
     HighExpr := ParseExpression;
-    if HayError then
-    begin
+    if HayError then begin
       LowExpr.Free;
       ArrayType.Free;
       Exit(nil);
     end;
-
     ArrayType.AddRange(TArrayRange.Create(LowExpr, HighExpr, SrcPos));
-
     if tokIdent = tiCOMMA then
       Next
     else
       Break;
   end;
-
-  if tokIdent <> tiBRACK_CL then
-  begin
-    GenError('Se esperaba "]" después de los índices');
+  if not ConsumeTok(tiBRACK_CL, 'Se esperaba "]"') then begin
     ArrayType.Free;
     Exit(nil);
   end;
-  Next;
-
-  if not ConsumeTok(tiOF, 'Se esperaba "of"') then
-  begin
+  if not ConsumeTok(tiOF, 'Se esperaba "of"') then begin
     ArrayType.Free;
     Exit(nil);
   end;
-
   // Parsear el tipo de los elementos (puede ser cualquier tipo)
   // Aquí llamamos a ParseTypeDefinition recursivamente
   // Pero cuidado: podría causar recursión infinita con tipos mutuamente referenciados
   // Para simplificar, leemos el nombre del tipo o una definición inline
-
-  if lex.tokType = tkIdentifier then
-  begin
+  if lex.tokType = tkIdentifier then begin
     ArrayType.ElementTypeName := lex.token;
     Next;
-  end
-  else
-  begin
+  end else begin
     // Definición inline (ej: array[1..10] of record ... end)
     ArrayType.ElementTypeDef := ParseTypeDefinition;
-    if HayError then
-    begin
+    if HayError then begin
       ArrayType.Free;
       Exit(nil);
     end;
   end;
-
   Result := ArrayType;
 end;
 function TParser.ParseRecordTypeDef: TRecordTypeDef;

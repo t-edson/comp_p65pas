@@ -1,6 +1,11 @@
 program muestra; 
+type
+  typeName = array[1..2, 0..5,9..23] of char;
 begin
-  y := aaa.bbb;
+  y := aaa[5];
+//  y := aaa[i];
+//  y := fun(i);
+
 //  empleado.Evaluaciones[1] := 5;
 //  x := -1 + 2;
 //  aaa(12) := 1;

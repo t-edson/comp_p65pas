@@ -255,18 +255,20 @@ type  //Nodos de expresiones
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Acceso a arreglo: variable[index]
+
+  { TArrayIndex }
+
   TArrayIndex = class(TExpression)  // Hereda de TExpression
   private
-    FArrayVar: TVariableRef;   // La variable arreglo
-    FIndices: TExpressionList;  // Lista de índices (multidimensional)
+    FArrayVar: TExpression;    //La variable arreglo o expresión
+    FIndices: TExpressionList;  //Lista de índices (multidimensional)
   public
-    constructor Create(AArrayVar: TVariableRef; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
     procedure AddIndex(Index: TExpression);
-    property ArrayVar: TVariableRef read FArrayVar;
+    property ArrayVar: TExpression read FArrayVar;
     property Indices: TExpressionList read FIndices;
 
+    constructor Create(AArrayVar: TExpression; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
@@ -980,7 +982,11 @@ begin
   FRecordVar.PrintDebug(Indent + 4);
 end;
 // TArrayIndex
-constructor TArrayIndex.Create(AArrayVar: TVariableRef; const ASrcPos: TSrcPos);
+procedure TArrayIndex.AddIndex(Index: TExpression);
+begin
+  FIndices.Add(Index);
+end;
+constructor TArrayIndex.Create(AArrayVar: TExpression; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntArrayIndex, ASrcPos);
   FArrayVar := AArrayVar;
@@ -992,14 +998,10 @@ begin
   FIndices.Free;
   inherited Destroy;
 end;
-procedure TArrayIndex.AddIndex(Index: TExpression);
-begin
-  FIndices.Add(Index);
-end;
 function TArrayIndex.ToString: string;
 begin
   Result := Format('ArrayIndex: %s (%d indices)',
-                   [FArrayVar.Name, FIndices.Count]);
+                   [FArrayVar.ToString, FIndices.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 procedure TArrayIndex.PrintDebug(Indent: Integer);
@@ -1040,7 +1042,7 @@ begin
     ntVariableRef:
       TargetStr := TVariableRef(FTarget).Name;
     ntArrayIndex:
-      TargetStr := TArrayIndex(FTarget).ArrayVar.Name + '[...]';
+      TargetStr := TArrayIndex(FTarget).ArrayVar.ToString + '[...]';
     ntFieldAccess:
       TargetStr := TFieldAccess(FTarget).RecordVar.ToString + '.' +
                    TFieldAccess(FTarget).FieldName;
