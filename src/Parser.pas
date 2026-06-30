@@ -282,7 +282,7 @@ Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve
     ArrayAccess: TArrayIndex;
     PointerDeref: TPointerDeref;
   begin
-    if tokIdent = tiDOT then begin
+    if tokIdent = tiDOT then begin               //"." -> Campo
       Next;  // Consumir '.'
       if lex.tokType <> tkIdentifier then begin
         GenError('Se esperaba un nombre de campo');
@@ -298,7 +298,7 @@ Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve
       FieldAccess := TFieldAccess.Create(BaseExpr, FieldName, lex.GetSrcPos);
       //Busca más modificadores del operando
       Result := ParseModifiers(FieldAccess);
-    end else if tokIdent = tiBRACK_OP then begin  //"[" -> Arreglo
+    end else if tokIdent = tiBRACK_OP then begin //"[" -> Arreglo
       Next;  // Consumir '['
       //Crea nodo de arreglo a partir de la expresión base
       ArrayAccess := TArrayIndex.Create(BaseExpr, lex.GetSrcPos);
@@ -395,7 +395,7 @@ var
 begin
   SrcPos := lex.GetSrcPos;
   //Detecta el operador unario, si existe.
-  if tokIdent in [tiPLUS, tiMINUS, tiNOT] then begin
+  if tokIdent in [tiPLUS, tiMINUS, tiNOT, tiADDRESS] then begin
     UnaryOp := lex.token;
     Next;   //Consume al operador
     Expr := ParseFactor();  // Recursivo para manejar múltiples signos

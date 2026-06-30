@@ -3,6 +3,7 @@ type
   typeName = array[1..2, 0..5,9..23] of char;
   aaa = ^byte;
 begin
+  a := @aaa;
   if a > b then
     aaa
   else
