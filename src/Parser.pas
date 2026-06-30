@@ -263,93 +263,68 @@ begin
   Next;
 end;
 function TParser.ParseIdentifier: TExpression;
-{Extrae un identificador, en la posición actual del lexer. El identificador puede ser
-simple, como "var1", un arreglo, como "var1[<expresión>]", un método como "var_base.func"
-o puede ser una llamada a función, como "func1()".
+{Extrae un identificador, en la posición actual del lexer. El identificador puede ser:
+ - Un identificador simple, como "var1" o "func1".
+ - Una llamada a función, como "func1()".
+ - Un arreglo, como "var_array1[<expresión>]".
+ - Un método como "var_base1.func".
 Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve NIL.}
-  function ParseFieldAccess(BaseExpr: TExpression): TExpression;
+  function ParseModifiers(BaseExpr: TExpression): TExpression;
+  {Analiza la parte que sigue después del nombre de un identificador, en busca de
+  caracteres epseciales (".", "[" o "^") que modifican el significado del identificador.
+  El parámetro "BaseExpr" representa a la expresión base que puede ser la referencia a una
+  expresión sencilla como "var1" o puede ser una expresión elaborada como "aaa.bbb[i].ccc"
+  Si se produce algún error, devuelve NIL y destruye al objeto "BaseExpr".}
   var
     FieldName: string;
+    idxExpr: TExpression;
     FieldAccess: TFieldAccess;
-    Expr: TExpression;
     ArrayAccess: TArrayIndex;
+    PointerDeref: TPointerDeref;
   begin
     if tokIdent = tiDOT then begin
       Next;  // Consumir '.'
       if lex.tokType <> tkIdentifier then begin
         GenError('Se esperaba un nombre de campo');
+        BaseExpr.Destroy;
         Exit(nil);
       end;
       FieldName := lex.token;
       Next;  // Consumir el nombre del campo
+      //Aquí faltaría procesara los parámetros por si el método los incluye.
+      // if tokIdent = tiPAREN_OP ... como se hace más abajo
+      //
       // Crear el acceso a campo actual
       FieldAccess := TFieldAccess.Create(BaseExpr, FieldName, lex.GetSrcPos);
       //Busca más modificadores del operando
-      Result := ParseFieldAccess(FieldAccess);
-      if HayError then begin
-        FieldAccess.Destroy;
-        Exit(nil);
-      end;
+      Result := ParseModifiers(FieldAccess);
     end else if tokIdent = tiBRACK_OP then begin  //"[" -> Arreglo
-      //Leer variable base
+      Next;  // Consumir '['
+      //Crea nodo de arreglo a partir de la expresión base
       ArrayAccess := TArrayIndex.Create(BaseExpr, lex.GetSrcPos);
       // Parsear índices
       while not HayError do begin
-        lex.Next;  // Consumir '['
-        // Parsear el índice
-        ArrayAccess.AddIndex(ParseExpression);
-        if HayError then begin
-          ArrayAccess.Free;
-          Exit(nil);
-        end;
-        // Verificar cierre
-        if tokIdent <> tiBRACK_CL then begin
-          GenError('Se esperaba "]" para cerrar el índice');
-          ArrayAccess.Free;
-          Exit(nil);
-        end;
-        Next;  // Consumir ']'
-        // Verificar si hay más dimensiones
-        if tokIdent <> tiBRACK_OP then Break;
+        idxExpr := ParseExpression;
+        if HayError then Break;
+        ArrayAccess.AddIndex(idxExpr);
+        if tokIdent = tiCOMMA then Next else Break;
       end;
-      //Busca más modificadores del operando
-      Result := ParseFieldAccess(ArrayAccess);
       if HayError then begin
-        ArrayAccess.Destroy;
+        ArrayAccess.Destroy;  //Destruye también "BaseExpr".
         Exit(nil);
       end;
-
-//      if not ConsumeTok(tiBRACK_OP, 'Se esperaba "[" después de "array"') then begin
-//        ArrayType.Free;
-//        Exit(nil);
-//      end;
-//      while not HayError do begin
-//        LowExpr := ParseExpression;
-//        if HayError then Break;
-//        if tokIdent <> tiDOTDOT then begin
-//          GenError('Se esperaba ".." en el rango del arreglo');
-//          LowExpr.Free;
-//          ArrayType.Free;
-//          Exit(nil);
-//        end;
-//        Next;
-//        HighExpr := ParseExpression;
-//        if HayError then begin
-//          LowExpr.Free;
-//          ArrayType.Free;
-//          Exit(nil);
-//        end;
-//        ArrayType.AddRange(TArrayRange.Create(LowExpr, HighExpr, SrcPos));
-//        if tokIdent = tiCOMMA then
-//          Next
-//        else
-//          Break;
-//      end;
-//      if not ConsumeTok(tiBRACK_CL, 'Se esperaba "]"') then begin
-//        ArrayType.Free;
-//        Exit(nil);
-//      end;
-
+      if not ConsumeTok(tiBRACK_CL, 'Se esperaba "]"') then begin
+        ArrayAccess.Destroy;  //Destruye también "BaseExpr".
+        Exit(nil);
+      end;
+      //Busca más modificadores del operando
+      Result := ParseModifiers(ArrayAccess);
+    end else if tokIdent = tiPOINTER then begin  //"^" -> Puntero
+      Next;  // Consumir '^'
+      //Crea nodo de arreglo a partir de la expresión base
+      PointerDeref := TPointerDeref.Create(BaseExpr, lex.GetSrcPos);
+      //Busca más modificadores del operando
+      Result := ParseModifiers(PointerDeref);
     end else begin
       // No hay más niveles, retornar el acceso actual
       Result := BaseExpr;
@@ -395,7 +370,7 @@ begin
     BaseExpr := TVariableRef.Create(token, SrcPos);
   end;
   //Busca si hay modificadores del operando ".", "[" o "^".
-  Result := ParseFieldAccess(BaseExpr);
+  Result := ParseModifiers(BaseExpr);
 end;
 function TParser.ParseStringLiteral: TStringLiteral;
 var
@@ -1108,10 +1083,10 @@ begin
       //Target := TVariableRef.Create(token, SrcPos);
       Block.AddStatement(TAssignment.Create(Operand1, Value, Operand1.SrcPos));
     end;
-  end else if tokIdent = tiSEMIC  then begin
-    //Sigue ";", debe ser una llamada a procedimiento, arreglo o puntero.
+  end else if tokIdent in [tiSEMIC, tiELSE, tiEND] then begin
+    //Sigue un delimitador de instrucción ";", "else" o "end". Debe ser una llamada a
+    //procedimiento o función.
     Block.AddStatement(Operand1);
-    //*** Se podría validar si el operando puede ser realmente un proced. o función.
   end else begin
     GenError('Se esperaba ":=" o ";".', lex.GetSrcPos);
     Operand1.Destroy;
@@ -1126,29 +1101,24 @@ var
 begin
   SrcPos := lex.GetSrcPos;
   if not ConsumeTok(tiIF, 'Se esperaba "if"') then Exit;
-
   Condition := ParseExpression;
-
   if HayError then Exit;
-
   if not ConsumeTok(tiTHEN, 'Se esperaba "then"') then Exit;
-
-  // Then branch
+  // Rama THEN
   ThenBranch := TBlock.Create(lex.GetSrcPos);
   ParseStatement(ThenBranch);
-
   if HayError then Exit;
-
-  // Else branch (opcional)
+  // Rama Else opcional)
   if tokIdent = tiELSE then begin
     Next;
     ElseBranch := TBlock.Create(lex.GetSrcPos);
     ParseStatement(ElseBranch);
-  end else
+  end else begin
     ElseBranch := nil;
-
-  if not HayError then
+  end;
+  if not HayError then begin
     Block.AddStatement(TIfStatement.Create(Condition, ThenBranch, ElseBranch, SrcPos));
+  end;
 end;
 procedure TParser.ParseWhileLoop(var Block: TBlock);
 var

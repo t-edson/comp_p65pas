@@ -1,8 +1,15 @@
 program muestra; 
 type
   typeName = array[1..2, 0..5,9..23] of char;
+  aaa = ^byte;
 begin
-  y := aaa[5];
+  if a > b then
+    aaa
+  else
+    bbb;
+
+//  y := aaa.bbb[5];
+//  y := bbb.aaa(1);  *** Falta implementar
 //  y := aaa[i];
 //  y := fun(i);
 

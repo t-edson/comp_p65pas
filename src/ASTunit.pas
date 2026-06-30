@@ -3,19 +3,19 @@ unit ASTunit;
 interface
 uses
   SysUtils, Classes, fgl, alexiaLex;
-type
-  // Tipos de nodos
+type  // Tipos de nodos
   TASTNodeType = (
     //Nodos de expresiones
     ntVariableRef,   //Referencia a variable: x, valor, ...
-    ntNumberLiteral, //Literal numérico: 123, 456
-    ntBooleanLiteral, //Literal booleano: true, false
-    ntStringLiteral, //Literal de cadena: 'Hola'
+    ntNumberLiteral, //Literal numérico: 123, 456.
+    ntBooleanLiteral,//Literal booleano: true, false.
+    ntStringLiteral, //Literal de cadena: 'Hola'.
     ntBinaryOp,      //Operación binaria. Ej. En "a+b", la operación binaria es el "+".
-    ntUnaryOp,       //Operación unaria (un operando). Ej. -x, not a
-    ntFunctionCall,  //Llamada a función: max(a, b)
-    ntArrayIndex,    //Acceso a arreglo (variable[index])
-    ntFieldAccess,   // Acceso a campo (persona.nombre)
+    ntUnaryOp,       //Operación unaria (un operando). Ej. -x, not a.
+    ntFunctionCall,  //Llamada a función: max(a, b).
+    ntFieldAccess,   //Acceso a campo (persona.nombre).
+    ntPointerDeref,  //Acceso a dirección de puntero (p^).
+    ntArrayIndex,    //Acceso a arreglo (variable[index]).
     //Nodos de sentencias
     ntAssignment,    //Asignación de valor a variable.
     ntIfStatement,   //Condicional IF-THEN-ELSE.
@@ -254,11 +254,19 @@ type  //Nodos de expresiones
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
+  // Dereferencia de puntero: p^
+  TPointerDeref = class(TExpression)
+  private
+    FPointer: TExpression;  // La expresión que es un puntero
+  public
+    property Pointer: TExpression read FPointer;
+    constructor Create(APointer: TExpression; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
   // Acceso a arreglo: variable[index]
-
-  { TArrayIndex }
-
-  TArrayIndex = class(TExpression)  // Hereda de TExpression
+  TArrayIndex = class(TExpression)
   private
     FArrayVar: TExpression;    //La variable arreglo o expresión
     FIndices: TExpressionList;  //Lista de índices (multidimensional)
@@ -980,6 +988,28 @@ begin
   WriteLn(StringOfChar(' ', Indent), ToString);
   WriteLn(StringOfChar(' ', Indent + 2), 'Record variable:');
   FRecordVar.PrintDebug(Indent + 4);
+end;
+// TPointerDeref
+constructor TPointerDeref.Create(APointer: TExpression; const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntPointerDeref, ASrcPos);
+  FPointer := APointer;
+end;
+destructor TPointerDeref.Destroy;
+begin
+  FPointer.Free;
+  inherited;
+end;
+function TPointerDeref.ToString: string;
+begin
+  Result := Format('PointerDeref: %s^', [FPointer.ToString]);
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TPointerDeref.PrintDebug(Indent: Integer = 0);
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+  WriteLn(StringOfChar(' ', Indent + 2), 'Pointer:');
+  FPointer.PrintDebug(Indent + 4);
 end;
 // TArrayIndex
 procedure TArrayIndex.AddIndex(Index: TExpression);
