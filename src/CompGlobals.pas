@@ -11,6 +11,8 @@ const
   VER_PROG = '1.0.0-Beta';
 
 type
+
+
   { TAdicDeclar }
   {Define aditional declaration settings for variable. Depends on target CPU architecture.
   Each compiler will support only what fit to its architecture.}

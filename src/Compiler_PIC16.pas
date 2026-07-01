@@ -1082,7 +1082,7 @@ var
 begin
   if comp_level = clNull then exit;
   debugln('');
-  StartCountElapsed;  //Start timer
+  StartCountElapsed;     //Start timer
   DefCompiler;   //Debe hacerse solo una vez al inicio
   hexfile  := ChangeFileExt(mainFile, '.prg');     //Obtiene nombre
   hexfile  := hexFilePath;   //Expande nombre si es necesario
@@ -1093,10 +1093,10 @@ begin
     exit;  //sale directamente
   end;
   try
-    ejecProg := true;  //marca bandera
+    ejecProg := true;    //Marca bandera
     ClearError;
     //Genera instrucciones de inicio
-    lex.ClearContexts;       //elimina todos los Contextos de entrada
+    lex.ClearContexts;   //Elimina todos los Contextos de entrada
     //Compila el texto indicado
     if not lex.OpenContextFrom(mainFile) then begin
       //No lo encuentra
@@ -1113,15 +1113,15 @@ begin
     ast.srcDec := lex.GetSrcPos;
     //Continúa con preparación
 //    EndCountElapsed('** Setup in: ');
-//    StartCountElapsed;  //Start timer
+//    StartCountElapsed; //Start timer
     CreateSystemUnitInAST;  //Crea los elementos del sistema. 3ms aprox.
-    ClearMacros;           //Limpia las macros
+    ClearMacros;         //Limpia las macros
     //Initiate CPU
-    pic.dataAddr1 := -1;  //Reset flag
+    pic.dataAddr1 := -1; //Reset flag
     pic.MsjError := '';
     //Compila el archivo actual como programa o como unidad
-    pic.InitMemRAM;  //Init RAM and clear.
-    pic.iRam := 0;  //Ubica puntero al inicio.
+    pic.InitMemRAM;      //Init RAM and clear.
+    pic.iRam := 0;       //Ubica puntero al inicio.
     IsUnit := GetUnitDeclaration();
     DoAnalyze;
     if HayError then exit;

@@ -77,7 +77,7 @@ type  //TAstElement class
     Parent  : TAstElement;  //Reference to parent element
     idClass : TAstIDClass;  //To avoid use RTTI
     elements: TAstElements; //Container list for other elements
-    location: TElemLocation;  //Element location
+//    location: TElemLocation;  //Element location
     codCont : TAstCodeCont;  //Temporal field for Code container.
     property name: string read Fname write Setname;
     property uname: string read Funame;
@@ -1364,13 +1364,13 @@ sección INTERFACE. De esta forma se facilita la exploración de elementos públ
 var
   ele: TAstElement;
 begin
-  InterfaceElements.Clear;
-  //Solo basta explorar a un nivel
-  for ele in elements do begin
-    if ele.location = locInterface then begin
-       InterfaceElements.Add(ele);
-    end;
-  end;
+//  InterfaceElements.Clear;
+//  //Solo basta explorar a un nivel
+//  for ele in elements do begin
+//    if ele.location = locInterface then begin
+//       InterfaceElements.Add(ele);
+//    end;
+//  end;
 end;
 constructor TAstUnit.Create;
 begin

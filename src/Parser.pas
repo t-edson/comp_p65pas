@@ -10,8 +10,17 @@ interface
 uses
   Classes, SysUtils, Types, LazLogger, alexiaLex,
   CompGlobals, ASTunit;
-type
-{ TParser }
+type  //Declaraciones generales
+//Primary location for elements
+{Current location for scan. This tells the compiler where it's scanning. It useful because
+some declarations have to be interpreted in different ways according to the location.}
+TElemLocation = (
+              locMain,       //En el programa principal.
+              locInterface,  //En INTERFACE de una unidad.
+              locImplement   //En IMPLEMENTATION de una unidad.
+);
+
+type  //TParser
 {Clase base para crear a los objetos compiladores.
 Esta clase implementa al analizador sintáctico (Parser).}
 TParser = class
@@ -44,7 +53,7 @@ protected // Métodos auxiliares para el parser
   procedure SkipWhitesNoDirect;
   procedure Next;
   function ConsumeTok(tokId: TTokenIdent; const msgErr: string): boolean;
-private  // Expresiones
+private   // Expresiones
   function ParseNumberLiteral: TNumberLiteral;
   function ParseIdentifier: TExpression;
   function ParseStringLiteral: TStringLiteral;
@@ -52,7 +61,7 @@ private  // Expresiones
   function ParseTerm: TExpression;
   function ParseSimpleExpression: TExpression;
   function ParseExpression: TExpression;
-private  // Métodos auxiliares para las declaraciones
+private   // Métodos auxiliares para las declaraciones
   procedure ParseParameters(Params: TVarDeclList);
   function ParseSubrangeType: TSubrangeTypeDef;
   function ParseEnumType: TEnumTypeDef;
@@ -60,25 +69,26 @@ private  // Métodos auxiliares para las declaraciones
   function ParseRecordTypeDef: TRecordTypeDef;
   function ParsePointerType: TPointerTypeDef;
   function ParseTypeDefinition: TTypeDef;
-private  // Declaraciones
+private   // Declaraciones
   procedure ParseVarDeclaration(declars: TDeclarations);
   procedure ParseConstDeclaration(declars: TDeclarations);
   procedure ParseProcedureDeclaration(declars: TDeclarations);
   procedure ParseFunctionDeclaration(declars: TDeclarations);
   procedure ParseTypeDeclaration(declars: TDeclarations);
-private  // Instrucciones
+private   // Instrucciones
   procedure ParseAssigOrProcedureCall(var Block: TBlock);
   procedure ParseIfStatement(var Block: TBlock);
   procedure ParseWhileLoop(var Block: TBlock);
   procedure ParseForLoop(var Block: TBlock);
   procedure ParseRepeatUntil(var Block: TBlock);
+  function ParseCaseBranch: TCaseBranch;
   procedure ParseCaseStatement(var Block: TBlock);
-public   // Sentencia, bloque y programa
+public    // Sentencia, bloque y programa
   procedure ParseStatement(Body: TBlock);
   procedure ParseDeclarations(Declars: TDeclarations);
   procedure ParseBody(Body: TBlock);
   procedure ParseProgram;
-public   // Inicialización
+public    // Inicialización
   procedure Clear;  // Reinicia el compilador para un nuevo programa
   constructor Create(msg0: TMessageManager);
   destructor Destroy; override;
@@ -1217,63 +1227,136 @@ begin
   if not HayError then
     Block.AddStatement(TRepeatUntil.Create(Body, Condition, SrcPos));
 end;
+function TParser.ParseCaseBranch: TCaseBranch;
+var
+  Branch: TCaseBranch;
+  SrcPos: TSrcPos;
+  Expr: TExpression;
+  LowExpr, HighExpr: TExpression;
+begin
+  SrcPos := lex.GetSrcPos;
+  Branch := TCaseBranch.Create(SrcPos);
+  //Leer lista de constantes / rangos: 1, 3, 5..10, 15
+  while not HayError do begin
+    // CASO 1: Rango: 1..10
+    if tokIdent = tiDOTDOT then begin
+      // Rango sin límite inferior explícito? (error)
+      GenError('Se esperaba un valor antes de ".."');
+      Branch.Free;
+      Result := nil;
+      Exit;
+    end;
+    // Parsear el límite inferior
+    LowExpr := ParseExpression;
+    if HayError then begin
+      LowExpr.Free;
+      Branch.Free;
+      Result := nil;
+      Exit;
+    end;
+    // Verificar si es un rango: 1..10
+    if tokIdent = tiDOTDOT then begin
+      Next;  // Consumir '..'
+      // Parsear el límite superior
+      HighExpr := ParseExpression;
+      if HayError then begin
+        LowExpr.Free;
+        HighExpr.Free;
+        Branch.Free;
+        Result := nil;
+        Exit;
+      end;
+      // Crear un rango como una expresión binaria especial
+      // O podemos crear un nodo específico para rangos
+      // Por ahora, usamos TBinaryOp con operador '..'
+      Expr := TBinaryOp.Create('..', LowExpr, HighExpr, SrcPos);
+      Branch.AddConstant(Expr);
+    end else begin
+      // Es una constante individual
+      Branch.AddConstant(LowExpr);
+    end;
+    // Verificar si hay más elementos en la lista
+    if tokIdent = tiCOMMA then
+      Next  // Consumir coma y continuar
+    else
+      Break;  // No hay más elementos
+  end;
+  if HayError then begin
+    Branch.Free;
+    Result := nil;
+    Exit;
+  end;
+  // Verificar ':'
+  if tokIdent <> tiCOLON then begin
+    GenError('Se esperaba ":"');
+    Branch.Free;
+    Result := nil;
+    Exit;
+  end;
+  Next;  // Consumir ':'
+
+  // Parsear la instrucción
+  Branch.Statement := TBlock.Create(lex.GetSrcPos);
+  ParseStatement(Branch.Statement);
+  if HayError then begin
+    Branch.Free;
+    Result := nil;
+    Exit;
+  end;
+  Result := Branch;
+end;
 procedure TParser.ParseCaseStatement(var Block: TBlock);
-// CASE STATEMENT (Simplificado)
 var
   Selector: TExpression;
   CaseStmt: TCaseStatement;
   Branch: TCaseBranch;
-  SrcPos: TSrcPos;
   ElseBlock: TBlock;
+  SrcPos: TSrcPos;
 begin
   SrcPos := lex.GetSrcPos;
-  Next;  //Consume "CASE".
+  Next;  //Consume "CASE"
   Selector := ParseExpression;
-  if HayError then Exit;
-  if not ConsumeTok(tiOF, 'Se esperaba "of"') then Exit;
+  if HayError then begin
+    Selector.Free;
+    Exit;
+  end;
+  if not ConsumeTok(tiOF, 'Se esperaba "of"') then begin
+    Selector.Free;
+    Exit;
+  end;
   CaseStmt := TCaseStatement.Create(Selector, SrcPos);
-  // Parsear ramas
-  while not (HayError or (tokIdent = tiEND)) do begin
-    Branch := TCaseBranch.Create(lex.GetSrcPos);
-    //Abaliza cada rama
-    if tokIdent = tiELSE then begin
-      //Es la rama ELSE
-      Next;
-      ElseBlock := TBlock.Create(lex.GetSrcPos);
-      // Parsear la instrucción del ELSE
-      // Puede ser una sola instrucción o un bloque BEGIN...END
-      ParseStatement(ElseBlock);
-      if not HayError then
-        CaseStmt.ElseBranch := ElseBlock
-      else
-        ElseBlock.Free;
-    end else begin
-      // Leer constantes: 1, 2, 3:
-      while not HayError do begin
-        if lex.tokType <> tkLitNumber then begin
-          GenError('Se esperaba una constante en CASE');
-          Break;
-        end;
-        Branch.AddConstant(TNumberLiteral.Create(StrToInt(lex.token), lex.GetSrcPos));
-        Next;
-        if tokIdent = tiCOMMA then
-          Next
-        else
-          Break;
-      end;
-      if HayError then Break;
-      if not ConsumeTok(tiCOLON, 'Se esperaba ":"') then Break;
-      // Parsear instrucción
-      ParseStatement(Branch.Statement);
-      if not HayError then
-        CaseStmt.AddBranch(Branch);
-    end;
+  // Parsear ramas normales
+  while not (HayError or (tokIdent = tiEND) or (tokIdent = tiELSE)) do begin
+    Branch := ParseCaseBranch;
+    if not HayError then
+      CaseStmt.AddBranch(Branch)
+    else
+      Branch.Free;
   end;
-  if HayError then Exit;
-  ConsumeTok(tiEND, 'Se esperaba "end"');
-  if not HayError then begin
-    Block.AddStatement(CaseStmt);
+  if HayError then begin
+    CaseStmt.Free;
+    Exit;
   end;
+  // Parsear ELSE (opcional)
+  if tokIdent = tiELSE then begin
+    Next;  // Consumir 'else'
+    ElseBlock := TBlock.Create(lex.GetSrcPos);
+    ParseStatement(ElseBlock);
+    if not HayError then
+      CaseStmt.ElseBranch := ElseBlock
+    else
+      ElseBlock.Free;
+  end;
+  if HayError then begin
+    CaseStmt.Free;
+    Exit;
+  end;
+  // Verificar END
+  if not ConsumeTok(tiEND, 'Se esperaba "end"') then begin
+    CaseStmt.Free;
+    Exit;
+  end;
+  Block.AddStatement(CaseStmt);
 end;
 {$endregion}
 {$region "Sentencia, bloque y programa"}

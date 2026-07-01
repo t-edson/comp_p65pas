@@ -109,10 +109,10 @@ type  //Declaraciones y clases base para el AST
     FBody: TBlock;
   public
     property Name: string read FName write FName;
-    property Body: TBlock read FBody write FBody;
     property Parameters: TVarDeclList read FParameters;
-    procedure AddParameter(Param: TVarDecl);
     property Declarations: TDeclarations read FDeclarations;
+    property Body: TBlock read FBody write FBody;
+    procedure AddParameter(Param: TVarDecl);
   public
     procedure Clear;
     procedure PrintDebug(Indent: Integer = 0); override;
