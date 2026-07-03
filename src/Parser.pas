@@ -615,19 +615,14 @@ begin
     Result := nil;
     Exit;
   end;
-  Result := TSubrangeTypeDef.Create(LowExpr, HighExpr);
+  Result := TSubrangeTypeDef.Create(LowExpr, HighExpr, lex.GetSrcPos);
 end;
 function TParser.ParseEnumType: TEnumTypeDef;
 var
   EnumType: TEnumTypeDef;
 begin
-  if tokIdent <> tiPAREN_OP then begin
-    GenError('Se esperaba "(" para el enumerado');
-    Result := nil;
-    Exit;
-  end;
-  Next;
-  EnumType := TEnumTypeDef.Create;
+  Next;     //Consume "("
+  EnumType := TEnumTypeDef.Create(lex.GetSrcPos);
   while not HayError do begin
     if lex.tokType <> tkIdentifier then begin
       GenError('Se esperaba un identificador en el enumerado');
@@ -658,11 +653,8 @@ var
   SrcPos: TSrcPos;
 begin
   SrcPos := lex.GetSrcPos;
-  ArrayType := TArrayTypeDef.Create;
-  if not ConsumeTok(tiARRAY, 'Se esperaba "array"') then begin
-    ArrayType.Free;
-    Exit(nil);
-  end;
+  ArrayType := TArrayTypeDef.Create(SrcPos);
+  Next;     //Consume ARRAY
   if not ConsumeTok(tiBRACK_OP, 'Se esperaba "[" después de "array"') then begin
     ArrayType.Free;
     Exit(nil);
@@ -722,7 +714,7 @@ var
   i: Integer;
 begin
   SrcPos := lex.GetSrcPos;
-  RecordType := TRecordTypeDef.Create;
+  RecordType := TRecordTypeDef.Create(SrcPos);
   Next;  //Toma el token "RECORD"
   while not (HayError or (tokIdent = tiEND)) do begin
     NamesList.Clear;
@@ -784,12 +776,7 @@ function TParser.ParsePointerType: TPointerTypeDef;
 var
   TargetTypeName: string;
 begin
-  if tokIdent <> tiPOINTER then begin
-    GenError('Se esperaba "^" para puntero');
-    Result := nil;
-    Exit;
-  end;
-  Next;
+  Next;   //Consume "^"
   if lex.tokType <> tkIdentifier then begin
     GenError('Se esperaba el tipo al que apunta el puntero');
     Result := nil;
@@ -797,7 +784,7 @@ begin
   end;
   TargetTypeName := lex.token;
   Next;
-  Result := TPointerTypeDef.Create(TargetTypeName);
+  Result := TPointerTypeDef.Create(TargetTypeName, lex.GetSrcPos);
 end;
 function TParser.ParseTypeDefinition: TTypeDef;
 var
@@ -805,34 +792,34 @@ var
   TypeName: string;
 begin
   SrcPos := lex.GetSrcPos;
-  // 1. Tipo simple (integer, byte, TPersona, etc.)
+  // 1. Alias: = integer, byte, TPersona, etc.
   if lex.tokType = tkIdentifier then begin
     TypeName := lex.token;
     Next;
-    Result := TSimpleTypeDef.Create(TypeName);
+    Result := TAliasTypeDef.Create(TypeName, SrcPos);
     Exit;
   end;
-  // 2. Subrango: 1..10, 'a'..'z'
+  // 2. Subrango:  = 1..10, 'a'..'z'
   if lex.tokType in [tkLitNumber, tkString] then begin
     Result := ParseSubrangeType;
     Exit;
   end;
-  // 3. Enumerado: (Rojo, Verde, Azul)
+  // 3. Enumerado: = (Rojo, Verde, Azul)
   if tokIdent = tiPAREN_OP then begin
     Result := ParseEnumType;
     Exit;
   end;
-  // 4. Arreglo: array[1..10] of integer
+  // 4. Arreglo: = array[1..10] of integer
   if tokIdent = tiARRAY then begin
     Result := ParseArrayTypeDef;
     Exit;
   end;
-  // 5. Registro: record ... end
+  // 5. Registro: = record ... end
   if tokIdent = tiRECORD then begin
     Result := ParseRecordTypeDef;
     Exit;
   end;
-  // 6. Puntero: ^integer
+  // 6. Puntero: = ^integer
   if tokIdent = tiPOINTER then begin
     Result := ParsePointerType;
     Exit;
@@ -870,7 +857,7 @@ var
   DataTypeName: string;
   i: Integer;
 begin
-  Next;  //Pasa al siguiente token.
+  Next;  //Consume VAR
   repeat
     //Lee un bloque de declaraciones: VAR a, b, c: byte;
     ReadNamesList;
@@ -1042,15 +1029,11 @@ procedure TParser.ParseTypeDeclaration(declars: TDeclarations);
 var
   TypeName: string;
   TypeDef: TTypeDef;
-  SrcPos: TSrcPos;
-  TypeDecl: TTypeDecl;
 begin
-  if not ConsumeTok(tiTYPE, 'Se esperaba "type"') then
-    Exit;
+  Next;  //Consume TYPE
   while not HayError do begin
     if lex.tokType <> tkIdentifier then
       Break;  // No hay más declaraciones de tipo
-    SrcPos := lex.GetSrcPos;
     TypeName := lex.token;
     Next;
     if tokIdent <> tiEQUAL then begin
@@ -1063,8 +1046,8 @@ begin
       TypeDef.Free;
       Break;
     end;
-    TypeDecl := TTypeDecl.Create(TypeName, TypeDef, SrcPos);
-    declars.Add(TypeDecl);
+    TypeDef.TypeName := TypeName;
+    declars.Add(TypeDef);        //Agrega la declaración
     if tokIdent = tiSEMIC then  // ";"
       Next
     else

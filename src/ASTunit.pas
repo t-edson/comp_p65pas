@@ -29,13 +29,19 @@ type  // Tipos de nodos
     ntVarDecl,       //Declaración de variable: var x: byte;
     ntConstDecl,     //Declaración de constantes: const PI=3;
     ntProcDecl,      //Declaración de procedimiento: procedure algo; begin ... end;
-    ntFunction,      //Declaración de función.
+    ntFunctDecl,      //Declaración de función.
     ntParamDecl,     //Parámetro de procedimiento/función: var x: byte
-    ntTypeDecl,      //Declaración de tipo: type mi_tipo = byte;
-    ntArrayType,     //Declaración de tipo arreglo
+    //Nodos auxiliares para declaraciones de tipos
     ntArrayRange,    //Rango de arreglo (1..10)
-    ntRecordType,    //Declaración de tipo RECORD
-    ntFieldDecl,     //Declaración de campo dentro de un RECORD
+    ntFieldDecl,     //Campo dentro de un RECORD
+    //Nodos de declaraciones de tipos
+    ntSimpleType,    //Tipo simple, ya predefinido por el sistema.
+    ntSubrangeType,  //Subrango
+    ntEnumType,      //Enumerado
+    ntArrayType,     //Tipo arreglo
+    ntRecordType,    //Tipo RECORD
+    ntPointerType,   //Puntero
+    ntAliasType,     //Alias
     //Nodos estructurales
     ntProgram,       //Nodo raíz del programa completo: program MiPrograma;
     ntDeclarations,  //Sección de declaraciones de variables, tipos, o procedimientos.
@@ -63,7 +69,6 @@ type  //Declaraciones y clases base para el AST
   TCaseBranch = class;
   TProcDecl = class;
   TFunctDecl = class;
-  TTypeDef = class;
   TDeclarations = class;
 
   // Listas genéricas especializadas
@@ -74,7 +79,7 @@ type  //Declaraciones y clases base para el AST
   TExpressionList = specialize TFPGObjectList<TExpression>;
   TCaseBranchList = specialize TFPGObjectList<TCaseBranch>;
 
-  // Nodo base abstracto
+  // Nodo base (clase abstracta)
   TASTNode = class
   private
     FNodeType: TASTNodeType;
@@ -98,8 +103,7 @@ type  //Declaraciones y clases base para el AST
     constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
   end;
 
-  { TCodeContainer }
-  {Clase base para contenedores de código (procedimientos, funciones y programa
+  {Clase abstracta base para contenedores de código (procedimientos, funciones y programa
   principal)}
   TCodeContainer = class(TASTNode)
   private
@@ -464,17 +468,19 @@ type  //Nodos de declaraciones
     constructor Create(const AName: string; const ASrcPos: TSrcPos);
   end;
 type  //Definiciones previas para declaraciones de tipos
-  //Categoría de tipos
-  TTypeKind = (
-    tkSimple,      //Tipo simple (integer, byte, etc.)
-    tkSubrange,    //Subrango (1..10)
-    tkEnum,        //Enumerado (Rojo, Verde, Azul)
-    tkArray,       //Arreglo (array[1..10] of integer)
-    tkRecord,      //Registro (record ... end)
-    tkPointer,     //Puntero (^integer)
-    tkAlias        //Alias (type TEdad = integer)
-  );
-  { TArrayRange }
+  //Clase base para las declaraciones de tipo
+  TTypeDef = class(TASTnode)
+    private
+      FTypeName: string;  // Nombre del tipo (para tipos simples o alias)
+    public
+      property TypeName: string read FTypeName write FTypeName;
+    public  //Inicialización y depuración
+      constructor Create(ANodeType: TASTNodeType; const ATypeName: string;
+          const ASrcPos: TSrcPos);
+      function ToString: string; override;
+      procedure PrintDebug(Indent: Integer = 0); override;
+    end;
+
   // Rango de arreglo (1..10, 'a'..'z', etc.)
   TArrayRange = class(TASTNode)
   private
@@ -491,6 +497,7 @@ type  //Definiciones previas para declaraciones de tipos
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
   TArrayRangeList = specialize TFPGObjectList<TArrayRange>;
+
   // Definición de campo (para registros)
   // ============================================================
   TFieldDef = class
@@ -513,28 +520,14 @@ type  //Definiciones previas para declaraciones de tipos
   end;
   TFieldDefList = specialize TFPGObjectList<TFieldDef>;
 
-  //Clase base para las declaraciones de tipo
-  TTypeDef = class
-    private
-      FTypeKind: TTypeKind;
-      FTypeName: string;  // Nombre del tipo (para tipos simples o alias)
-    public
-      constructor Create(ATypeKind: TTypeKind; const ATypeName: string = '');
-
-      property TypeKind: TTypeKind read FTypeKind;
-      property TypeName: string read FTypeName write FTypeName;
-
-      function ToString: string; virtual;
-      procedure PrintDebug(Indent: Integer = 0); virtual;
-    end;
 type  //Nodos de declaraciones de tipos
-  // Tipo simple (integer, byte, boolean, etc.)
+  // Declaración de tipos pedefinidos (integer, byte, boolean, etc.)
+  {Este nodo representa a una supuesta definición de los tipos básicos, que se supone ya
+  están definidos. No se creará por códio.}
   TSimpleTypeDef = class(TTypeDef)
   public
-    constructor Create(const ATypeName: string);
-
+    constructor Create(const ATypeName: string; const ASrcPos: TSrcPos);
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Subrango (1..10, 'a'..'z')
   TSubrangeTypeDef = class(TTypeDef)
@@ -542,7 +535,7 @@ type  //Nodos de declaraciones de tipos
     FLowExpr: TExpression;
     FHighExpr: TExpression;
   public
-    constructor Create(ALowExpr, AHighExpr: TExpression);
+    constructor Create(ALowExpr, AHighExpr: TExpression; const ASrcPos: TSrcPos);
     destructor Destroy; override;
 
     property LowExpr: TExpression read FLowExpr;
@@ -556,7 +549,7 @@ type  //Nodos de declaraciones de tipos
   private
     FValues: TStringList;  // Lista de nombres de valores
   public
-    constructor Create;
+    constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
 
     procedure AddValue(const Value: string);
@@ -569,10 +562,13 @@ type  //Nodos de declaraciones de tipos
   TAliasTypeDef = class(TTypeDef)
   private
     FBaseTypeName: string;
+    FBaseTypeDef: TTypeDef;
   public
-    constructor Create(const ABaseTypeName: string);
+    constructor Create(const ABaseTypeName: string; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
 
     property BaseTypeName: string read FBaseTypeName;
+    property BaseTypeDef: TTypeDef read FBaseTypeDef write FBaseTypeDef;
 
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
@@ -584,24 +580,22 @@ type  //Nodos de declaraciones de tipos
     FElementTypeName: string;
     FElementTypeDef: TTypeDef;  // Para tipos definidos inline
   public
-    constructor Create;
-    destructor Destroy; override;
-
     procedure AddRange(Range: TArrayRange);
     property IndexRanges: TArrayRangeList read FIndexRanges;
     property ElementTypeName: string read FElementTypeName write FElementTypeName;
     property ElementTypeDef: TTypeDef read FElementTypeDef write FElementTypeDef;
-
+  public  //Inicialización y depuración
+    constructor Create(const ASrcPos: TSrcPos);
+    destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Registro (record ... end)
-  // ============================================================
   TRecordTypeDef = class(TTypeDef)
   private
     FFields: TFieldDefList;  // Lista de TFieldDef
   public
-    constructor Create;
+    constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
 
     procedure AddField(Field: TFieldDef);
@@ -617,28 +611,11 @@ type  //Nodos de declaraciones de tipos
     FTargetTypeName: string;
     FTargetTypeDef: TTypeDef;  // Para tipos definidos inline
   public
-    constructor Create(const ATargetTypeName: string);
+    constructor Create(const ATargetTypeName: string; const ASrcPos: TSrcPos);
     destructor Destroy; override;
 
     property TargetTypeName: string read FTargetTypeName;
     property TargetTypeDef: TTypeDef read FTargetTypeDef write FTargetTypeDef;
-
-    function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
-  end;
-  { TTypeDecl }
-  // Declaración de tipo (TTypeDecl actualizado)
-  // ============================================================
-  TTypeDecl = class(TASTNode)
-  private
-    FName: string;
-    FTypeDef: TTypeDef;  // ← AHORA es un objeto estructurado
-  public
-    constructor Create(const AName: string; ATypeDef: TTypeDef; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
-    property Name: string read FName;
-    property TypeDef: TTypeDef read FTypeDef;
 
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
@@ -1377,7 +1354,7 @@ begin
 end;
 constructor TFunctDecl.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntFunction, ASrcPos);
+  inherited Create(ntFunctDecl, ASrcPos);
   FName := AName;
   //Para simplificar el análisis sintáctico, conviene que el tipo de retorno se actualice
   //después de leer los parámetros por eso no se incluye en el constructor.
@@ -1446,14 +1423,15 @@ begin
     FTypeDef.PrintDebug(Indent + 2);
 end;
 // TTypeDef
-constructor TTypeDef.Create(ATypeKind: TTypeKind; const ATypeName: string);
+constructor TTypeDef.Create(ANodeType: TASTNodeType; const ATypeName: string;
+                            const ASrcPos: TSrcPos);
 begin
-  FTypeKind := ATypeKind;
+  inherited Create(ANodeType, ASrcPos);
   FTypeName := ATypeName;
 end;
 function TTypeDef.ToString: string;
 begin
-  Result := Format('TypeDef(%d)', [Ord(FTypeKind)]);
+  Result := Format('TypeDef(%d): %s', [Ord(NodeType), FTypeName]);
 end;
 procedure TTypeDef.PrintDebug(Indent: Integer = 0);
 begin
@@ -1462,22 +1440,19 @@ end;
 {$endregion}
 {$region "Nodos de declaraciones de tipos"}
 // TSimpleTypeDef
-constructor TSimpleTypeDef.Create(const ATypeName: string);
+constructor TSimpleTypeDef.Create(const ATypeName: string; const ASrcPos: TSrcPos);
 begin
-  inherited Create(tkSimple, ATypeName);
+  inherited Create(ntSimpleType, ATypeName, ASrcPos);
 end;
 function TSimpleTypeDef.ToString: string;
 begin
   Result := Format('SimpleType: %s', [FTypeName]);
 end;
-procedure TSimpleTypeDef.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-end;
 // TSubrangeTypeDef
-constructor TSubrangeTypeDef.Create(ALowExpr, AHighExpr: TExpression);
+constructor TSubrangeTypeDef.Create(ALowExpr, AHighExpr: TExpression;
+  const ASrcPos: TSrcPos);
 begin
-  inherited Create(tkSubrange);
+  inherited Create(ntSubrangeType, '', ASrcPos);
   FLowExpr := ALowExpr;
   FHighExpr := AHighExpr;
 end;
@@ -1501,9 +1476,9 @@ begin
   FHighExpr.PrintDebug(Indent + 4);
 end;
 // TEnumTypeDef
-constructor TEnumTypeDef.Create;
+constructor TEnumTypeDef.Create(const ASrcPos: TSrcPos);
 begin
-  inherited Create(tkEnum);
+  inherited Create(ntEnumType, '', ASrcPos);
   FValues := TStringList.Create;
 end;
 destructor TEnumTypeDef.Destroy;
@@ -1529,10 +1504,15 @@ begin
     WriteLn(StringOfChar(' ', Indent + 4), FValues[i]);
 end;
 // TAliasTypeDef
-constructor TAliasTypeDef.Create(const ABaseTypeName: string);
+constructor TAliasTypeDef.Create(const ABaseTypeName: string;
+  const ASrcPos: TSrcPos);
 begin
-  inherited Create(tkAlias);
+  inherited Create(ntAliasType, '', ASrcPos);
   FBaseTypeName := ABaseTypeName;
+end;
+destructor TAliasTypeDef.Destroy;
+begin
+  inherited Destroy;
 end;
 function TAliasTypeDef.ToString: string;
 begin
@@ -1543,9 +1523,13 @@ begin
   WriteLn(StringOfChar(' ', Indent), ToString);
 end;
 // TArrayTypeDef
-constructor TArrayTypeDef.Create;
+procedure TArrayTypeDef.AddRange(Range: TArrayRange);
 begin
-  inherited Create(tkArray);
+  FIndexRanges.Add(Range);
+end;
+constructor TArrayTypeDef.Create(const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntArrayType, '', ASrcPos);
   FIndexRanges := TArrayRangeList.Create(True);
   FElementTypeName := '';
   FElementTypeDef := nil;
@@ -1556,17 +1540,15 @@ begin
   FElementTypeDef.Free;
   inherited;
 end;
-procedure TArrayTypeDef.AddRange(Range: TArrayRange);
-begin
-  FIndexRanges.Add(Range);
-end;
 function TArrayTypeDef.ToString: string;
 var
   typName: String;
 begin
-  if FElementTypeDef <> nil then typName := FElementTypeDef.TypeName
-  else typName:= FElementTypeName;
-  Result := Format('Array: [%d dims] of %s', [FIndexRanges.Count, typName]);
+  if FElementTypeDef <> nil then
+    typName := FElementTypeDef.TypeName
+  else
+    typName := FElementTypeName;
+  Result := Format('ArrayType: [%d dims] of %s', [FIndexRanges.Count, typName]);
 end;
 procedure TArrayTypeDef.PrintDebug(Indent: Integer = 0);
 var
@@ -1576,15 +1558,14 @@ begin
   WriteLn(StringOfChar(' ', Indent + 2), 'Index ranges:');
   for i := 0 to FIndexRanges.Count - 1 do
     FIndexRanges[i].PrintDebug(Indent + 4);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Element type: ',
-           FElementTypeName);
+  WriteLn(StringOfChar(' ', Indent + 2), 'Element type: ', FElementTypeName);
   if FElementTypeDef <> nil then
     FElementTypeDef.PrintDebug(Indent + 4);
 end;
 // TRecordTypeDef
-constructor TRecordTypeDef.Create;
+constructor TRecordTypeDef.Create(const ASrcPos: TSrcPos);
 begin
-  inherited Create(tkRecord);
+  inherited Create(ntRecordType, '', ASrcPos);
   FFields := TFieldDefList.Create(True);
 end;
 destructor TRecordTypeDef.Destroy;
@@ -1610,9 +1591,10 @@ begin
     FFields[i].PrintDebug(Indent + 4);
 end;
 // TPointerTypeDef
-constructor TPointerTypeDef.Create(const ATargetTypeName: string);
+constructor TPointerTypeDef.Create(const ATargetTypeName: string;
+  const ASrcPos: TSrcPos);
 begin
-  inherited Create(tkPointer);
+  inherited Create(ntPointerType, '', ASrcPos);
   FTargetTypeName := ATargetTypeName;
   FTargetTypeDef := nil;
 end;
@@ -1631,28 +1613,6 @@ begin
   WriteLn(StringOfChar(' ', Indent + 2), 'Target type: ', FTargetTypeName);
   if FTargetTypeDef <> nil then
     FTargetTypeDef.PrintDebug(Indent + 4);
-end;
-// TTypeDecl
-constructor TTypeDecl.Create(const AName: string; ATypeDef: TTypeDef; const ASrcPos: TSrcPos);
-begin
-  inherited Create(ntTypeDecl, ASrcPos);
-  FName := AName;
-  FTypeDef := ATypeDef;
-end;
-destructor TTypeDecl.Destroy;
-begin
-  FTypeDef.Free;
-  inherited;
-end;
-function TTypeDecl.ToString: string;
-begin
-  Result := Format('TypeDecl: %s = %s', [FName, FTypeDef.ToString]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TTypeDecl.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  FTypeDef.PrintDebug(Indent + 2);
 end;
 {$endregion}
 {$region "Nodos estructurales"}

@@ -1,5 +1,22 @@
 program muestra; 
 type
+  { Tipos básicos }
+  TEdad = 0..99;
+  TColor = (Rojo, Verde, Azul);
+  TEstado = (Activo, Inactivo, Pendiente);
+  
+  { Arreglos }
+  TLista = array[1..10] of integer;
+  TMatriz = array[1..3, 1..3] of integer;
+  TTabla = array['a'..'z'] of integer;
+  
+  { Registros }
+  TPersona = record
+    Nombre: string;
+    Edad: TEdad;
+    ColorFav: TColor;
+    Activo: boolean;
+  end;
   typeName = array[1..2, 0..5,9..23] of char;
   aaa = ^byte;
 procedure Sumar(a, b: integer; var resultado: integer);
@@ -9,7 +26,7 @@ begin
 end;
   
 begin
-  a := @aaa;
+  a := 'aaa';
   if a > b then aaa 
   else bbb;
 //  case a of 
