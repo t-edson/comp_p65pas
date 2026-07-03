@@ -25,6 +25,8 @@ type  // Tipos de nodos
     ntForLoop,       //Bucle FOR-TO/DOWNTO-DO.
     ntCaseStatement, //Estructura CASE.
     ntCaseBranch,    //Rama individual de un CASE.
+    ntWithStatement, //Estructura WITH ... DO
+    ntExitStatement, //Instrucción EXIT
     //Nodos de declaraciones
     ntVarDecl,       //Declaración de variable: var x: byte;
     ntConstDecl,     //Declaración de constantes: const PI=3;
@@ -362,17 +364,16 @@ type  //Nodos de sentencias
     FEndExpr: TExpression;
     FBody: TBlock;
   public
-    constructor Create(AControlVar: TVariableRef; ADirection: TForDirection;
-                       AStartExpr, AEndExpr: TExpression; ABody: TBlock;
-                       const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
     property ControlVar: TVariableRef read FControlVar;
     property Direction: TForDirection read FDirection;
     property StartExpr: TExpression read FStartExpr;
     property EndExpr: TExpression read FEndExpr;
     property Body: TBlock read FBody;
-
+  public  //Inicialización y depuración
+    constructor Create(AControlVar: TVariableRef; ADirection: TForDirection;
+                       AStartExpr, AEndExpr: TExpression; ABody: TBlock;
+                       const ASrcPos: TSrcPos);
+    destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
@@ -410,7 +411,35 @@ type  //Nodos de sentencias
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
-
+  // Nodo para WITH
+  TWithStatement = class(TASTNode)
+  private
+    FRecordVar: TExpression;  // La variable registro (puede ser campo o arreglo)
+    FBody: TBlock;            // El cuerpo del WITH
+  public
+    property RecordVar: TExpression read FRecordVar;
+    property Body: TBlock read FBody;
+  public  //Inicialización y depuración
+    constructor Create(ARecordVar: TExpression; ABody: TBlock;
+                       const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+  // Nodo para la instrucción EXIT
+  TExitStatement = class(TASTNode)
+  private
+    FReturnValue: TExpression;  // Valor de retorno (opcional, solo para funciones)
+  public
+    property ReturnValue: TExpression read FReturnValue;
+    function HasReturnValue: Boolean;
+  public  //Inicialización y depuración
+    constructor Create(const ASrcPos: TSrcPos); overload;
+    constructor Create(AReturnValue: TExpression; const ASrcPos: TSrcPos); overload;
+    destructor Destroy; override;
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
 type  //Nodos de declaraciones
   // Declaraciones de variables
   TVarDecl = class(TASTNode)
@@ -1270,6 +1299,72 @@ begin
     FStatement.PrintDebug(Indent + 4)
   else
     WriteLn(StringOfChar(' ', Indent + 4), '(empty)');
+end;
+// TWithStatement
+constructor TWithStatement.Create(ARecordVar: TExpression; ABody: TBlock;
+                                  const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntWithStatement, ASrcPos);
+  FRecordVar := ARecordVar;
+  FBody := ABody;
+end;
+destructor TWithStatement.Destroy;
+begin
+  FRecordVar.Free;
+  FBody.Free;
+  inherited;
+end;
+function TWithStatement.ToString: string;
+begin
+  Result := Format('WithStatement: %s', [FRecordVar.ToString]);
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TWithStatement.PrintDebug(Indent: Integer = 0);
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+  WriteLn(StringOfChar(' ', Indent + 2), 'Record variable:');
+  FRecordVar.PrintDebug(Indent + 4);
+  WriteLn(StringOfChar(' ', Indent + 2), 'Body:');
+  FBody.PrintDebug(Indent + 4);
+end;
+// TExitStatement
+function TExitStatement.HasReturnValue: Boolean;
+begin
+  Result := FReturnValue <> nil;
+end;
+constructor TExitStatement.Create(const ASrcPos: TSrcPos);
+// Constructor sin valor de retorno (procedimiento)
+begin
+  inherited Create(ntExitStatement, ASrcPos);
+  FReturnValue := nil;
+end;
+constructor TExitStatement.Create(AReturnValue: TExpression; const ASrcPos: TSrcPos);
+// Constructor con valor de retorno (función)
+begin
+  inherited Create(ntExitStatement, ASrcPos);
+  FReturnValue := AReturnValue;
+end;
+destructor TExitStatement.Destroy;
+begin
+  FReturnValue.Free;
+  inherited;
+end;
+function TExitStatement.ToString: string;
+begin
+  if HasReturnValue then
+    Result := Format('ExitStatement: return %s', [FReturnValue.ToString])
+  else
+    Result := 'ExitStatement';
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TExitStatement.PrintDebug(Indent: Integer = 0);
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+  if HasReturnValue then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Return value:');
+    FReturnValue.PrintDebug(Indent + 4);
+  end;
 end;
 {$endregion}
 {$region "Nodos de declaraciones"}

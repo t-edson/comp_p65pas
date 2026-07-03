@@ -83,6 +83,8 @@ private   // Instrucciones
   procedure ParseRepeatUntil(var Block: TBlock);
   function ParseCaseBranch: TCaseBranch;
   procedure ParseCaseStatement(var Block: TBlock);
+  procedure ParseWithStatement(var Block: TBlock);
+  procedure ParseExitStatement(var Block: TBlock);
 public    // Sentencia, bloque y programa
   procedure ParseStatement(Body: TBlock);
   procedure ParseDeclarations(Declars: TDeclarations);
@@ -422,10 +424,10 @@ begin
     Result := ParseIdentifier;
   end else if lex.tokType = tkString then begin
     Result := ParseStringLiteral
-  end else if CompareText(lex.token, 'true')=0 then begin
+  end else if tokIdent = tiTRUE then begin
     Next;
     Result := TBooleanLiteral.Create(True, SrcPos);
-  end else if CompareText(lex.token, 'false')=0 then begin
+  end else if tokIdent = tiFALSE then begin
     Next;
     Result := TBooleanLiteral.Create(False, SrcPos);
   end else if tokIdent = tiPAREN_OP then begin  //'('
@@ -1341,6 +1343,64 @@ begin
   end;
   Block.AddStatement(CaseStmt);
 end;
+procedure TParser.ParseWithStatement(var Block: TBlock);
+var
+  SrcPos: TSrcPos;
+  RecordVar: TExpression;
+  Body: TBlock;
+begin
+  SrcPos := lex.GetSrcPos;
+  if not ConsumeTok(tiWITH, 'Se esperaba "with"') then Exit;
+  // Parsear la variable registro (puede ser compuesta)
+  // Ejemplos: persona, persona.nombre, personas[i], empleado.persona
+  RecordVar := ParseExpression;
+  if HayError then begin
+    RecordVar.Free;
+    Exit;
+  end;
+  // Verificar 'do'
+  if not ConsumeTok(tiDO, 'Se esperaba "do" después de "with"') then begin
+    RecordVar.Free;
+    Exit;
+  end;
+  // Parsear el cuerpo
+  Body := TBlock.Create(lex.GetSrcPos);
+  ParseStatement(Body);
+  if HayError then begin
+    RecordVar.Free;
+    Body.Free;
+    Exit;
+  end;
+  Block.AddStatement(TWithStatement.Create(RecordVar, Body, SrcPos));
+end;
+procedure TParser.ParseExitStatement(var Block: TBlock);
+var
+  SrcPos: TSrcPos;
+  ReturnValue: TExpression;
+  ExitStmt: TExitStatement;
+begin
+  SrcPos := lex.GetSrcPos;
+  if not ConsumeTok(tiEXIT, 'Se esperaba "exit"') then Exit;
+  // Verificar si hay valor de retorno entre paréntesis
+  if tokIdent = tiPAREN_OP then begin
+    // Exit(5); → función con valor de retorno
+    Next;  // Consumir '('
+    ReturnValue := ParseExpression;
+    if HayError then begin
+      ReturnValue.Free;
+      Exit;
+    end;
+    if not ConsumeTok(tiPAREN_CL, 'Se esperaba ")"') then begin
+      ReturnValue.Free;
+      Exit;
+    end;
+    ExitStmt := TExitStatement.Create(ReturnValue, SrcPos);
+  end else begin
+    // Exit; → procedimiento o función sin valor
+    ExitStmt := TExitStatement.Create(SrcPos);
+  end;
+  Block.AddStatement(ExitStmt);
+end;
 {$endregion}
 {$region "Sentencia, bloque y programa"}
 procedure TParser.ParseStatement(Body: TBlock);
@@ -1349,7 +1409,10 @@ begin
     Body := TBlock.Create(lex.GetSrcPos);
   end;
   // Identificar el tipo de instrucción
-  if lex.tokType = tkIdentifier then begin
+  if tokIdent = tiEXIT then begin
+    //Se valida primero porque "exit" es también un identificador.
+    ParseExitStatement(Body)
+  end else if lex.tokType = tkIdentifier then begin
     //Puede ser una asignación o una llamada a procedimiento.
     ParseAssigOrProcedureCall(Body);
   end else if tokIdent = tiIF then begin
@@ -1362,6 +1425,8 @@ begin
     ParseRepeatUntil(Body)
   end else if tokIdent = tiCASE then begin
     ParseCaseStatement(Body)
+  end else if tokIdent = tiWITH then begin
+    ParseWithStatement(Body)
   end else if tokIdent = tiBEGIN then begin
     // Bloque anidado - se convierte en parte del bloque actual
     ParseBody(Body);
