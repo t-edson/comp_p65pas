@@ -3,13 +3,14 @@ unit ASTunit;
 interface
 uses
   SysUtils, Classes, fgl, alexiaLex;
-type  // Tipos de nodos
+type  //Tipos de nodos
   TASTNodeType = (
     //Nodos de expresiones
     ntVariableRef,   //Referencia a variable: x, valor, ...
     ntNumberLiteral, //Literal numérico: 123, 456.
     ntBooleanLiteral,//Literal booleano: true, false.
     ntStringLiteral, //Literal de cadena: 'Hola'.
+    ntArrayLiteral,  //Literal de arreglo: (10, 20, 30)
     ntBinaryOp,      //Operación binaria. Ej. En "a+b", la operación binaria es el "+".
     ntUnaryOp,       //Operación unaria (un operando). Ej. -x, not a.
     ntFunctionCall,  //Llamada a función: max(a, b).
@@ -31,7 +32,7 @@ type  // Tipos de nodos
     ntVarDecl,       //Declaración de variable: var x: byte;
     ntConstDecl,     //Declaración de constantes: const PI=3;
     ntProcDecl,      //Declaración de procedimiento: procedure algo; begin ... end;
-    ntFunctDecl,      //Declaración de función.
+    ntFunctDecl,     //Declaración de función.
     ntParamDecl,     //Parámetro de procedimiento/función: var x: byte
     //Nodos auxiliares para declaraciones de tipos
     ntArrayRange,    //Rango de arreglo (1..10)
@@ -186,10 +187,23 @@ type  //Nodos de expresiones
   private
     FValue: string;
   public
-    constructor Create(const AValue: string; const ASrcPos: TSrcPos);
-
     property Value: string read FValue;
-
+  public  //Inicialización y depuración
+    constructor Create(const AValue: string; const ASrcPos: TSrcPos);
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+  // Literal de arreglos
+  TArrayLiteral = class(TExpression)
+  private
+    FValues: TExpressionList;  // Lista de valores (pueden ser anidados)
+  public
+    procedure AddValue(Value: TExpression);
+    property Values: TExpressionList read FValues;
+    function IsMultiDimensional: Boolean;
+  public  //Inicialización y depuración
+    constructor Create(const ASrcPos: TSrcPos);
+    destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
@@ -200,14 +214,13 @@ type  //Nodos de expresiones
     FLeft: TExpression;
     FRight: TExpression;
   public
-    constructor Create(const AOp: string; ALeft, ARight: TExpression;
-                       const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
     property Op: string read FOp;
     property Left: TExpression read FLeft;
     property Right: TExpression read FRight;
-
+  public  //Inicialización y depuración
+    constructor Create(const AOp: string; ALeft, ARight: TExpression;
+                       const ASrcPos: TSrcPos);
+    destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
@@ -467,14 +480,13 @@ type  //Nodos de declaraciones
     FValue: TExpression;  // La expresión que define el valor
     FConstType: string;   // Tipo opcional (si se especifica)
   public
-    constructor Create(const AName: string; AValue: TExpression;
-                       const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
     property Name: string read FName;
     property Value: TExpression read FValue;
     property ConstType: string read FConstType write FConstType;
-
+  public  //Inicialización y depuración
+    constructor Create(const AName: string; AValue: TExpression;
+                       const ASrcPos: TSrcPos);
+    destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
@@ -885,6 +897,52 @@ end;
 procedure TStringLiteral.PrintDebug(Indent: Integer = 0);
 begin
   WriteLn(StringOfChar(' ', Indent), ToString);
+end;
+// TArrayLiteral
+constructor TArrayLiteral.Create(const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntArrayLiteral, ASrcPos);
+  FValues := TExpressionList.Create(True);
+end;
+destructor TArrayLiteral.Destroy;
+begin
+  FValues.Free;
+  inherited;
+end;
+procedure TArrayLiteral.AddValue(Value: TExpression);
+begin
+  FValues.Add(Value);
+end;
+function TArrayLiteral.IsMultiDimensional: Boolean;
+var
+  i: Integer;
+begin
+  Result := False;
+  for i := 0 to FValues.Count - 1 do begin
+    if FValues[i].NodeType = ntArrayLiteral then begin
+      Result := True;
+      Break;
+    end;
+  end;
+end;
+function TArrayLiteral.ToString: string;
+begin
+  Result := Format('ArrayLiteral: %d values', [FValues.Count]);
+  if IsMultiDimensional then
+    Result := Result + ' [multidimensional]';
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TArrayLiteral.PrintDebug(Indent: Integer = 0);
+var
+  i: Integer;
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+  if FValues.Count > 0 then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Values:');
+    for i := 0 to FValues.Count - 1 do
+      FValues[i].PrintDebug(Indent + 4);
+  end;
 end;
 // TBinaryOp
 constructor TBinaryOp.Create(const AOp: string; ALeft, ARight: TExpression;

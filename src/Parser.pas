@@ -57,6 +57,7 @@ private   // Expresiones
   function ParseNumberLiteral: TNumberLiteral;
   function ParseIdentifier: TExpression;
   function ParseStringLiteral: TStringLiteral;
+  function ParseArrayLiteral: TArrayLiteral;
   function ParseFactor: TExpression;
   function ParseTerm: TExpression;
   function ParseSimpleExpression: TExpression;
@@ -397,6 +398,59 @@ begin
   Result := TStringLiteral.Create(lex.token, SrcPos);
   Next;
 end;
+function TParser.ParseArrayLiteral: TArrayLiteral;
+var
+  SrcPos: TSrcPos;
+  ArrayLit: TArrayLiteral;
+  Value: TExpression;
+begin
+  SrcPos := lex.GetSrcPos;
+  Next;  // Consumir '['
+  ArrayLit := TArrayLiteral.Create(SrcPos);
+  // Verificar si está vacío: []
+  if tokIdent = tiBRACK_CL then begin
+    Next;  // Consumir ']'
+    Result := ArrayLit;
+    Exit;
+  end;
+  // Parsear valores
+  while not HayError do begin
+    // Verificar si es un array anidado: [1, 2], [3, 4]
+    if tokIdent = tiBRACK_OP then begin
+      // Es un array anidado (multidimensional)
+      Value := ParseArrayLiteral;
+      if HayError then begin
+        ArrayLit.Free;
+        Result := nil;
+        Exit;
+      end;
+      ArrayLit.AddValue(Value);
+    end else begin
+      // Es un valor simple
+      Value := ParseExpression;
+      if HayError then begin
+        ArrayLit.Free;
+        Result := nil;
+        Exit;
+      end;
+      ArrayLit.AddValue(Value);
+    end;
+    // Verificar si hay más elementos
+    if tokIdent = tiCOMMA then
+      Next  // Consumir ',' y continuar
+    else
+      Break;  // No hay más elementos
+  end;
+  // Verificar cierre ']'
+  if tokIdent <> tiBRACK_CL then begin
+    GenError('Se esperaba "]" para cerrar el literal.');
+    ArrayLit.Free;
+    Result := nil;
+    Exit;
+  end;
+  Next;  // Consumir ']'
+  Result := ArrayLit;
+end;
 function TParser.ParseFactor: TExpression;
 {Analiza un operando, o factor, que puede ser de diversos tipos.
 Si no reconoce al operando, devuelve NIL }
@@ -439,6 +493,8 @@ begin
       end;
       Next;
     end;
+  end else if tokIdent = tiBRACK_OP then begin
+    Result := ParseArrayLiteral;
   end else begin
     GenError('Operando no reconocido', SrcPos);
     Result := nil;
