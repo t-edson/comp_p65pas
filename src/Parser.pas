@@ -1,15 +1,12 @@
 {Parser
-
-Clase base para la creación de un compilador como el P65Pas.
-La idea es tener aquí todas las rutinas que en lo posible sean independientes del
-lenguaje y del modelo de CPU.
+Clase para la creación de un analizador sintáctico en Pascal.
+Todas las rutinas definidas aquí son independientes de la de CPU.
 }
 //{$Define LogExpres}
 unit Parser;
 interface
 uses
-  Classes, SysUtils, Types, LazLogger, alexiaLex,
-  CompGlobals, ASTunit;
+  Classes, SysUtils, Types, LazLogger, alexiaLex, ASTunit;
 type  //Declaraciones generales
 //Primary location for elements
 {Current location for scan. This tells the compiler where it's scanning. It useful because
@@ -21,8 +18,7 @@ TElemLocation = (
 );
 
 type  //TParser
-{Clase base para crear a los objetos compiladores.
-Esta clase implementa al analizador sintáctico (Parser).}
+{Clase que implementa al analizador sintáctico (Parser).}
 TParser = class
 public    //Componentes principales del compilador
   lex  : TAleLexer;        //Analizador léxico
