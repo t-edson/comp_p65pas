@@ -46,7 +46,9 @@ type  //Tipos de nodos
     ntPointerType,   //Puntero
     ntAliasType,     //Alias
     //Nodos estructurales
+    ntUnitRef,       //Referencia a unidades: USES unit1, unit2, ...
     ntProgram,       //Nodo raíz del programa completo: program MiPrograma;
+    ntUnit,          //Nodo raiz de una unidad
     ntDeclarations,  //Sección de declaraciones de variables, tipos, o procedimientos.
     ntBlock          //Bloque de instrucciones (begin...end)
   );
@@ -73,6 +75,7 @@ type  //Declaraciones y clases base para el AST
   TProcDecl = class;
   TFunctDecl = class;
   TDeclarations = class;
+  TTypeDef = class;
 
   // Listas genéricas especializadas
   TASTNodeList = specialize TFPGObjectList<TASTNode>;
@@ -477,15 +480,20 @@ type  //Nodos de declaraciones
   TConstDecl = class(TASTNode)
   private
     FName: string;
-    FValue: TExpression;  // La expresión que define el valor
-    FConstType: string;   // Tipo opcional (si se especifica)
+    FTypeName: string;        //Tipo opcional ('' si no se especifica).
+    FTypeDef: TTypeDef;       //Tipo, cuando se declaran constantes con tipo.
+    FValue: TExpression;      //La expresión que define el valor
   public
     property Name: string read FName;
+    property TypeName: string read FTypeName;
+    property TypeDef: TTypeDef read FTypeDef write FTypeDef;
     property Value: TExpression read FValue;
-    property ConstType: string read FConstType write FConstType;
+    function HasType: Boolean;
   public  //Inicialización y depuración
     constructor Create(const AName: string; AValue: TExpression;
-                       const ASrcPos: TSrcPos);
+                       const ASrcPos: TSrcPos); overload;
+    constructor Create(const AName, ATypeName: string; ATypeDef: TTypeDef;
+      AValue: TExpression; const ASrcPos: TSrcPos); overload;
     destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
@@ -662,17 +670,30 @@ type  //Nodos de declaraciones de tipos
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
 type  //Nodos estructurales
+  // Nodo para la sección USES
+  TUnitRef = class(TASTNode)
+  private
+    FUnitName: string;
+    FUnitPath: string;  // Ruta completa (resuelta en análisis semántico)
+  public
+    property UnitName: string read FUnitName;
+    property UnitPath: string read FUnitPath write FUnitPath;
+  public  //Inicialización y depuración
+    constructor Create(const AUnitName: string; const ASrcPos: TSrcPos);
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+  TUnitRefList = specialize TFPGObjectList<TUnitRef>;
   // Contenedor de declaraciones
   TDeclarations = class(TASTNode)
   private
     FItems: TASTNodeList;  // Mezcla de VarDecl, ProcDecl, FunctionDecl
   public
-    constructor Create(const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
     procedure Add(Decl: TASTNode);
     property Items: TASTNodeList read FItems;
-
+  public  //Inicialización y depuración
+    constructor Create(const ASrcPos: TSrcPos);
+    destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
@@ -689,17 +710,45 @@ type  //Nodos estructurales
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
   end;
-  { TProgram }
   // Programa prinicpal
   TProgram = class(TCodeContainer)
+  private
+    FUsedUnits: TUnitRefList;  //Lista de unidades usadas
   public
+    procedure AddUnit(const AUnitName: string; const ASrcPos: TSrcPos);
+    property UsedUnits: TUnitRefList read FUsedUnits;
     property srcDec: TSrcPos write FSrcPos;  //Acceso para actualizar "SrcPos".
   public  //Inicialización y depuración
-    function ToString: string; override;
     constructor Create(const AName: string; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0);
   end;
-
-// Funciones auxiliares
+  // Unidad
+  TUnit = class(TCodeContainer)
+  private
+    FUnitName: string;
+    FInterfaceUses: TUnitRefList;    // USES en interface
+    FImplementationUses: TUnitRefList; // USES en implementation
+    FInterfaceDecls: TDeclarations;   // Declaraciones públicas (interface)
+    FImplementationDecls: TDeclarations; // Declaraciones privadas (implementation)
+    FInitializationBlock: TBlock;      // Bloque de inicialización
+    FFinalizationBlock: TBlock;        // Bloque de finalización
+  public
+    property UnitName: string read FUnitName;
+    property InterfaceUses: TUnitRefList read FInterfaceUses;
+    property ImplementationUses: TUnitRefList read FImplementationUses;
+    property InterfaceDecls: TDeclarations read FInterfaceDecls;
+    property ImplementationDecls: TDeclarations read FImplementationDecls;
+    property InitializationBlock: TBlock read FInitializationBlock write FInitializationBlock;
+    property FinalizationBlock: TBlock read FFinalizationBlock write FFinalizationBlock;
+  public  //Inicialización y depuración
+    constructor Create(const AUnitName: string; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+  // Funciones auxiliares
 function ForDirectionToString(Direction: TForDirection): string;
 
 implementation
@@ -1458,33 +1507,48 @@ constructor TConstDecl.Create(const AName: string; AValue: TExpression;
 begin
   inherited Create(ntConstDecl, ASrcPos);
   FName := AName;
+  FTypeName := '';
+  FTypeDef := nil;
   FValue := AValue;
-  FConstType := '';
+end;
+constructor TConstDecl.Create(const AName, ATypeName: string; ATypeDef: TTypeDef;
+                              AValue: TExpression; const ASrcPos: TSrcPos);
+//Constructor con tipo: MIN: integer = 0;
+begin
+  inherited Create(ntConstDecl, ASrcPos);
+  FName := AName;
+  FTypeName := ATypeName;
+  FTypeDef := ATypeDef;
+  FValue := AValue;
 end;
 destructor TConstDecl.Destroy;
 begin
   FValue.Free;
+  FTypeDef.Free;
   inherited;
+end;
+function TConstDecl.HasType: Boolean;
+begin
+  Result := FTypeName <> '';
 end;
 function TConstDecl.ToString: string;
 begin
-  Result := Format('ConstDecl: %s = ', [FName]);
-  if FConstType <> '' then
-    Result := Result + Format(':%s ', [FConstType]);
-  if FValue <> nil then
-    Result := Result + FValue.ToString
-  else
-    Result := Result + '(nil)';
+  Result := Format('ConstDecl: %s', [FName]);
+  if HasType then
+    Result := Result + Format(': %s', [FTypeName]);
+  Result := Result + Format(' = %s', [FValue.ToString]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 procedure TConstDecl.PrintDebug(Indent: Integer = 0);
 begin
   WriteLn(StringOfChar(' ', Indent), ToString);
-  if FValue <> nil then
+  if HasType and (FTypeDef <> nil) then
   begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Value:');
-    FValue.PrintDebug(Indent + 4);
+    WriteLn(StringOfChar(' ', Indent + 2), 'Type:');
+    FTypeDef.PrintDebug(Indent + 4);
   end;
+  WriteLn(StringOfChar(' ', Indent + 2), 'Value:');
+  FValue.PrintDebug(Indent + 4);
 end;
 // TProcDecl
 function TProcDecl.ToString: string;
@@ -1769,6 +1833,24 @@ begin
 end;
 {$endregion}
 {$region "Nodos estructurales"}
+// TUnitRef
+constructor TUnitRef.Create(const AUnitName: string; const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntUnitRef, ASrcPos);
+  FUnitName := AUnitName;
+  FUnitPath := '';
+end;
+function TUnitRef.ToString: string;
+begin
+  Result := Format('UnitRef: %s', [FUnitName]);
+  if FUnitPath <> '' then
+    Result := Result + Format(' -> %s', [FUnitPath]);
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TUnitRef.PrintDebug(Indent: Integer = 0);
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+end;
 // TDeclarations
 constructor TDeclarations.Create(const ASrcPos: TSrcPos);
 begin
@@ -1826,17 +1908,139 @@ begin
   inherited;
 end;
 // TProgram
-function TProgram.ToString: string;
-begin
-  Result := Format('Program: %s', [FName]);
-  if FDeclarations <> nil then
-    Result := Result + Format(' (%d decls)', [FDeclarations.Items.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
 constructor TProgram.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntProgram, ASrcPos);
   FName := AName;
+  FUsedUnits := TUnitRefList.Create(True);
+end;
+destructor TProgram.Destroy;
+begin
+  FUsedUnits.Free;
+  inherited;
+end;
+procedure TProgram.AddUnit(const AUnitName: string; const ASrcPos: TSrcPos);
+begin
+  FUsedUnits.Add(TUnitRef.Create(AUnitName, ASrcPos));
+end;
+function TProgram.ToString: string;
+begin
+  Result := Format('Program: %s', [FName]);
+  if FUsedUnits.Count > 0 then
+    Result := Result + Format(' (uses %d units)', [FUsedUnits.Count]);
+  if FDeclarations <> nil then
+    Result := Result + Format(' (%d decls)', [FDeclarations.Items.Count]);
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TProgram.PrintDebug(Indent: Integer = 0);
+var
+  i: Integer;
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+
+  // Mostrar USES
+  if FUsedUnits.Count > 0 then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Uses:');
+    for i := 0 to FUsedUnits.Count - 1 do
+      FUsedUnits[i].PrintDebug(Indent + 4);
+  end;
+
+  // Mostrar declaraciones
+  if FDeclarations.Items.Count > 0 then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Declarations:');
+    FDeclarations.PrintDebug(Indent + 4);
+  end;
+
+  // Mostrar cuerpo
+  WriteLn(StringOfChar(' ', Indent + 2), 'Main body:');
+  FBody.PrintDebug(Indent + 4);
+end;
+// TUnit
+constructor TUnit.Create(const AUnitName: string; const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntUnit, ASrcPos);
+  FUnitName := AUnitName;
+  FInterfaceUses := TUnitRefList.Create(True);
+  FImplementationUses := TUnitRefList.Create(True);
+  FInterfaceDecls := TDeclarations.Create(ASrcPos);
+  FImplementationDecls := TDeclarations.Create(ASrcPos);
+  FInitializationBlock := nil;
+  FFinalizationBlock := nil;
+end;
+destructor TUnit.Destroy;
+begin
+  FInterfaceUses.Free;
+  FImplementationUses.Free;
+  FInterfaceDecls.Free;
+  FImplementationDecls.Free;
+  FInitializationBlock.Free;
+  FFinalizationBlock.Free;
+  inherited;
+end;
+function TUnit.ToString: string;
+begin
+  Result := Format('Unit: %s', [FUnitName]);
+  if FInterfaceUses.Count > 0 then
+    Result := Result + Format(' (interface uses %d units)', [FInterfaceUses.Count]);
+  if FImplementationUses.Count > 0 then
+    Result := Result + Format(' (impl uses %d units)', [FImplementationUses.Count]);
+  if FInterfaceDecls.Items.Count > 0 then
+    Result := Result + Format(' (interface %d decls)', [FInterfaceDecls.Items.Count]);
+  if FImplementationDecls.Items.Count > 0 then
+    Result := Result + Format(' (impl %d decls)', [FImplementationDecls.Items.Count]);
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TUnit.PrintDebug(Indent: Integer = 0);
+var
+  i: Integer;
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+
+  // Mostrar interface USES
+  if FInterfaceUses.Count > 0 then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Interface uses:');
+    for i := 0 to FInterfaceUses.Count - 1 do
+      FInterfaceUses[i].PrintDebug(Indent + 4);
+  end;
+
+  // Mostrar interface declarations
+  if FInterfaceDecls.Items.Count > 0 then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Interface declarations:');
+    FInterfaceDecls.PrintDebug(Indent + 4);
+  end;
+
+  // Mostrar implementation USES
+  if FImplementationUses.Count > 0 then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Implementation uses:');
+    for i := 0 to FImplementationUses.Count - 1 do
+      FImplementationUses[i].PrintDebug(Indent + 4);
+  end;
+
+  // Mostrar implementation declarations
+  if FImplementationDecls.Items.Count > 0 then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Implementation declarations:');
+    FImplementationDecls.PrintDebug(Indent + 4);
+  end;
+
+  // Mostrar initialization block
+  if FInitializationBlock <> nil then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Initialization:');
+    FInitializationBlock.PrintDebug(Indent + 4);
+  end;
+
+  // Mostrar finalization block
+  if FFinalizationBlock <> nil then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Finalization:');
+    FFinalizationBlock.PrintDebug(Indent + 4);
+  end;
 end;
 {$endregion}
 end.

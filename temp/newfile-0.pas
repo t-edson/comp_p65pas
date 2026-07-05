@@ -1,11 +1,8 @@
 program muestra; 
-procedure Sumar(a, b: integer; var resultado: integer);
-var a,b,c: byte;
-begin
-  resultado := a + b;
-  exit(1);
-end;
-  
+uses Commodore64;
+const
+  consName = 0; 
+  consName1: array[1..10] of byte = 0; 
 begin
   a := 'aaa';
 //  case a of 
