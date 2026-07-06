@@ -23,7 +23,7 @@ TParser = class
 public    //Componentes principales del compilador
   lex    : TAleLexer;       //Analizador léxico
   msg    : TMessageManager; //Referencia al gestor de mensajes
-  ast    : TProgram;        //Árbol de sintaxis abstracto de un programa
+  astProg: TProgram;        //Árbol de sintaxis abstracto de un programa
   astUnit: TUnit;           //Árbol de sintaxis abstracto de una unidad
 public    //Messages
   procedure ClearError;
@@ -41,7 +41,7 @@ public    //Messages
   procedure GenError(txt: String; const Args: array of const);
 private   //Objetos auxiliares
   NamesList: TStringList;
-protected //Calls to Directive Module (ParserDirec.pas)
+public    //Calls to Directive Module (ParserDirec.pas)
   callProcDIRline  : procedure(const AsmLin: string; out ctxChanged: boolean) of object;
 protected // Métodos auxiliares para el parser
   function tokIdent: TTokenIdent; inline;
@@ -92,6 +92,7 @@ public    // Sentencia, bloque y programa
   procedure ParseProgram;
   procedure ParseUnit;
 public    // Inicialización
+  function GetUnitDeclaration: boolean;
   procedure Clear;  // Reinicia el compilador para un nuevo programa
   constructor Create(msg0: TMessageManager);
   destructor Destroy; override;
@@ -1603,8 +1604,8 @@ debe haber sido limpiado}
         GenError('Program name expected.');
         exit;
       end;
-      ast.Name := lex.token;
-      ast.srcDec := lex.GetSrcPos;
+      astProg.Name := lex.token;
+      astProg.srcDec := lex.GetSrcPos;
       Next;  //Toma el nombre y pasa al siguiente
       if not CaptureSemicolon then exit;
     end;
@@ -1620,15 +1621,15 @@ begin
   if HayError then Exit;
   //Parsear sección USES (opcional)
   if tokIdent = tiUSES then
-    ParseUsesClause(ast.UsedUnits);
+    ParseUsesClause(astProg.UsedUnits);
   if HayError then Exit;
 
   // Analizar las declaraciones
-  ParseDeclarations(ast.Declarations);
+  ParseDeclarations(astProg.Declarations);
   if HayError then Exit;
 
   // Analizar el cuerpo principal
-  ParseBody(ast.Body);
+  ParseBody(astProg.Body);
   if HayError then Exit;
 
   // Consumir el punto final
@@ -1701,10 +1702,24 @@ begin
 end;
 {$endregion}
 {$region "Inicialización"}
+function TParser.GetUnitDeclaration: boolean;
+{Indica si el archivo del contexto actual, es una unidad. Debe llamarse al inico de la
+exploración del archivo.}
+begin
+  //Salta blancos sin ejecutar directivas
+  SkipWhitesNoDirect;
+  //Busca UNIT
+  if lowercase(lex.token) = 'unit' then begin
+    lex.curCtx.StartScan;   //retorna al inicio
+    exit(true);
+  end;
+  lex.curCtx.StartScan;   //retorna al inicio
+  exit(false);
+end;
 procedure TParser.Clear;
 begin
   ClearError;
-  ast.Clear;
+  astProg.Clear;
   astUnit.Clear;
 end;
 constructor TParser.Create(msg0: TMessageManager);
@@ -1712,7 +1727,7 @@ begin
   //inherited;
   lex := TAleLexer.Create(msg0);
   msg := msg0;
-  ast := TProgram.Create('prog', lex.GetSrcPos);
+  astProg := TProgram.Create('prog', lex.GetSrcPos);
   astUnit := TUnit.Create('unit', lex.GetSrcPos);
   NamesList := TStringList.Create;
   ClearError;   //inicia motor de errores
@@ -1721,7 +1736,7 @@ destructor TParser.Destroy;
 begin
   NamesList.Destroy;
   astUnit.Destroy;
-  ast.Destroy;
+  astProg.Destroy;
   lex.Destroy;
   inherited Destroy;
 end;

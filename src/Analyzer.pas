@@ -41,7 +41,6 @@ type
       const srcPos: TSrcPos; typ: TAstTypeDec; const adicVar: TAdicVarDec);
     procedure TestAllConstructs;
   protected
-    function GetUnitDeclaration: boolean;
     function StartOfSection: boolean;
   protected  //Elements processing
     procedure AnalyzeInlineDeclar(elemLocat: TElemLocation);
@@ -145,7 +144,7 @@ begin
 //    ReadInlineHeader(procName, retType, srcPos, pars);
 //    if HayError then exit;
 //    //Verifica si es implementación de una función en la INTERFACE o no.
-//    ParentElems := ast.curNode.elements;  //Para comparar
+//    ParentElems := astProg.curNode.elements;  //Para comparar
 //    {Se supone que esta exploración solo se hará en la primera pasada, así que no hay
 //    problema, en hacer una exploración común.}
 //    //debugln('Buscando declaración de %s en nodo %s desde 0 hasta %d', [fun.name, ParentElems.name, ParentElems.elements.Count-2]);
@@ -178,7 +177,7 @@ begin
 //    end;
 //    if Found then begin
 //      //Es una implementación. No vale la pena tener otro nodo.
-//      ast.OpenElement(fun);  //Abre el nodo anterior
+//      astProg.OpenElement(fun);  //Abre el nodo anterior
 //    end else begin
 //      //Debe ser una función privada. No declarada en Interface.
 //      //La creamos con seguridad porque ya verificamos que no hay conflicto en IMPLEMENTATION.
@@ -191,7 +190,7 @@ begin
 //    //Es una compilación en el programa principal. ¿Y si es FORWARD?
 //    ReadInlineHeader(procName, retType, srcPos, pars);  //Procesa el encabezado
 //    if HayError then exit;
-//    if ast.InlineExistInCur(procName, pars) then begin
+//    if astProg.InlineExistInCur(procName, pars) then begin
 //      GenErrorPos(ER_DUPLIC_FUNC_,[procName], srcPos);
 //      exit;
 //    end;
@@ -233,42 +232,29 @@ begin
 //  fun.posCtx := PosAct;  //Guarda posición para la segunda compilación
 //  bod := CreateBody;   //crea elemento del cuerpo de la función
 //  bod.srcDec := GetSrcPos;
-//  ast.AddElementAndOpen(bod);  //Abre nodo Body
+//  astProg.AddElementAndOpen(bod);  //Abre nodo Body
 //  CompileInlineBody(fun);
-//  ast.CloseElement;  //Cierra Nodo Body
-//  ast.CloseElement; //cierra espacio de nombres de la función
+//  astProg.CloseElement;  //Cierra Nodo Body
+//  astProg.CloseElement; //cierra espacio de nombres de la función
 //  bod.srcEnd := GetSrcPos;  //Fin de cuerpo
 ////  fun.adrReturn := pic.iRam-1;  //Guarda dirección del i_RETURN
 //  if not CaptureTok(';') then exit;
 //  ProcComments;  //Quita espacios. Puede salir con error
 end;
 
-function TAnalyzer.GetUnitDeclaration: boolean;
-{Indica si el archivo del contexto actual, es una unidad. Debe llamarse al inico de la
-exploración del archivo.}
-begin
-  //Salta blancos sin ejecutar directivas
-  SkipWhitesNoDirect;
-  //Busca UNIT
-  if lowercase(lex.token) = 'unit' then begin
-    lex.curCtx.StartScan;   //retorna al inicio
-    exit(true);
-  end;
-  lex.curCtx.StartScan;   //retorna al inicio
-  exit(false);
-end;
 //Compilación de secciones
 procedure TAnalyzer.DoAnalyze;
 {Performs the Analysis (Lexical, syntactic and semantic).
 Input: The current context.
 Output: The AST.}
 begin
+  IsUnit := GetUnitDeclaration();
   if IsUnit then begin
-    //DoAnalyzeUnit(ast);
+    //DoAnalyzeUnit(astProg);
   end else begin
     ParseProgram;
   end;
-  //TestAllConstructs;  //Llena el AST con código de ejemplo
+  //TestAllConstructs;  //Llena el astProg con código de ejemplo
 end;
 
 constructor TAnalyzer.Create(msg0: TMessageManager);
@@ -290,7 +276,7 @@ var
   Param: TVarDecl;
   ProcBody, FuncBody: TBlock;
   begin
-    ast.Clear;
+    astProg.Clear;
     // Inicializar posición (simulando la del lexer)
     SrcPos.idCtx := 1;
     SrcPos.row := 1;
@@ -302,12 +288,12 @@ var
     SrcPos.row := 3;
     SrcPos.col := 1;
     VarDeclX := TVarDecl.Create('x', 'byte', SrcPos);
-    ast.Declarations.Add(VarDeclX);
+    astProg.Declarations.Add(VarDeclX);
 
     SrcPos.row := 3;
     SrcPos.col := 7;
     VarDeclY := TVarDecl.Create('y', 'byte', SrcPos);
-    ast.Declarations.Add(VarDeclY);
+    astProg.Declarations.Add(VarDeclY);
 
     // ============================================================
     // 2. Declarar procedimiento: procedure Sumar(a: byte);
@@ -329,7 +315,7 @@ var
     ProcBody := TBlock.Create(SrcPos);
     Proc.Body := ProcBody;
 
-    ast.Declarations.Add(Proc);
+    astProg.Declarations.Add(Proc);
 
     // ============================================================
     // 3. Declarar función: function Calcular: integer;
@@ -345,12 +331,12 @@ var
     FuncBody := TBlock.Create(SrcPos);
     Func.Body := FuncBody;
 
-    ast.Declarations.Add(Func);
+    astProg.Declarations.Add(Func);
 
     // ============================================================
     // 4. Cuerpo principal: x := 1; y := 2;
     // ============================================================
-    // NOTA: ast.Body ya existe, solo añadimos instrucciones
+    // NOTA: astProg.Body ya existe, solo añadimos instrucciones
 
     // x := 1;
     SrcPos.row := 12;
@@ -358,7 +344,7 @@ var
     VarRef1 := TVariableRef.Create('x', SrcPos);
     Literal1 := TNumberLiteral.Create(1, SrcPos);
     Assign1 := TAssignment.Create(VarRef1, Literal1, SrcPos);
-    ast.Body.AddStatement(Assign1);
+    astProg.Body.AddStatement(Assign1);
 
     // y := 2;
     SrcPos.row := 13;
@@ -366,13 +352,13 @@ var
     VarRef2 := TVariableRef.Create('y', SrcPos);
     Literal2 := TNumberLiteral.Create(2, SrcPos);
     Assign2 := TAssignment.Create(VarRef2, Literal2, SrcPos);
-    ast.Body.AddStatement(Assign2);
+    astProg.Body.AddStatement(Assign2);
 
     // ============================================================
-    // 5. Imprimir el AST
+    // 5. Imprimir el astProg
     // ============================================================
     WriteLn('=== AST DEL PROGRAMA ===');
-    ast.PrintDebug;
+    astProg.PrintDebug;
 
     WriteLn;
     WriteLn('Presiona Enter para salir...');

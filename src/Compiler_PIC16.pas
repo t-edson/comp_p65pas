@@ -688,7 +688,7 @@ begin
 //    end;
 //  end;
 //  //Reserva espacio para las variables (Que no son de funciones).
-//  for xvar in ast.AllVars do begin
+//  for xvar in astProg.AllVars do begin
 //    if xvar.Parent.idClass = eleFuncImp then continue;  //Las variables de funciones ya se crearon
 //    //if xvar.Parent.idClass = eleUnit then continue;
 ////debugln('Verificando: ' + xvar.name);
@@ -700,7 +700,7 @@ begin
 //    end else begin
 //      //Variable no usada
 //      xvar.ResetAddress;
-//      if xvar.Parent = ast.main then begin
+//      if xvar.Parent = astProg.main then begin
 //        //Genera mensaje solo para variables del programa principal.
 //        GenWarn(WA_UNUSED_VAR_, [xVar.name], xvar.srcDec);
 //      end;
@@ -751,7 +751,7 @@ begin
 //    end else begin
 //      //Variable no usada
 //      vardec.ResetAddress;
-//      if vardec.Parent = ast.main then begin
+//      if vardec.Parent = astProg.main then begin
 //        //Genera mensaje solo para variables del programa principal.
 //        GenWarn(WA_UNUSED_VAR_, [vardec.name], vardec.srcDec);
 //      end;
@@ -852,7 +852,7 @@ Parameters:
     Exit(false);
   end;
   procedure ConvertIF(sen: TAstSentence);
-  {COnvert an IF AST structure to the MIR representation. Only a BASIC simplification is
+  {COnvert an IF astProg structure to the MIR representation. Only a BASIC simplification is
   applied. Optimization needs to be done later.}
   var
     i, lblEndIf: Integer;
@@ -892,7 +892,7 @@ Parameters:
     end;
   end;
   procedure ConvertWHILE(sen: TAstSentence);
-  {Convert an WHILE AST structure to the MIR representation.}
+  {Convert an WHILE astProg structure to the MIR representation.}
   var
     ifgot: TMirIfGoto;
     condit, expBool: TAstExpress;
@@ -937,13 +937,13 @@ begin
       end else begin
         //Es una función cualquiera (del sistema o de usuario)
         {Notar que todas las funciones (INLINE o normal) se representan igual en el
-        AST y el MIR}
+        astProg y el MIR}
         mirRep.AddFunCall(mcont, Op1);
       end;
     end else if eleSen.idClass = eleSenten then begin
 
     end else begin
-      //Other AST element.
+      //Other astProg element.
       GenError('Invalid Syntax element: %s', [eleSen.name], eleSen.srcDec);
       exit;
     end;
@@ -973,7 +973,7 @@ begin
 //      if (val1.opType = otConst) and (val2.opType = otConst) then begin
 //        if val1.val > val2.val then begin
 //          //Unreachable code
-////          ast.DeleteTypeNode();
+////          astProg.DeleteTypeNode();
 //        end;
 //      end;
 //    end else if sen.sntType = sntExit then begin
@@ -998,7 +998,7 @@ var
   mirTypDec: TMirTypDec;
 begin
 //  //Agrega variables globales
-////  for astVardec in ast.AllVars do begin
+////  for astVardec in astProg.AllVars do begin
 ////    if astVardec.Parent.idClass = eleFuncImp then continue;  //Las variables de funciones ya se crearon
 //////debugln('Verificando: ' + astVardec.name);
 ////    if (astVardec.nCalled>0) or astVardec.required then begin
@@ -1006,7 +1006,7 @@ begin
 ////      astVardec.mirVarDec := mirVarDec;  //Guarda referencia al MIR.;
 ////    end;
 ////  end;
-//  for elem in ast.elements do begin
+//  for elem in astProg.elements do begin
 //    if elem.idClass = eleConsDec then begin
 //      astConDec := TAstConsDec(elem);
 //      mirConDec := AddMirConDec(mirRep.root.declars, astConDec);
@@ -1038,7 +1038,7 @@ begin
 //          end;
 //      end;
 //      //Actualizmos los parámetros MIR después de explorar los elementos
-//      //internas AST (que incluye a los parámetros).
+//      //internas astProg (que incluye a los parámetros).
 //      mirFunDec.ReadParamsFromAST(astFunDec);
 //    end else if astFunDec.callType = ctSysNormal then begin
 //      mirFunDec := AddMirFunDecSNF(mirRep.root.declars, astFunDec);
@@ -1046,7 +1046,7 @@ begin
 //    end;
 //  end;
 //  //Split body
-//  bod := ast.BodyNode;  //lee Nodo del cuerpo principal
+//  bod := astProg.BodyNode;  //lee Nodo del cuerpo principal
 //  ConvertBody(mirRep.root.instrucs, bod);
 end;
 procedure TCompiler_PIC16.DoOptimize;
@@ -1058,7 +1058,7 @@ begin
 //  ExprLevel := 0;
 //  ClearError;
 //  //Detecting unused elements
-//  ast.RefreshAllUnits; //Actualiza lista de unidades
+//  astProg.RefreshAllUnits; //Actualiza lista de unidades
 //  //Genera la representación MIR
 //  GenerateMIR;
 //  //Evaluate declared constants
@@ -1104,13 +1104,13 @@ begin
       exit;
     end;
     {-------------------------------------------------}
-    ast.Clear;
+    astProg.Clear;
     mirRep.Clear;
-    //Asigna nombre y ubicación al nodo principal del ast
-    ast.name := ExtractFileName(mainFile);
-    p := pos('.',ast.name);
-    if p <> 0 then ast.name := copy(ast.name, 1, p-1);
-    ast.srcDec := lex.GetSrcPos;
+    //Asigna nombre y ubicación al nodo principal del astProg
+    astProg.name := ExtractFileName(mainFile);
+    p := pos('.',astProg.name);
+    if p <> 0 then astProg.name := copy(astProg.name, 1, p-1);
+    astProg.srcDec := lex.GetSrcPos;
     //Continúa con preparación
 //    EndCountElapsed('** Setup in: ');
 //    StartCountElapsed; //Start timer
@@ -1122,7 +1122,6 @@ begin
     //Compila el archivo actual como programa o como unidad
     pic.InitMemRAM;      //Init RAM and clear.
     pic.iRam := 0;       //Ubica puntero al inicio.
-    IsUnit := GetUnitDeclaration();
     DoAnalyze;
     if HayError then exit;
     //Actualiza esta opción al generador de código porque puede haberse cambiado con las directivas.
@@ -1286,10 +1285,10 @@ begin
   //Here variables can be added
   {Create a body, to be uniform with normal function and for have a space where
   compile code and access to posible variables or other elements.}
-  ast.AddBodyAndOpen(SrcPos);  //Create body
+  astProg.AddBodyAndOpen(SrcPos);  //Create body
   SetCodSysInline(Result);  //Set routine to generate code o SIF routine.
-  ast.CloseElement;  //Close body
-  ast.CloseElement;  //Close function implementation
+  astProg.CloseElement;  //Close body
+  astProg.CloseElement;  //Close function implementation
   lex.curLocation := tmpLoc;   //Restore current location
 }end;
 function TCompiler_PIC16.AddSNFtoUnit(name: string; retType: TAstTypeDec; const srcPos: TSrcPos;
@@ -1341,20 +1340,20 @@ begin
   funimp := AddFunctionIMP(name, retType, srcPos, fundec, true);
   //Create local variables
   for i:=0 to high(local_vars) do begin
-    locvar := ast.AddVarDecAndOpen(srcPos, local_vars[i].name, local_vars[i].typ);
+    locvar := astProg.AddVarDecAndOpen(srcPos, local_vars[i].name, local_vars[i].typ);
     locvar.storage := stRamFix;
     locvar.adicPar := local_vars[i].adicVar;
-    ast.CloseElement;  //Close variable
+    astProg.CloseElement;  //Close variable
     local_vars[i].vardec := locvar;  //Keep reference
   end;
   {Create a body, to be uniform with normal function and for have a space where
   compile code and access to posible variables or other elements.}
-  ast.AddBodyAndOpen(SrcPos);  //Create body
+  astProg.AddBodyAndOpen(SrcPos);  //Create body
   //Set function created
   fundec.callType     := ctSysNormal;
   fundec.codSysNormal := codSys;  //Set routine to generate code SIF.
-  ast.CloseElement;  //Close body
-  ast.CloseElement;  //Close function implementation
+  astProg.CloseElement;  //Close body
+  astProg.CloseElement;  //Close function implementation
   lex.curLocation := tmpLoc;   //Restore current location
   exit(fundec);
 }end;
@@ -1397,7 +1396,7 @@ begin
   Result.oper := UpCase(opr); //Set operator as UpperCase to speed searching.
   if opr = '' then Result.operTyp := opkNone
   else Result.operTyp := operTyp; //Must be pre or post
-  ast.CloseElement;    //Close function implementation
+  astProg.CloseElement;    //Close function implementation
 }end;
 function TCompiler_PIC16.CreateInBOMethod(
                       clsType: TAstTypeDec;   //Base type where the method bellow.
@@ -1418,7 +1417,7 @@ begin
   //Add declaration
   Result      := AddFunctionUNI(name, retType, srcPosNull, pars, false,
                       false);  //Don't include variables to don't ask for RAM.
-  ast.AddBodyAndOpen(srcPosNull);  //Create body
+  astProg.AddBodyAndOpen(srcPosNull);  //Create body
   //Here variables can be added
   {Create a body, to be uniform with normal function and for have a space where
   compile code and access to posible variables or other elements.}
@@ -1426,8 +1425,8 @@ begin
   Result.oper := UpCase(opr); //Set operator as UpperCase to speed search.
   if opr = '' then Result.operTyp := opkNone
   else Result.operTyp := opkBinary;
-  ast.CloseElement;  //Close body
-  ast.CloseElement;  //Close function implementation
+  astProg.CloseElement;  //Close body
+  astProg.CloseElement;  //Close function implementation
 }end;
 function TCompiler_PIC16.CreateInTerMethod(clsType: TAstTypeDec;
   name: string; parType1, parType2: TAstTypeDec; retType: TAstTypeDec
@@ -1445,14 +1444,14 @@ begin
   //Add declaration
   Result      := AddFunctionUNI(name, retType, srcPosNull, pars, false,
                       false);  //Don't include variables to don't ask for RAM.
-  ast.AddBodyAndOpen(srcPosNull);  //Create body
+  astProg.AddBodyAndOpen(srcPosNull);  //Create body
   //Here variables can be added
   {Create a body, to be uniform with normal function and for have a space where
   compile code and access to posible variables or other elements.}
   SetCodSysInline(Result); //Set routine to generate code
   Result.operTyp := opkNone;   //Could be a ternary operator
-  ast.CloseElement;  //Close body
-  ast.CloseElement;  //Close function implementation
+  astProg.CloseElement;  //Close body
+  astProg.CloseElement;  //Close function implementation
 }end;
 procedure TCompiler_PIC16.DefineArray(etyp: TAstTypeDec);
 var
@@ -1520,61 +1519,61 @@ begin
 {  /////////////// System types ////////////////////
   typBool := CreateEleTypeDec('boolean', srcPosNull, 1, tctAtomic, t_boolean);
   typBool.location := locInterface;   //Location for type (Interface/Implementation/...)
-  ast.AddElementAndOpen(typBool);  //Open to create "elements" list.
-  ast.CloseElement;   //Close Type
+  astProg.AddElementAndOpen(typBool);  //Open to create "elements" list.
+  astProg.CloseElement;   //Close Type
   typByte := CreateEleTypeDec('byte', srcPosNull, 1, tctAtomic, t_uinteger);
   typByte.location := locInterface;
-  ast.AddElementAndOpen(typByte);  //Open to create "elements" list.
-  ast.CloseElement;
+  astProg.AddElementAndOpen(typByte);  //Open to create "elements" list.
+  astProg.CloseElement;
 
   typChar := CreateEleTypeDec('char', srcPosNull, 1, tctAtomic, t_string);
   typChar.location := locInterface;
-  ast.AddElementAndOpen(typChar);
-  ast.CloseElement;
+  astProg.AddElementAndOpen(typChar);
+  astProg.CloseElement;
 
   typWord := CreateEleTypeDec('word', srcPosNull, 2, tctAtomic, t_uinteger);
   typWord.location := locInterface;
-  ast.AddElementAndOpen(typWord);
-  ast.CloseElement;
+  astProg.AddElementAndOpen(typWord);
+  astProg.CloseElement;
 
   typDWord := CreateEleTypeDec('dword', srcPosNull, 4, tctAtomic, t_uinteger);
   //typDWord.OnLoadToWR := @word_LoadToWR;
   //typDWord.OnRequireWR := @word_RequireWR;
   typDWord.location := locInterface;
-  ast.AddElementAndOpen(typDWord);
-  ast.CloseElement;
+  astProg.AddElementAndOpen(typDWord);
+  astProg.CloseElement;
 
   typTriplet := CreateEleTypeDec('triplet', srcPosNull, 3, tctAtomic, t_uinteger);
   //typTriplet.OnLoadToWR := @trip_LoadToWR;
   //typTriplet.OnRequireWR := @trip_RequireWR;
   //typTriplet.location := locInterface;
-  ast.AddElementAndOpen(typTriplet);
-  ast.CloseElement;
+  astProg.AddElementAndOpen(typTriplet);
+  astProg.CloseElement;
 
   // ****  This section is hardware dependent ****
   {Create variables for aditional Working register. These variables are accesible
   (and usable) from the code, because the name assigned is a common variable.}
   //Create register H as variable
   H := AddVarDecAndOpen('__H', typByte, srcPosNull);
-  ast.CloseElement;  { TODO : ¿No sería mejor evitar abrir el elemento para no tener que cerrarlo? }
+  astProg.CloseElement;  { TODO : ¿No sería mejor evitar abrir el elemento para no tener que cerrarlo? }
   H.adicPar.hasAdic := decNone;
   H.adicPar.hasInit := nil;
   H.location := locInterface;  //make visible
   //Create register E as variable
   E := AddVarDecAndOpen('__E', typByte, srcPosNull);
-  ast.CloseElement;
+  astProg.CloseElement;
   E.adicPar.hasAdic := decNone;
   E.adicPar.hasInit := nil;
   E.location := locInterface;  //make visible
   //Create register U as variable
   U := AddVarDecAndOpen('__U', typByte, srcPosNull);
-  ast.CloseElement;
+  astProg.CloseElement;
   U.adicPar.hasAdic := decNone;
   U.adicPar.hasInit := nil;
   U.location := locInterface;  //make visible
   //Create register IX as variable
   IX := AddVarDecAndOpen('__IX', typWord, srcPosNull);
-  ast.CloseElement;
+  astProg.CloseElement;
   IX.adicPar.hasAdic := decNone;
   IX.adicPar.hasInit := nil;
   IX.location := locInterface;  //make visible
@@ -1585,7 +1584,7 @@ var
 begin
 {  /////////////// Boolean type ////////////////////
   //Methods-Operators
-  ast.OpenElement(typBool);
+  astProg.OpenElement(typBool);
   f:=CreateInBOMethod(typBool, ':=',  '_set', typBool, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
@@ -1600,14 +1599,14 @@ begin
   f.fConmutat := true;
   f:=CreateInBOMethod(typBool, '<>',  '_dif', typBool, typBool);
   f.fConmutat := true;
-  ast.CloseElement;   //Close Type
+  astProg.CloseElement;   //Close Type
 }end;
 procedure TCompiler_PIC16.CreateByteOperations;
 var
   f, f1, f2: TAstFunDec;
 begin
 {  //Methods-Operators
-  ast.OpenElement(typByte);
+  astProg.OpenElement(typByte);
   //Simple Assignment
   f:=CreateInBOMethod(typByte, ':=', '_set', typByte, AstTree.typNull);
   f.asgMode := asgSimple;
@@ -1666,14 +1665,14 @@ begin
   f:=CreateInBOMethod(typByte, '<=', '_lequ',typByte, typBool);
   f:=CreateInBOMethod(typByte, '>>', '_shr', typByte, typByte);  { TODO : Definir bien la precedencia }
   f:=CreateInBOMethod(typByte, '<<', '_shl', typByte, typByte);
-  ast.CloseElement;   //Close Type
+  astProg.CloseElement;   //Close Type
 }end;
 procedure TCompiler_PIC16.CreateCharOperations;
 var
   f: TAstFunDec;
 begin
 {  /////////////// Char type ////////////////////
-  ast.OpenElement(typChar);
+  astProg.OpenElement(typChar);
   f:=CreateInBOMethod(typChar, ':=', '_set', typChar, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
@@ -1682,14 +1681,14 @@ begin
   f.fConmutat := true;
   f:=CreateInBOMethod(typChar, '<>', '_dif', typChar, typBool);
   f.fConmutat := true;
-  ast.CloseElement;   //Close Type
+  astProg.CloseElement;   //Close Type
 }end;
 procedure TCompiler_PIC16.CreateWordOperations;
 var
   f: TAstFunDec;
 begin
 {  /////////////// Word type ////////////////////
-  ast.OpenElement(typWord);
+  astProg.OpenElement(typWord);
   f:=CreateInBOMethod(typWord, ':=' ,'_set' , typWord, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
@@ -1752,14 +1751,14 @@ begin
   f:=CreateInUOMethod(typWord, '', 'low' , typByte);
   f:=CreateInUOMethod(typWord, '', 'high', typByte);
 
-  ast.CloseElement;   //Close Type
+  astProg.CloseElement;   //Close Type
 }end;
 procedure TCompiler_PIC16.CreateDWordOperations;
 var
   f: TAstFunDec;
 begin
 {  /////////////// DWord type ////////////////////
-  ast.OpenElement(typDWord);
+  astProg.OpenElement(typDWord);
   f:=CreateInBOMethod(typDWord, ':=' ,'_set' , typDWord, AstTree.typNull);
   f.asgMode := asgSimple;
   f.getset := gsSetInSimple;
@@ -1827,7 +1826,7 @@ begin
 //  f:=CreateInUOMethod(typDWord, '', 'low' , typByte, @word_Low);
 //  f:=CreateInUOMethod(typDWord, '', 'high', typByte, @word_High);
 
-  ast.CloseElement;   //Close Type
+  astProg.CloseElement;   //Close Type
 }end;
 procedure TCompiler_PIC16.CreateSystemUnitInAST;
 {Initialize the system elements. Must be executed just one time when compiling.}
@@ -1852,7 +1851,7 @@ begin
   linking, calling and optimization that we use in common functions. Moreover, we can
   create private functions.}
   uni := CreateEleUnit('System');  //System unit
-  ast.AddElementAndOpen(uni);  //Open Unit
+  astProg.AddElementAndOpen(uni);  //Open Unit
   CreateSystemTypesAndVars;
   lex.curLocation := locInterface;   {Maybe not needed because element here are created directly.}
   //Creates operations
@@ -1949,7 +1948,7 @@ begin
   AddCallerToFrom(snfWordShift_l, sifWordShlByte.bodyNode);
 }
   //Close Unit
-  ast.CloseElement;
+  astProg.CloseElement;
 }end;
 
 procedure TCompiler_PIC16.cbSetGeneralORG(value: integer);
