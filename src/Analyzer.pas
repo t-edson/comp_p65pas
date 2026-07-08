@@ -14,6 +14,14 @@ type
     //Variables públicas del compilador
     ejecProg  : boolean;     //Indicates the compiler is working
     stopEjec  : boolean;     //To stop compilation
+  public   //Componentes del compilador
+    lex    : TAleLexer;        //Analizador léxico
+    msg    : TMessageManager;  //Gestor de mensajes
+    vParserASM_6502 : TParserAsm_6502;
+  public
+    procedure ClearError;
+    procedure GenError(txt: string);
+    procedure GenError(txt: string; const srcPos: TSrcPos);
   protected //Compiling Options. Set by directives.
     syntaxMode  : (modPascal, modPicPas);
     bootloader  : TBootloader;  //Bootloader code for the compiled binary.
@@ -40,8 +48,6 @@ type
     procedure SetParameter(var funPar: TAstParam; const name: string;
       const srcPos: TSrcPos; typ: TAstTypeDec; const adicVar: TAdicVarDec);
     procedure TestAllConstructs;
-  protected
-    function StartOfSection: boolean;
   protected  //Elements processing
     procedure AnalyzeInlineDeclar(elemLocat: TElemLocation);
     procedure DoAnalyze;
@@ -80,6 +86,28 @@ resourcestring
   ER_ONL_BYT_WORD = 'Only BYTE or WORD index is allowed in FOR.';
   ER_UNKNOWN_IDE_ = 'Unknown identifier: %s'    ;
 
+procedure TAnalyzer.ClearError;
+{Limpia la bandera de errores. Tomar en cuenta que solo se debe usar para iniciar el
+procesamiento de errores. Limpiar errores en medio de la compilación, podría hacer que
+se pierda el rastro de errores anteriores, y que inclusive, la compilación termine sin
+error, aún cuando haya generado errores intermedios.
+Como norma, se podría decir que solo se debe usar, después de haber procesado un posible
+error anterior.}
+begin
+  msg.nErrors := 0;
+  msg.nInfos := 0;
+  msg.nWarns := 0;
+end;
+procedure TAnalyzer.GenError(txt: string);
+{Genera un mensaje de error en la posición actual a la posición del contexto actual.}
+begin
+  msg.error(lex.GetMsgInfoE(txt));
+end;
+procedure TAnalyzer.GenError(txt: string; const srcPos: TSrcPos);
+{Genera un mensaje de error en la posición indicada.}
+begin
+  msg.error(lex.GetMsgInfoE(txt, srcPos));
+end;
 {$region "Files"}
 function TAnalyzer.hexFilePath: string;
 begin
@@ -102,16 +130,6 @@ begin
   hexfile := filPath;
 end;
 {$endregion}
-
-function TAnalyzer.StartOfSection: boolean;
-var
-  tokL: String;
-begin
-  tokL := lowercase(lex.token);
-  Result := (tokL ='var') or (tokL ='const') or
-            (tokL ='type') or (tokL ='procedure') or (tokL ='inline');
-end;
-//Elements processing
 
 procedure TAnalyzer.SetParameter(var funPar: TAstParam;
     const name: string; const srcPos: TSrcPos; typ: TAstTypeDec; const adicVar: TAdicVarDec);
@@ -261,7 +279,9 @@ end;
 constructor TAnalyzer.Create(msg0: TMessageManager);
 begin
   //Crea componentes del compilador
-  inherited Create(msg0);
+  msg := msg0;
+  lex := TAleLexer.Create(msg0);
+  inherited Create(msg0, lex);
   vParserASM_6502 := TParserAsm_6502.Create(msg0, lex);
   //callParseASMblock := @vParserASM_6502.ProcessASMblock;
   ejecProg := false;
@@ -270,6 +290,7 @@ end;
 destructor TAnalyzer.Destroy;
 begin
   vParserASM_6502.Destroy;
+  lex.Destroy;
   inherited Destroy;
 end;
 

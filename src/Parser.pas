@@ -20,12 +20,13 @@ TElemLocation = (
 type  //TParser
 {Clase que implementa al analizador sintáctico (Parser).}
 TParser = class
-public    //Componentes principales del compilador
+private
   lex    : TAleLexer;       //Analizador léxico
   msg    : TMessageManager; //Referencia al gestor de mensajes
+public    //Componentes principales del compilador
   astProg: TProgram;        //Árbol de sintaxis abstracto de un programa
   astUnit: TUnit;           //Árbol de sintaxis abstracto de una unidad
-public    //Messages
+private    //Messages
   procedure ClearError;
   function HayError: boolean; inline;          //Flag for errors
   //Rutinas de generación de mensajes
@@ -96,7 +97,7 @@ public    // Sentencia, bloque y programa
 public    // Inicialización
   function GetUnitDeclaration: boolean;
   procedure Clear;  // Reinicia el compilador para un nuevo programa
-  constructor Create(msg0: TMessageManager);
+  constructor Create(msg0: TMessageManager; lex0: TAleLexer);
   destructor Destroy; override;
 end;
 
@@ -1727,10 +1728,10 @@ begin
   astProg.Clear;
   astUnit.Clear;
 end;
-constructor TParser.Create(msg0: TMessageManager);
+constructor TParser.Create(msg0: TMessageManager; lex0: TAleLexer);
 begin
   //inherited;
-  lex := TAleLexer.Create(msg0);
+  lex := lex0;
   msg := msg0;
   astProg := TProgram.Create('prog', lex.GetSrcPos);
   astUnit := TUnit.Create('unit', lex.GetSrcPos);
@@ -1742,7 +1743,6 @@ begin
   NamesList.Destroy;
   astUnit.Destroy;
   astProg.Destroy;
-  lex.Destroy;
   inherited Destroy;
 end;
 {$endregion}

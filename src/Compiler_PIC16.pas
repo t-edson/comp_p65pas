@@ -924,7 +924,7 @@ begin
     if eleSen.idClass = eleExpress then begin
       Op1 := TAstExpress(eleSen);
       if Op1.opType <> otFunct then begin
-        GenError('Expected function or procedure: %s', [eleSen.name], eleSen.srcDec);
+        GenError(format('Expected function or procedure: %s', [eleSen.name]), eleSen.srcDec);
         exit;
       end;
       if Op1.fundec.getset = gsSetInSimple then begin
@@ -944,7 +944,7 @@ begin
 
     end else begin
       //Other astProg element.
-      GenError('Invalid Syntax element: %s', [eleSen.name], eleSen.srcDec);
+      GenError(format('Invalid Syntax element: %s', [eleSen.name]), eleSen.srcDec);
       exit;
     end;
 //    //We have a sentence here.
@@ -1100,7 +1100,7 @@ begin
     //Compila el texto indicado
     if not lex.OpenContextFrom(mainFile) then begin
       //No lo encuentra
-      GenError(ER_FIL_NOFOUND, [mainFile]);
+      GenError(Format(ER_FIL_NOFOUND, [mainFile]));
       exit;
     end;
     {-------------------------------------------------}

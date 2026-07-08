@@ -74,6 +74,12 @@ type
 
   { TParserDirecBase }
   TParserDirecBase = class(TAnalyzer)
+  private  //Mensajes
+    function HayError: boolean; inline;          //Flag for errors
+    procedure GenInfo(txt: string);
+    procedure GenWarn(txt: string);
+    procedure GenError(txt: string);
+    procedure GenError(txt: string; const srcPos: TSrcPos);
   private  //Parser and Expressions evaluation
     tokIni : integer;  //Posición inicial del token actual
     WaitForEndIF: integer;
@@ -258,6 +264,31 @@ begin
   OnWriteStr := WriteStr;
 end;
 { TParserDirecBase }
+//Mensajes
+function TParserDirecBase.HayError: boolean;
+begin
+  exit(msg.nErrors>0);
+end;
+procedure TParserDirecBase.GenInfo(txt: string);
+{Genera un mensaje de Información, en la posición actual del contexto. }
+begin
+  msg.info(lex.GetMsgInfo(txt));
+end;
+procedure TParserDirecBase.GenWarn(txt: string);
+{Genera un mensaje de Advertencia, en la posición actual del contexto. }
+begin
+  msg.warn(lex.GetMsgInfo(txt));
+end;
+procedure TParserDirecBase.GenError(txt: string);
+{Genera un mensaje de error en la posición actual a la posición del contexto actual.}
+begin
+  msg.error(lex.GetMsgInfoE(txt));
+end;
+procedure TParserDirecBase.GenError(txt: string; const srcPos: TSrcPos);
+{Genera un mensaje de error en la posición indicada.}
+begin
+  msg.error(lex.GetMsgInfoE(txt, srcPos));
+end;
 //Parser and Expressions evaluation
 function TParserDirecBase.GetIdent: string;
 begin
@@ -1574,7 +1605,7 @@ var
 begin
   p := lex.GetSrcPos;
   p.col := tokIni + lexDir.col0;  //corrige columna
-  GenError(txt, Args, p);
+  GenError(Format(txt, Args), p);
 end;
 procedure TParserDirecBase.AddSysVariableNumber(varName: string;
   ReadNum: TDirEveReadNum; WriteNum: TDirEveWriteNum);
@@ -1622,7 +1653,7 @@ begin
     //Ubicamos el error, "manualmente", porque aún no hemos explorado con el lexer.
     p := lex.GetSrcPos;
     p.col := tokIni + dlin + 1;  //columna al final
-    GenError(ER_EXPECTED_BR, [], p);
+    GenError(ER_EXPECTED_BR, p);
   end;
   //Inicia exploración con el lexer "lexDir"
   lexdir.SetSource(directiveLine);

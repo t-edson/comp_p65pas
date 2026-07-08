@@ -45,8 +45,6 @@ type
     constructor Create(msg0: TMessageManager; lex0: TAleLexer);
     destructor Destroy; override;
   end;
-var
-  vParserASM_6502 : TParserAsm_6502;
 
 procedure SetLanguage;
 
