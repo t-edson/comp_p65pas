@@ -28,6 +28,8 @@ type  //Tipos de nodos
     ntCaseBranch,    //Rama individual de un CASE.
     ntWithStatement, //Estructura WITH ... DO
     ntExitStatement, //Instrucción EXIT
+    ntAsmBlock,      //Bloque asm ... end;
+    ntAsmInstruction,//Instrucción dentro de un bloque ASM
     //Nodos de declaraciones
     ntVarDecl,       //Declaración de variable: var x: byte;
     ntConstDecl,     //Declaración de constantes: const PI=3;
@@ -452,6 +454,81 @@ type  //Nodos de sentencias
   public  //Inicialización y depuración
     constructor Create(const ASrcPos: TSrcPos); overload;
     constructor Create(AReturnValue: TExpression; const ASrcPos: TSrcPos); overload;
+    destructor Destroy; override;
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+  //Tipos para soporte a instrucciones ASM
+  //ASM instruction type
+  TAsmInsType = (
+    itOpcode,     //Common instruction with an Opcode and Operand.
+    itLabel,      //An ASM label.
+    itOrgDir,     //Instruction ORG
+    itDefByte,    //Instruction DB
+    itDefWord     //Instruction DW
+  );
+  //Valid operators for TAsmOperation
+  TAsmOperator = (
+    aopSelByte,  //Select a byte: operand.low, operand.high, >operand, <operand
+    aopAddValue, //Add a value: operand + value
+    aopSubValue  //Substract a value: operand - value
+  );
+  TAsmOperation = record
+    oper: TAsmOperator;
+    value: word;
+  end;
+  TAsmOperations = array of TAsmOperation;
+  { TAsmOperand }
+  TAsmOperand = object
+    val: integer;    {The value of instruction operand, when it's a simple number.
+                      When it's -1, the operand is a reference to an element and
+                      should be read in "operRef".}
+    ref: TASTNode;   {Reference to element when operand refers to some Pascal or
+                      ASM element.}
+    nam: string;     {Operand name. Used when operand is an unsolved reference}
+    used: boolean;   //Indicates if operand is used or not.
+    //Operations
+    operations: TAsmOperations;    //Operations applied on Operand
+    procedure ClearOperations;
+    procedure AddOperation(oper: TAsmOperator; value: word);
+  end;
+  // Nodo para una instrucción ASM
+  TAsmInstruction = class(TASTNode)
+  private
+    Fname    : string;   //Element name
+    Funame   : string;   //Upper case name. Used to acelerate searchings.
+    procedure Setname(AValue: string);
+  public
+    addr   : integer;  //Starting Address. Used only in code generation.
+    iType  : TAsmInsType;   //ASM instruction type
+    //Fields to generate instructions, using TP6502.codAsm() or similar.
+    opcode : word;     {Formally should be TP6502Inst or similar. Defined as word
+                        because we don't want to depend on unit P6502Utils here. }
+    addMode: byte;     {Formally should be TP6502AddMode or similar. Defined as byte
+                        because we don't want to depend on unit P6502Utils here. }
+    operand: TAsmOperand;  //Operand for ASM instruction.
+    operand2: TAsmOperand; //Second operand, used when it's needed.
+    property name: string read Fname write Setname;
+    property uname: string read Funame;
+  public  //Inicialización y depuración
+    constructor Create(const ASrcPos: TSrcPos);
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+  TAsmInstructionList = specialize TFPGObjectList<TAsmInstruction>;
+  // Nodo para un bloque ASM
+  TAsmBlock = class(TASTNode)
+  private
+    FInstructions: TAsmInstructionList; // Lista de instrucciones ASM
+    FRegisters: TStringList; // Registros modificados (para la cláusula ['EAX','EBX'])
+  public
+    undefInstrucs: TAsmInstructionList; //List of instruction with operands undefined
+    procedure AddInstruction(Inst: TAsmInstruction);
+    procedure AddRegister(const Reg: string);
+    property Instructions: TAsmInstructionList read FInstructions;
+    property Registers: TStringList read FRegisters;
+  public  //Inicialización y depuración
+    constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
@@ -1472,6 +1549,85 @@ begin
     WriteLn(StringOfChar(' ', Indent + 2), 'Return value:');
     FReturnValue.PrintDebug(Indent + 4);
   end;
+end;
+// TAsmOperand
+procedure TAsmOperand.ClearOperations;
+begin
+  setlength(Operations, 0);
+end;
+procedure TAsmOperand.AddOperation(oper: TAsmOperator; value: word);
+var
+  n: Integer;
+begin
+  n := high(Operations)+1;  //Number of elements
+  setlength(Operations, n+1);
+  Operations[n].oper  := oper;
+  Operations[n].value := value;
+end;
+// TAsmInstruction
+procedure TAsmInstruction.Setname(AValue: string);
+begin
+  if Fname = AValue then Exit;
+  Fname    := AValue;
+  Funame   := Upcase(AValue);
+end;
+constructor TAsmInstruction.Create(const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntAsmInstruction, ASrcPos);
+end;
+function TAsmInstruction.ToString: string;
+begin
+  Result := 'AsmInstruction';
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TAsmInstruction.PrintDebug(Indent: Integer = 0);
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+end;
+// TAsmBlock
+constructor TAsmBlock.Create(const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntAsmBlock, ASrcPos);
+  FInstructions := TAsmInstructionList.Create(True);
+  FRegisters := TStringList.Create;
+  undefInstrucs := TAsmInstructionList.Create(True);
+end;
+destructor TAsmBlock.Destroy;
+begin
+  undefInstrucs.Destroy;
+  FRegisters.Destroy;
+  FInstructions.Destroy;
+  inherited;
+end;
+procedure TAsmBlock.AddInstruction(Inst: TAsmInstruction);
+begin
+  FInstructions.Add(Inst);
+end;
+procedure TAsmBlock.AddRegister(const Reg: string);
+begin
+  FRegisters.Add(Reg);
+end;
+function TAsmBlock.ToString: string;
+begin
+  Result := Format('AsmBlock (%d instructions)', [FInstructions.Count]);
+  if FRegisters.Count > 0 then
+    Result := Result + Format(' modifies [%s]', [FRegisters.CommaText]);
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TAsmBlock.PrintDebug(Indent: Integer = 0);
+var
+  i: Integer;
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+  if FRegisters.Count > 0 then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Registers:');
+    for i := 0 to FRegisters.Count - 1 do
+      WriteLn(StringOfChar(' ', Indent + 4), FRegisters[i]);
+  end;
+  WriteLn(StringOfChar(' ', Indent + 2), 'Instructions:');
+  for i := 0 to FInstructions.Count - 1 do
+    FInstructions[i].PrintDebug(Indent + 4);
 end;
 {$endregion}
 {$region "Nodos de declaraciones"}

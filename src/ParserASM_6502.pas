@@ -9,17 +9,17 @@ unit ParserASM_6502;
 interface
 uses
   Classes, SysUtils, fgl, alexiaLex, Parser, P65C02utils, CompGlobals,
-  AstElemP65, ASTunit;
+  ASTunit;
 type
   { TParserAsm_6502 }
   TParserAsm_6502 = class
   private
-    cpx     : TParser;   //Reference to compiler
+    parser  : TParser;         //Reference to compiler
     lex     : TAleLexer;       //Reference to the compiler
-    msg     : TMessageManager;    //Referencia al gestor de mensajes
-    labels  : TAstAsmInstrs;   //Lista de etiquetas
-    curBlock: TAstAsmBlock;    //Bloque ASM actual.
-    curInst : TAstAsmInstr;    //Instruction ASM actual.
+    msg     : TMessageManager; //Referencia al gestor de mensajes
+    labels  : TAsmInstructionList;   //Lista de etiquetas
+    curBlock: TAsmBlock;       //Bloque ASM actual.
+    curInst : TAsmInstruction;    //Instruction ASM actual.
     procedure AddDirectiveDB;
     procedure AddDirectiveDW;
     procedure AddInstructionLabel(lblName: string);
@@ -28,18 +28,18 @@ type
     function CaptureParenthes: boolean;
     procedure EndASM;
     function GetFaddressByte(addr: integer): byte;
-    function IsLabelDeclared(txt: string; out lblEle: TAstAsmInstr): boolean;
+    function IsLabelDeclared(txt: string; out lblEle: TAsmInstruction): boolean;
     procedure ProcASMline(out blkEnd: boolean);
     procedure ProcInstrASM(idInst: TP6502Inst; var blkEnd: boolean);
     procedure StartASM;
   private
     procedure AddInstruction(const inst: TP6502Inst; addMode: TP6502AddMode;
-      param: integer; srcDec: TSrcPos);
+      param: integer; const srcDec: TSrcPos);
     procedure AddDirectiveORG(param: word);
   public //Inicialización
-    procedure ProcessASMblock(cpx0: TParser);
+    procedure ProcessASMblock(Body: TBlock);
     function DecodeNext: boolean;
-    constructor Create;
+    constructor Create(msg0: TMessageManager; parser0: TParser);
     destructor Destroy; override;
   end;
 var
@@ -68,15 +68,16 @@ begin
   if addr>255 then begin
     addr := addr and $7F;
     //Indica con advertencia
-    cpx.GenWarn(WA_ADDR_TRUNC);
+    parser.GenWarn(WA_ADDR_TRUNC);
   end;
   Result := addr;
 end;
-function TParserAsm_6502.IsLabelDeclared(txt: string; out lblEle: TAstAsmInstr): boolean;
+function TParserAsm_6502.IsLabelDeclared(txt: string; out
+  lblEle: TAsmInstruction): boolean;
 {Indica si un nombre es una etiqueta. Si lo es, devuelve TRUE, y devuelve en lblEle, la
 referencia a la instrucción de la etiqueta.}
 var
-  lbl: TAstAsmInstr;
+  lbl: TAsmInstruction;
 begin
   //No se espera procesar muchas etiquetas
   for lbl in labels do begin  { TODO : ¿No se podría prescindir de "labels2 y usar solamente la lista de todas las instrucciones? }
@@ -96,7 +97,7 @@ begin
     lex.Next;   //toma la coma
     exit(true);
   end else begin
-    cpx.GenError(ER_EXPEC_PAREN);
+    parser.GenError(ER_EXPEC_PAREN);
     exit(false);
   end;
 end;
@@ -108,7 +109,7 @@ operations if exist.
    [ > | < ] "$" [.HIGH | .LOW | @0 | @1 | @2 | @3 | <+|-><numeric literal>]
    [ > | < ] <numeric literal>
    [ > | < ] <identifier> [.HIGH | .LOW | @0 | @1 | @2 | @3 | <+|-><numeric literal>]
-If not operand eas found error is generated and returns FALSE.}
+If not operand has found, error is generated and returns FALSE.}
   function ScanOperation(out operation: TAsmOperator; out value: word): boolean;
   {Look for one operations, in the current context. Operatiosn valids are:
         .HIGH
@@ -145,7 +146,7 @@ If not operand eas found error is generated and returns FALSE.}
         lex.Next;
         exit(true);
       end else begin
-        cpx.GenError('Field expected after "."');
+        parser.GenError('Field expected after "."');
         exit(false);
       end;
     end else if lex.token = '@' then begin
@@ -171,7 +172,7 @@ If not operand eas found error is generated and returns FALSE.}
         lex.Next;
         exit(true);
       end else begin
-        cpx.GenError('Field expected after "@"');
+        parser.GenError('Field expected after "@"');
         exit(false);
       end;
     end else if (lex.token = '+') or (lex.token = '-') then begin
@@ -181,12 +182,12 @@ If not operand eas found error is generated and returns FALSE.}
       lex.SkipWhitesNoEOL;
       if (lex.tokType = tkEol) or (lex.token = ';') then begin
         //End of line
-        cpx.GenError('Operand expected');
+        parser.GenError('Operand expected');
         exit(false);
       end else begin
         //Follows something
         if not TryStrToInt(lex.token, valueInt) then begin
-          cpx.GenError('Numeric operand expected');
+          parser.GenError('Numeric operand expected');
           exit(false);
         end;
         lex.Next;
@@ -235,14 +236,10 @@ If not operand eas found error is generated and returns FALSE.}
     end;
   end;
 var
-  ele: TASTNode;
-  xfun: TAstFunImp;
-  xvar: TAstVarDec;
-  xcon: TAstConsDec;
   positOper: char;
-  lblEle: TAstAsmInstr;
+  lblEle: TAsmInstruction;
 begin
-{  Result := false;
+  Result := false;
   operand.used := false;
   undefLabel := false;
   lex.SkipWhitesNoEOL;
@@ -255,7 +252,7 @@ begin
     operand.Val := -2;  //To indicates it's $
     //Check for operations
     ScanOperations(positOper);
-    if cpx.HayError then exit(false);
+    if parser.HayError then exit(false);
     operand.used := true;
     exit(true);
   end else if lex.tokType = tkLitNumber then begin
@@ -273,12 +270,12 @@ begin
       lex.Next;
       //Check for operations
       ScanOperations(positOper);
-      if cpx.HayError then exit(false);
+      if parser.HayError then exit(false);
       operand.used := true;
       exit(true);
     end;
-    ele := cpx.astProg.FindFirst(lex.token);  //identifica elemento
-    if ele=nil then begin
+//    ele := parser.astProg.FindFirst(lex.token);  //**** La Identificación se hará en el análisis semántico
+//    if ele=nil then begin
       //Es un identificador no definido (como una etiqueta). Puede definirse luego.
       operand.Val := -1;        //Indicates to use "operRef"
       operand.Ref := nil;        //Will be later linked.
@@ -288,62 +285,62 @@ begin
       lex.Next;
       //Check for operations
       ScanOperations(positOper);
-      if cpx.HayError then exit(false);
+      if parser.HayError then exit(false);
       operand.used := true;
       exit(true);
-    end else begin
-      //Se identifica un elemento del lenguaje
-      if ele.idClass = eleFuncImp then begin
-        //Es un identificador de función del árbol de sintaxis
-        xfun := TAstFunImp(ele);
-        lex.Next;  //Take variable name
-        operand.Val := -1;        //Indicates to use "operRef"
-        operand.Ref := xfun;
-        //Check for operations
-        ScanOperations(positOper);
-        if cpx.HayError then exit(false);
-        operand.used := true;
-        exit(true);
-      end else if ele.idClass = eleVarDec then begin
-        //It's variable identifier
-        xvar := TAstVarDec(ele);
-        lex.Next;  //Take variable name
-        operand.Val := -1;        //Indicates to use "operRef"
-        operand.Ref := xvar;
-        //Check for operations
-        ScanOperations(positOper);
-        if cpx.HayError then exit(false);
-        operand.used := true;
-        exit(true);
-      end else if ele.idClass = eleConsDec then begin
-        //Es identificador de constante
-        xcon := TAstConsDec(ele);
-        //Constants can be resolved as numbers
-        if (xcon.typ = cpx.typByte) or (xcon.typ = cpx.typWord) then begin
-          lex.Next;
-          operand.Val := -1;        //Indicates to use "operRef"
-          operand.Ref := xcon;
-          //Check for operations
-          ScanOperations(positOper);
-          if cpx.HayError then exit(false);
-        end else begin
-          //Otro tipo de constante
-          cpx.GenError(ER_NOGETVAL_CON);
-          exit(false);
-        end;
-        operand.used := true;
-        exit(true);
-      end else begin
-        //No se puede leer dirección
-        cpx.GenError(ER_EXP_CON_VAL);
-        exit(false);
-      end;
-    end;
+//    end else begin
+//      //Se identifica un elemento del lenguaje
+//      if ele.NodeType = ntFunctDecl then begin
+//        //Es un identificador de función del árbol de sintaxis
+//        xfun := TFunctDecl(ele);
+//        lex.Next;  //Take variable name
+//        operand.Val := -1;        //Indicates to use "operRef"
+//        operand.Ref := xfun;
+//        //Check for operations
+//        ScanOperations(positOper);
+//        if parser.HayError then exit(false);
+//        operand.used := true;
+//        exit(true);
+//      end else if ele.NodeType = ntVarDecl then begin
+//        //It's variable identifier
+//        xvar := TVarDecl(ele);
+//        lex.Next;  //Take variable name
+//        operand.Val := -1;        //Indicates to use "operRef"
+//        operand.Ref := xvar;
+//        //Check for operations
+//        ScanOperations(positOper);
+//        if parser.HayError then exit(false);
+//        operand.used := true;
+//        exit(true);
+//      end else if ele.NodeType = ntConstDecl then begin
+//        //Es identificador de constante
+//        xcon := TConstDecl(ele);
+//        //Constants can be resolved as numbers
+//        if (xcon.typ = parser.typByte) or (xcon.typ = parser.typWord) then begin
+//          lex.Next;
+//          operand.Val := -1;        //Indicates to use "operRef"
+//          operand.Ref := xcon;
+//          //Check for operations
+//          ScanOperations(positOper);
+//          if parser.HayError then exit(false);
+//        end else begin
+//          //Otro tipo de constante
+//          parser.GenError(ER_NOGETVAL_CON);
+//          exit(false);
+//        end;
+//        operand.used := true;
+//        exit(true);
+//      end else begin
+//        //No se puede leer dirección
+//        parser.GenError(ER_EXP_CON_VAL);
+//        exit(false);
+//      end;
+//    end;
   end else begin
-    cpx.GenError(ER_EXP_CON_VAL);
+    parser.GenError(ER_EXP_CON_VAL);
     exit(false);
   end;
-}end;
+end;
 procedure TParserAsm_6502.StartASM; //Inicia el procesamiento de código ASM
 begin
   labels.Clear;   //limpia etiquetas
@@ -353,36 +350,36 @@ procedure TParserAsm_6502.EndASM;  //Termina el procesamiento de código ASM
   {Completa la instrucción "unsInstruct", buscando en la lista de etiquetas.
   Si no encuentra la etiqueta, devuelve FALSE.}
   var
-    lblInstr: TAstAsmInstr;
+    lblInstr: TAsmInstruction;
   begin
     for lblInstr in labels do begin  //Ve si la etiqueta existe
       if operand.Nam  = lblInstr.uname  then begin
         //Sí existe la etiqueta.
         operand.Ref := lblInstr;  //Actualiza la referencia a la etiqueta.
-        //cpx.AddCallerToFromCurr(lblInstr);  //Agrega referencia
+        //parser.AddCallerToFromCurr(lblInstr);  //Agrega referencia
         exit(true);  //Encontrado y actualizado.
       end;
     end;
     exit(false);  //No se encontró.
   end;
 var
-  jmpInst : TAstAsmInstr;
+  jmpInst: TAsmInstruction;
 begin
   //Complete operand for instructions with udefined label references.
   {Al final de esta iteración todas las instruciones que incluyan operandos con
   saltos a etiquetas indefinidas, estarán referenciando a la etiqueta correspondiente
   en lugar de solo guardar el nombre de la etiqueta.}
   for jmpInst in curBlock.undefInstrucs do begin
-    if jmpInst.operand.nam<>'' then begin  //Has an undefined label
+    if jmpInst.operand.nam<>'' then begin    //Has an undefined label
       if not CompleteUndefJump(jmpInst.operand) then begin
         //No se enuentra "jmpInst" en "labels".
-        cpx.GenError(ER_UNDEF_LABEL_, [jmpInst.operand.nam], jmpInst.srcDec);
+        parser.GenError(ER_UNDEF_LABEL_, [jmpInst.operand.nam], jmpInst.SrcPos);
       end;
     end;
     if jmpInst.operand2.nam<>'' then begin   //Has an undefined label
       if not CompleteUndefJump(jmpInst.operand2) then begin
         //No se enuentra "jmpInst" en "labels".
-        cpx.GenError(ER_UNDEF_LABEL_, [jmpInst.operand2.nam], jmpInst.srcDec);
+        parser.GenError(ER_UNDEF_LABEL_, [jmpInst.operand2.nam], jmpInst.SrcPos);
       end;
     end;
   end;
@@ -390,7 +387,7 @@ end;
 procedure TParserAsm_6502.ProcInstrASM(idInst: TP6502Inst; var blkEnd: boolean);
 {Proccess an 6502 ASM instruction. Instruction must be previously validated and
  identified in "idInst".
- Basically this procedure, add a new TAstAsmInstr (including instruction, addresing
+ Basically this procedure, add a new TAsmInstruction (including instruction, addresing
  mode and operamd) to the current TAstAsmBlock, that represents a 6502 instruction.
  An instruction ends with the EOL token or the ASM delimiter "END".
  This procedure must not process the EOL token or the "END" delimiter.
@@ -419,7 +416,7 @@ begin
       AddInstruction(idInst, aAcumulat, 0, srcInst);
     end else begin
       //An operand must follow.
-      cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+      parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
       exit;
     end;
   end else if (lex.tokType=tkIdentifier) and (Upcase(lex.token)='END') then begin
@@ -432,7 +429,7 @@ begin
       AddInstruction(idInst, aAcumulat, 0, srcInst);
     end else begin
       //An operand must follow.
-      cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+      parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
       exit;
     end;
     blkEnd := true;
@@ -442,7 +439,7 @@ begin
     AddInstruction(idInst, aImmediat, 0, srcInst);
     //Complete the "param" of "curInst".
     if not CaptureOperand(curInst.operand, undefLabel) then begin
-      cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+      parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
       exit;
     end;
     if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
@@ -453,7 +450,7 @@ begin
     lex.Next;
     if lex.tokType in [tkLitNumber, tkIdentifier] then begin
       if not CaptureOperand(curInst.operand, undefLabel) then begin
-        cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+        parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
         exit;
       end;
       if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
@@ -463,7 +460,7 @@ begin
         lex.Next;  //Take number
         lex.SkipWhitesNoEOL;
         if UpCase(lex.token) <> 'X' then begin
-          cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+          parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
           exit;
         end;
         lex.Next;  //Take X
@@ -476,7 +473,7 @@ begin
         end;
         //Verify ')'
         if not CaptureParenthes then begin
-          cpx.GenError(ER_EXPEC_PAREN);
+          parser.GenError(ER_EXPEC_PAREN);
           exit;
         end;
       end else if lex.token = ')' then begin
@@ -489,7 +486,7 @@ begin
           lex.Next;  //Toma número
           lex.SkipWhitesNoEOL;
           if UpCase(lex.token) <> 'Y' then begin
-            cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+            parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
             exit;
           end;
           lex.Next;  //Takes Y
@@ -498,15 +495,15 @@ begin
           //Can only be (indirect)
           //No need to change anything.
         end else begin
-          cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+          parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
           exit;
         end;
       end else begin
-        cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+        parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
         exit;
       end;
     end else begin
-      cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+      parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
       exit;
     end;
   end else begin
@@ -514,7 +511,7 @@ begin
     AddInstruction(idInst, aImplicit, 0, srcInst);  //Add the instruction with "aImplicit" temporally. Later will be updated.
     //Complete the "param" of "curInst".
     if not CaptureOperand(curInst.operand, undefLabel) then begin
-      cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+      parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
       exit;
     end;
     if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
@@ -536,7 +533,7 @@ begin
       end else begin
         //Could be the 65c02 instruction BBR0 $12, <label>
         if not CaptureOperand(curInst.operand2, undefLabel) then begin
-          cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+          parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
           exit;
         end;
         if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
@@ -568,7 +565,7 @@ procedure TParserAsm_6502.ProcASMline(out blkEnd: boolean);
 var
   idInst: TP6502Inst;
   tok, lbl: String;
-  lblEle: TAstAsmInstr;
+  lblEle: TAsmInstruction;
   undefLabel: boolean;
   n: Integer;
 begin
@@ -617,7 +614,7 @@ begin
         //Must follow Eol
         lex.Next;
       end else begin
-        cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+        parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
         lex.GotoEOL;   //Move to end of line.
         lex.Next;      //Pass to the start of the next line.
       end;
@@ -635,7 +632,7 @@ begin
         //Must follow Eol
         lex.Next;
       end else begin
-        cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+        parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
         lex.GotoEOL;   //Move to end of line.
         lex.Next;      //Pass to the start of the next line.
       end;
@@ -647,7 +644,7 @@ begin
       if lex.token = ':' then begin
         //Definitivamente es una etiqueta
         if IsLabelDeclared(lbl, lblEle) then begin  //¿Ya existe?
-          cpx.GenError(ER_DUPLIC_LBL_, [lbl]);
+          parser.GenError(ER_DUPLIC_LBL_, [lbl]);
           exit;
         end;
         //Crea la instrucción de etiqueta
@@ -659,7 +656,7 @@ begin
         exit;
       end else begin
         //Not a label
-        cpx.GenError(ER_SYNTAX_ERR_, [lbl]);
+        parser.GenError(ER_SYNTAX_ERR_, [lbl]);
         exit;
       end;
     end;
@@ -667,126 +664,92 @@ begin
     lex.SkipWhitesNoEOL;
   end else begin
     //Something is wrong
-    cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+    parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
     lex.GotoEOL;   //Move to end of line.
   end;
   //Process the line delimiter
   if lex.tokType = tkEol then begin
     lex.Next;      //Pass to the start of the next line.
   end else begin
-    cpx.GenError(ER_SYNTAX_ERR_, [lex.token]);
+    parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
     lex.GotoEOL;   //Move to end of line.
     lex.Next;      //Pass to the start of the next line.
   end;
 end;
 procedure TParserAsm_6502.AddInstruction(const inst: TP6502Inst;
-  addMode: TP6502AddMode; param: integer; srcDec: TSrcPos);
+  addMode: TP6502AddMode; param: integer; const srcDec: TSrcPos);
 {Add a new instruction to the current ASM block element. Set "curInst" pointing
 to the instruction added.}
 begin
-{  if curInst <> nil then begin
-    //We need to close the current instruction.
-    cpx.astProg.CloseElement;
-  end;
-  curInst := TAstAsmInstr.Create;
+  curInst := TAsmInstruction.Create(srcDec);
   curInst.name := '<inst>';
-  curInst.srcDec := srcDec;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itOpcode;   //Marca como instrucción de salto.
-  cpx.astProg.AddElementAndOpen(curInst);
+  curBlock.AddInstruction(curInst);
   //Actualiza propiedades de la instrucción
   curInst.opcode := ord(inst);
   curInst.addMode := ord(addMode);
   curInst.operand.Val := param;
-}end;
+end;
 procedure TParserAsm_6502.AddInstructionLabel(lblName: string);
 {Add a new instruction to the current ASM block element. Set "curInst" pointing
 to the instruction added.
 If operand of the instruction is expression, it mus be added in the child nodes.}
 begin
-{  if curInst <> nil then begin
-    //We need to close the current instruction.
-    cpx.astProg.CloseElement;
-  end;
-  curInst := TAstAsmInstr.Create;
+  curInst := TAsmInstruction.Create(lex.GetSrcPos);
   curInst.name := lblName;
-  curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itLabel;   //Marca como instrucción de salto.
-  cpx.astProg.AddElementAndOpen(curInst);
-  labels.add(curInst);  //Agrega a la lista de etiquetas}
+  curBlock.AddInstruction(curInst);
+  labels.add(curInst);  //Agrega a la lista de etiquetas
 end;
 procedure TParserAsm_6502.AddDirectiveORG(param: word);
 begin
-{  if curInst <> nil then begin
-    //We need to close the current instruction.
-    cpx.astProg.CloseElement;
-  end;
-  curInst := TAstAsmInstr.Create;
+  curInst := TAsmInstruction.Create(lex.GetSrcPos);
   curInst.name := 'ORG';
-  curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itOrgDir;  //Represents ORG
-  cpx.astProg.AddElementAndOpen(curInst);
-  curInst.operand.Val := param;}
+  curBlock.AddInstruction(curInst);
+  curInst.operand.Val := param;
 end;
 procedure TParserAsm_6502.AddDirectiveDB;
 begin
-{  if curInst <> nil then begin
-    //We need to close the current instruction.
-    cpx.astProg.CloseElement;
-  end;
-  curInst := TAstAsmInstr.Create;
+  curInst := TAsmInstruction.Create(lex.GetSrcPos);
   curInst.name := 'DB';
-  curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itDefByte;  //Represents DB
-  cpx.astProg.AddElementAndOpen(curInst);}
+  curBlock.AddInstruction(curInst);
 end;
 procedure TParserAsm_6502.AddDirectiveDW;
 begin
-{  if curInst <> nil then begin
-    //We need to close the current instruction.
-    cpx.astProg.CloseElement;
-  end;
-  curInst := TAstAsmInstr.Create;
+  curInst := TAsmInstruction.Create(lex.GetSrcPos);
   curInst.name := 'DW';
-  curInst.srcDec := lex.GetSrcPos;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
   curInst.iType := itDefWord;  //Represents DB
-  cpx.astProg.AddElementAndOpen(curInst);}
+  curBlock.AddInstruction(curInst);
 end;
 //Inicialización
-procedure TParserAsm_6502.ProcessASMblock(cpx0: TParser);
+procedure TParserAsm_6502.ProcessASMblock(Body: TBlock);
 var
   blkEnd: boolean;
 begin
-{  cpx := cpx0;  //Reference to compiler.
-  lex := cpx.lex; //Actualiza referencia al lexer
-  msg := cpx.msg;
   lex.Next;     //Get ASM
-  lex.curCtx.OnDecodeNext := @DecodeNext;  //Set a new lexer
-  curBlock := TAstAsmBlock.Create;
-  curBlock.srcDec := lex.GetSrcPos;
-  curBlock.name := 'ASMblk';
-  cpx.astProg.AddElementAndOpen(curBlock);
+  lex.curCtx.OnDecodeNext := @DecodeNext;   //Set a new syntax
+  //Create an ASM node
+  curBlock := TAsmBlock.Create(lex.GetSrcPos);
+  Body.AddStatement(curBlock);
   StartASM;
   curInst := nil;
   repeat
     ProcASMline(blkEnd);
   until lex.atEof or blkEnd;
   if lex.atEof then begin
-    cpx.GenError('Unclosed ASM block.');  //Don't stop scanning
+    parser.GenError('Unclosed ASM block.');  //Don't stop scanning
   end;
   EndASM;
-  if curInst <> nil then begin
-    //There are an instruction opened
-    cpx.astProg.CloseElement;
-  end;
   //Current token is delimiter END.
   lex.curCtx.OnDecodeNext := nil;   //Restore lexer here, in order to take the "END" with the new lexer and avoid problems of syntax.
   lex.Next;   //Take END with default lexer.
-  cpx.astProg.CloseElement;  //Close ASM block}
 end;
 function TParserAsm_6502.DecodeNext: boolean;
 {Decode the token in the current position, indicated by (frow, fcol), and returns:
@@ -860,7 +823,7 @@ begin
   '''': begin
     repeat inc(ctx.fcol); until ctx._Eol or (ctx.curline[ctx.fcol] = '''');
     if ctx._Eol then begin
-      cpx.GenError('Unclosed string.');  //Don't stop scanning
+      parser.GenError('Unclosed string.');  //Don't stop scanning
     end else begin
       ctx._NextChar;  //Go to next character
     end;
@@ -873,10 +836,13 @@ begin
   end;
   exit(false);
 end;
-constructor TParserAsm_6502.Create;
+constructor TParserAsm_6502.Create(msg0: TMessageManager; parser0: TParser);
 begin
   inherited Create;
-  labels := TAstAsmInstrs.Create(false);
+  msg := msg0;
+  lex := parser0.lex; //Actualiza referencia al lexer
+  parser := parser0;
+  labels := TAsmInstructionList.Create(false);
 end;
 destructor TParserAsm_6502.Destroy;
 begin
@@ -885,8 +851,6 @@ begin
 end;
 
 initialization
-  vParserASM_6502 := TParserAsm_6502.Create;
 finalization
-  vParserASM_6502.Destroy;
 end.
 

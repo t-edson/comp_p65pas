@@ -41,8 +41,10 @@ public    //Messages
   procedure GenError(txt: String; const Args: array of const);
 private   //Objetos auxiliares
   NamesList: TStringList;
-public    //Calls to Directive Module (ParserDirec.pas)
+public    //Eventos
+  //Calls to Directive Module
   callProcDIRline  : procedure(const AsmLin: string; out ctxChanged: boolean) of object;
+  callParseASMblock: procedure(Body: TBlock) of object;
 protected // Métodos auxiliares para el parser
   function tokIdent: TTokenIdent; inline;
   function CaptureSemicolon: boolean;
@@ -1538,6 +1540,9 @@ begin
   end else if tokIdent = tiBEGIN then begin
     // Bloque anidado - se convierte en parte del bloque actual
     ParseBody(Body);
+  end else if tokIdent = tiASM then begin
+    //Inicio de bloque ASM
+    callParseASMblock(Body);  //LLama a procedimiento externo
   end else if tokIdent = tiSEMIC then begin
     // Instrucción vacía
     Next;

@@ -47,6 +47,7 @@ type
     procedure DoAnalyze;
   public
     constructor Create(msg0: TMessageManager);
+    destructor Destroy; override;
   end;
 
 implementation
@@ -259,8 +260,17 @@ end;
 
 constructor TAnalyzer.Create(msg0: TMessageManager);
 begin
+  //Crea componentes del compilador
   inherited Create(msg0);
+  vParserASM_6502 := TParserAsm_6502.Create(msg0, self);
+  //callParseASMblock := @vParserASM_6502.ProcessASMblock;
   ejecProg := false;
+end;
+
+destructor TAnalyzer.Destroy;
+begin
+  vParserASM_6502.Destroy;
+  inherited Destroy;
 end;
 
 //********************** CÓDIGO DE PRUEBA DEL NUEVO LEXER *****************************
