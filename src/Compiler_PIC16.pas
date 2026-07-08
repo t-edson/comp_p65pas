@@ -1104,13 +1104,13 @@ begin
       exit;
     end;
     {-------------------------------------------------}
-    astProg.Clear;
+    par.astProg.Clear;
     mirRep.Clear;
     //Asigna nombre y ubicación al nodo principal del astProg
-    astProg.name := ExtractFileName(mainFile);
-    p := pos('.',astProg.name);
-    if p <> 0 then astProg.name := copy(astProg.name, 1, p-1);
-    astProg.srcDec := lex.GetSrcPos;
+    par.astProg.name := ExtractFileName(mainFile);
+    p := pos('.', par.astProg.name);
+    if p <> 0 then par.astProg.name := copy(par.astProg.name, 1, p-1);
+    par.astProg.srcDec := lex.GetSrcPos;
     //Continúa con preparación
 //    EndCountElapsed('** Setup in: ');
 //    StartCountElapsed; //Start timer

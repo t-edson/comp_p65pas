@@ -3,11 +3,11 @@ unit Analyzer;
 interface
 uses
   Classes, SysUtils, Types, alexiaLex, Parser,
-  ParserASM_6502, CompGlobals, AstElemP65, ASTunit, MirList;
+  ParserASM_6502, CompGlobals, ASTunit, MirList;
 type
 
   { TAnalyzer }
-  TAnalyzer = class(TParser)
+  TAnalyzer = class
   public    //Public attributes of compiler
     ID        : integer;     //Identificador para el compilador.
     IsUnit    : boolean;     //Flag to identify a Unit
@@ -16,9 +16,10 @@ type
     stopEjec  : boolean;     //To stop compilation
   public   //Componentes del compilador
     lex    : TAleLexer;        //Analizador léxico
+    par    : TParser;          //Analizador sintáctico
     msg    : TMessageManager;  //Gestor de mensajes
     vParserASM_6502 : TParserAsm_6502;
-  public
+  public  //Mensajes
     procedure ClearError;
     procedure GenError(txt: string);
     procedure GenError(txt: string; const srcPos: TSrcPos);
@@ -45,8 +46,6 @@ type
     function PICName: string; virtual; abstract;
     function RAMmax: integer; virtual; abstract;
   private
-    procedure SetParameter(var funPar: TAstParam; const name: string;
-      const srcPos: TSrcPos; typ: TAstTypeDec; const adicVar: TAdicVarDec);
     procedure TestAllConstructs;
   protected  //Elements processing
     procedure AnalyzeInlineDeclar(elemLocat: TElemLocation);
@@ -130,17 +129,6 @@ begin
   hexfile := filPath;
 end;
 {$endregion}
-
-procedure TAnalyzer.SetParameter(var funPar: TAstParam;
-    const name: string; const srcPos: TSrcPos; typ: TAstTypeDec; const adicVar: TAdicVarDec);
-begin
-  funPar.name  := name;
-  funPar.srcPos:= srcPos;
-  funPar.typ   := typ;
-  funPar.adicVar := adicVar;
-end;
-
-
 procedure TAnalyzer.AnalyzeInlineDeclar(elemLocat: TElemLocation);
 {Compila la declaración de procedimientos INLINE. Tanto procedimientos como funciones
  INLINE se manejan internamente como funciones.
@@ -267,11 +255,11 @@ procedure TAnalyzer.DoAnalyze;
 Input: The current context.
 Output: The AST.}
 begin
-  IsUnit := GetUnitDeclaration();
+  IsUnit := par.GetUnitDeclaration();
   if IsUnit then begin
     //DoAnalyzeUnit(astProg);
   end else begin
-    ParseProgram;
+    par.ParseProgram;
   end;
   //TestAllConstructs;  //Llena el astProg con código de ejemplo
 end;
@@ -281,21 +269,22 @@ begin
   //Crea componentes del compilador
   msg := msg0;
   lex := TAleLexer.Create(msg0);
-  inherited Create(msg0, lex);
+  par := TParser.Create(msg0, lex);
   vParserASM_6502 := TParserAsm_6502.Create(msg0, lex);
-  //callParseASMblock := @vParserASM_6502.ProcessASMblock;
+  par.callParseASMblock := @vParserASM_6502.ProcessASMblock;
+//  par.callProcDIRline := @ProcDIRline;
   ejecProg := false;
 end;
 
 destructor TAnalyzer.Destroy;
 begin
   vParserASM_6502.Destroy;
+  par.Destroy;
   lex.Destroy;
   inherited Destroy;
 end;
-
-//********************** CÓDIGO DE PRUEBA DEL NUEVO LEXER *****************************
 procedure TAnalyzer.TestAllConstructs;
+{CRea un código de prueba para el AST}
 var
   SrcPos: TSrcPos;
   VarDeclX, VarDeclY: TVarDecl;
@@ -306,7 +295,9 @@ var
   Literal1, Literal2: TNumberLiteral;
   Param: TVarDecl;
   ProcBody, FuncBody: TBlock;
+  astProg: TProgram;
   begin
+    astProg := par.astProg;
     astProg.Clear;
     // Inicializar posición (simulando la del lexer)
     SrcPos.idCtx := 1;
