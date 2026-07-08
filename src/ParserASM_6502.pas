@@ -8,18 +8,22 @@ unit ParserASM_6502;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fgl, alexiaLex, Parser, P65C02utils, CompGlobals,
-  ASTunit;
+  Classes, SysUtils, fgl, alexiaLex, CompGlobals, P65C02utils, ASTunit;
 type
   { TParserAsm_6502 }
   TParserAsm_6502 = class
   private
-    parser  : TParser;         //Reference to compiler
-    lex     : TAleLexer;       //Reference to the compiler
+    lex     : TAleLexer;       //Reference to the lexer
     msg     : TMessageManager; //Referencia al gestor de mensajes
     labels  : TAsmInstructionList;   //Lista de etiquetas
     curBlock: TAsmBlock;       //Bloque ASM actual.
     curInst : TAsmInstruction;    //Instruction ASM actual.
+    function HayError: boolean; inline;
+  private  //Mensajes
+    procedure GenWarn(txt: string);
+    procedure GenError(txt: string);
+    procedure GenError(txt: string; const srcPos: TSrcPos);
+  private
     procedure AddDirectiveDB;
     procedure AddDirectiveDW;
     procedure AddInstructionLabel(lblName: string);
@@ -32,14 +36,13 @@ type
     procedure ProcASMline(out blkEnd: boolean);
     procedure ProcInstrASM(idInst: TP6502Inst; var blkEnd: boolean);
     procedure StartASM;
-  private
     procedure AddInstruction(const inst: TP6502Inst; addMode: TP6502AddMode;
       param: integer; const srcDec: TSrcPos);
     procedure AddDirectiveORG(param: word);
   public //Inicialización
     procedure ProcessASMblock(Body: TBlock);
     function DecodeNext: boolean;
-    constructor Create(msg0: TMessageManager; parser0: TParser);
+    constructor Create(msg0: TMessageManager; lex0: TAleLexer);
     destructor Destroy; override;
   end;
 var
@@ -59,8 +62,27 @@ procedure SetLanguage;
 begin
   {$I _language\tra_ParserAsm.pas}
 end;
+// Mensajes
+function TParserAsm_6502.HayError: boolean;
+begin
+  exit(msg.nErrors>0);
+end;
+procedure TParserAsm_6502.GenWarn(txt: string);
+{Genera un mensaje de Advertencia, en la posición actual del contexto. }
+begin
+  msg.warn(lex.GetMsgInfo(txt));
+end;
+procedure TParserAsm_6502.GenError(txt: string);
+{Genera un mensaje de error en la posición actual a la posición del contexto actual.}
+begin
+  msg.error(lex.GetMsgInfoE(txt));
+end;
+procedure TParserAsm_6502.GenError(txt: string; const srcPos: TSrcPos);
+{Genera un mensaje de error en la posición indicada.}
+begin
+  msg.error(lex.GetMsgInfoE(txt, srcPos));
+end;
 
-{ TParserAsm_6502 }
 function TParserAsm_6502.GetFaddressByte(addr: integer): byte;
 {Obtiene una dirección de registro para una isntrucción ASM, truncando, si es necesario,
 los bits adicionales.}
@@ -68,7 +90,7 @@ begin
   if addr>255 then begin
     addr := addr and $7F;
     //Indica con advertencia
-    parser.GenWarn(WA_ADDR_TRUNC);
+    GenWarn(WA_ADDR_TRUNC);
   end;
   Result := addr;
 end;
@@ -97,7 +119,7 @@ begin
     lex.Next;   //toma la coma
     exit(true);
   end else begin
-    parser.GenError(ER_EXPEC_PAREN);
+    GenError(ER_EXPEC_PAREN);
     exit(false);
   end;
 end;
@@ -146,7 +168,7 @@ If not operand has found, error is generated and returns FALSE.}
         lex.Next;
         exit(true);
       end else begin
-        parser.GenError('Field expected after "."');
+        GenError('Field expected after "."');
         exit(false);
       end;
     end else if lex.token = '@' then begin
@@ -172,7 +194,7 @@ If not operand has found, error is generated and returns FALSE.}
         lex.Next;
         exit(true);
       end else begin
-        parser.GenError('Field expected after "@"');
+        GenError('Field expected after "@"');
         exit(false);
       end;
     end else if (lex.token = '+') or (lex.token = '-') then begin
@@ -182,12 +204,12 @@ If not operand has found, error is generated and returns FALSE.}
       lex.SkipWhitesNoEOL;
       if (lex.tokType = tkEol) or (lex.token = ';') then begin
         //End of line
-        parser.GenError('Operand expected');
+        GenError('Operand expected');
         exit(false);
       end else begin
         //Follows something
         if not TryStrToInt(lex.token, valueInt) then begin
-          parser.GenError('Numeric operand expected');
+          GenError('Numeric operand expected');
           exit(false);
         end;
         lex.Next;
@@ -252,7 +274,7 @@ begin
     operand.Val := -2;  //To indicates it's $
     //Check for operations
     ScanOperations(positOper);
-    if parser.HayError then exit(false);
+    if HayError then exit(false);
     operand.used := true;
     exit(true);
   end else if lex.tokType = tkLitNumber then begin
@@ -270,7 +292,7 @@ begin
       lex.Next;
       //Check for operations
       ScanOperations(positOper);
-      if parser.HayError then exit(false);
+      if HayError then exit(false);
       operand.used := true;
       exit(true);
     end;
@@ -285,7 +307,7 @@ begin
       lex.Next;
       //Check for operations
       ScanOperations(positOper);
-      if parser.HayError then exit(false);
+      if HayError then exit(false);
       operand.used := true;
       exit(true);
 //    end else begin
@@ -337,7 +359,7 @@ begin
 //      end;
 //    end;
   end else begin
-    parser.GenError(ER_EXP_CON_VAL);
+    GenError(ER_EXP_CON_VAL);
     exit(false);
   end;
 end;
@@ -373,13 +395,13 @@ begin
     if jmpInst.operand.nam<>'' then begin    //Has an undefined label
       if not CompleteUndefJump(jmpInst.operand) then begin
         //No se enuentra "jmpInst" en "labels".
-        parser.GenError(ER_UNDEF_LABEL_, [jmpInst.operand.nam], jmpInst.SrcPos);
+        GenError(Format(ER_UNDEF_LABEL_, [jmpInst.operand.nam]), jmpInst.SrcPos);
       end;
     end;
     if jmpInst.operand2.nam<>'' then begin   //Has an undefined label
       if not CompleteUndefJump(jmpInst.operand2) then begin
         //No se enuentra "jmpInst" en "labels".
-        parser.GenError(ER_UNDEF_LABEL_, [jmpInst.operand2.nam], jmpInst.SrcPos);
+        GenError(format(ER_UNDEF_LABEL_, [jmpInst.operand2.nam]), jmpInst.SrcPos);
       end;
     end;
   end;
@@ -416,7 +438,7 @@ begin
       AddInstruction(idInst, aAcumulat, 0, srcInst);
     end else begin
       //An operand must follow.
-      parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+      GenError(format(ER_SYNTAX_ERR_, [lex.token]));
       exit;
     end;
   end else if (lex.tokType=tkIdentifier) and (Upcase(lex.token)='END') then begin
@@ -429,7 +451,7 @@ begin
       AddInstruction(idInst, aAcumulat, 0, srcInst);
     end else begin
       //An operand must follow.
-      parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+      GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
       exit;
     end;
     blkEnd := true;
@@ -439,7 +461,7 @@ begin
     AddInstruction(idInst, aImmediat, 0, srcInst);
     //Complete the "param" of "curInst".
     if not CaptureOperand(curInst.operand, undefLabel) then begin
-      parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+      GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
       exit;
     end;
     if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
@@ -450,7 +472,7 @@ begin
     lex.Next;
     if lex.tokType in [tkLitNumber, tkIdentifier] then begin
       if not CaptureOperand(curInst.operand, undefLabel) then begin
-        parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+        GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
         exit;
       end;
       if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
@@ -460,7 +482,7 @@ begin
         lex.Next;  //Take number
         lex.SkipWhitesNoEOL;
         if UpCase(lex.token) <> 'X' then begin
-          parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+          GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
           exit;
         end;
         lex.Next;  //Take X
@@ -473,7 +495,7 @@ begin
         end;
         //Verify ')'
         if not CaptureParenthes then begin
-          parser.GenError(ER_EXPEC_PAREN);
+          GenError(ER_EXPEC_PAREN);
           exit;
         end;
       end else if lex.token = ')' then begin
@@ -486,7 +508,7 @@ begin
           lex.Next;  //Toma número
           lex.SkipWhitesNoEOL;
           if UpCase(lex.token) <> 'Y' then begin
-            parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+            GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
             exit;
           end;
           lex.Next;  //Takes Y
@@ -495,15 +517,15 @@ begin
           //Can only be (indirect)
           //No need to change anything.
         end else begin
-          parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+          GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
           exit;
         end;
       end else begin
-        parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+        GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
         exit;
       end;
     end else begin
-      parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+      GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
       exit;
     end;
   end else begin
@@ -511,7 +533,7 @@ begin
     AddInstruction(idInst, aImplicit, 0, srcInst);  //Add the instruction with "aImplicit" temporally. Later will be updated.
     //Complete the "param" of "curInst".
     if not CaptureOperand(curInst.operand, undefLabel) then begin
-      parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+      GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
       exit;
     end;
     if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
@@ -533,7 +555,7 @@ begin
       end else begin
         //Could be the 65c02 instruction BBR0 $12, <label>
         if not CaptureOperand(curInst.operand2, undefLabel) then begin
-          parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+          GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
           exit;
         end;
         if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
@@ -614,7 +636,7 @@ begin
         //Must follow Eol
         lex.Next;
       end else begin
-        parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+        GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
         lex.GotoEOL;   //Move to end of line.
         lex.Next;      //Pass to the start of the next line.
       end;
@@ -632,7 +654,7 @@ begin
         //Must follow Eol
         lex.Next;
       end else begin
-        parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+        GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
         lex.GotoEOL;   //Move to end of line.
         lex.Next;      //Pass to the start of the next line.
       end;
@@ -644,7 +666,7 @@ begin
       if lex.token = ':' then begin
         //Definitivamente es una etiqueta
         if IsLabelDeclared(lbl, lblEle) then begin  //¿Ya existe?
-          parser.GenError(ER_DUPLIC_LBL_, [lbl]);
+          GenError(Format(ER_DUPLIC_LBL_, [lbl]));
           exit;
         end;
         //Crea la instrucción de etiqueta
@@ -656,7 +678,7 @@ begin
         exit;
       end else begin
         //Not a label
-        parser.GenError(ER_SYNTAX_ERR_, [lbl]);
+        GenError(Format(ER_SYNTAX_ERR_, [lbl]));
         exit;
       end;
     end;
@@ -664,14 +686,14 @@ begin
     lex.SkipWhitesNoEOL;
   end else begin
     //Something is wrong
-    parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+    GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
     lex.GotoEOL;   //Move to end of line.
   end;
   //Process the line delimiter
   if lex.tokType = tkEol then begin
     lex.Next;      //Pass to the start of the next line.
   end else begin
-    parser.GenError(ER_SYNTAX_ERR_, [lex.token]);
+    GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
     lex.GotoEOL;   //Move to end of line.
     lex.Next;      //Pass to the start of the next line.
   end;
@@ -744,7 +766,7 @@ begin
     ProcASMline(blkEnd);
   until lex.atEof or blkEnd;
   if lex.atEof then begin
-    parser.GenError('Unclosed ASM block.');  //Don't stop scanning
+    GenError('Unclosed ASM block.');  //Don't stop scanning
   end;
   EndASM;
   //Current token is delimiter END.
@@ -823,7 +845,7 @@ begin
   '''': begin
     repeat inc(ctx.fcol); until ctx._Eol or (ctx.curline[ctx.fcol] = '''');
     if ctx._Eol then begin
-      parser.GenError('Unclosed string.');  //Don't stop scanning
+      GenError('Unclosed string.');  //Don't stop scanning
     end else begin
       ctx._NextChar;  //Go to next character
     end;
@@ -836,12 +858,11 @@ begin
   end;
   exit(false);
 end;
-constructor TParserAsm_6502.Create(msg0: TMessageManager; parser0: TParser);
+constructor TParserAsm_6502.Create(msg0: TMessageManager; lex0: TAleLexer);
 begin
   inherited Create;
-  msg := msg0;
-  lex := parser0.lex; //Actualiza referencia al lexer
-  parser := parser0;
+  msg := msg0;  //Toma referencia al gestor de mensajes
+  lex := lex0;  //Toma referencia al lexer
   labels := TAsmInstructionList.Create(false);
 end;
 destructor TParserAsm_6502.Destroy;

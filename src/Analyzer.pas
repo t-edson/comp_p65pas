@@ -262,7 +262,7 @@ constructor TAnalyzer.Create(msg0: TMessageManager);
 begin
   //Crea componentes del compilador
   inherited Create(msg0);
-  vParserASM_6502 := TParserAsm_6502.Create(msg0, self);
+  vParserASM_6502 := TParserAsm_6502.Create(msg0, lex);
   //callParseASMblock := @vParserASM_6502.ProcessASMblock;
   ejecProg := false;
 end;
