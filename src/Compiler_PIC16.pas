@@ -5,12 +5,12 @@ unit Compiler_PIC16;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fgl, LazLogger, StrUtils,
+  Classes, SysUtils, fgl, LazLogger, LazFileUtils, StrUtils,
   P65C02utils, CPUCore, Parser, ParserDirec, CompGlobals, AstElemP65,
-  Analyzer, ParserASM_6502, MirList, alexiaLex, SIF_P65pas;
+  Analyzer, ParserASM_6502, MirList, alexiaLex, SIF_P65pas, CompOptions;
 type
   { TCompiler_PIC16 }
-  TCompiler_PIC16 = class(TParserDirecBase)
+  TCompiler_PIC16 = class(TAnalyzer)
   private  //Funciones básicas
     addBootldr: integer;  //Address where start Bootloader.
     addVariab : integer;  //Address where start Variables section.
@@ -23,20 +23,6 @@ type
     function AddSNFtoUnit(name: string; retType: TAstTypeDec;
       const srcPos: TSrcPos; var pars: TAstParamArray; codSys: TCodSysNormal
       ): TAstFunDec;
-    procedure cbClearStateRam;
-    function cbReadFrequen: Single;
-    function cbReadMaxFreq: Single;
-    function cbReadORG: Integer;
-    function cbReadPicModel: string;
-    procedure cbSetCpuMode(value: string);
-    procedure cbSetDataAddr(value: string);
-    procedure cbSetFrequen(value: single);
-    procedure cbSetFrequency(f: Longint; value: string);
-    procedure cbSetGeneralORG(value: integer);
-    procedure cbSetMaxFreq(value: single);
-    procedure cbSetORG(value: integer);
-    procedure cbSetPicModel(value: string);
-    procedure cbSetStatRAMCom(value: string);
     procedure Cod_EndProgram;
     procedure Cod_StartProgram;
     procedure ConvertBody(mcont: TMirContainer; sntBlock: TAstCodeCont);
@@ -65,7 +51,6 @@ type
 //    procedure EvaluateConstantDeclare;
 //    procedure ConstantFolding;
 //    procedure ConstanPropagation;
-    procedure DoCompile;
     procedure DoOptimize;
 //    procedure DoGenerateCode;
   public      //Events
@@ -1072,93 +1057,6 @@ begin
 //  if HayError then exit;
 //  ConstanPropagation;
 end;
-procedure TCompiler_PIC16.DoCompile;
-{Compila el contenido del archivo "mainFile" con las opciones que se hayan definido en
-esta instancia del compilador.
-No debería usarse directamente, sino a través del método Exec(), para asegurarse de que
-se inicializan correctamente las configuraiones.}
-var
-  p: SizeInt;
-begin
-  if comp_level = clNull then exit;
-  debugln('');
-  StartCountElapsed;     //Start timer
-  DefCompiler;   //Debe hacerse solo una vez al inicio
-  hexfile  := ChangeFileExt(mainFile, '.prg');     //Obtiene nombre
-  hexfile  := hexFilePath;   //Expande nombre si es necesario
-  //se pone en un "try" para capturar errores y para tener un punto salida de salida
-  //único
-  if ejecProg then begin
-    GenError(ER_COMPIL_PROC);
-    exit;  //sale directamente
-  end;
-  try
-    ejecProg := true;    //Marca bandera
-    ClearError;
-    //Genera instrucciones de inicio
-    lex.ClearContexts;   //Elimina todos los Contextos de entrada
-    //Compila el texto indicado
-    if not lex.OpenContextFrom(mainFile) then begin
-      //No lo encuentra
-      GenError(Format(ER_FIL_NOFOUND, [mainFile]));
-      exit;
-    end;
-    {-------------------------------------------------}
-    par.astProg.Clear;
-    mirRep.Clear;
-    //Asigna nombre y ubicación al nodo principal del astProg
-    par.astProg.name := ExtractFileName(mainFile);
-    p := pos('.', par.astProg.name);
-    if p <> 0 then par.astProg.name := copy(par.astProg.name, 1, p-1);
-    par.astProg.srcDec := lex.GetSrcPos;
-    //Continúa con preparación
-//    EndCountElapsed('** Setup in: ');
-//    StartCountElapsed; //Start timer
-    CreateSystemUnitInAST;  //Crea los elementos del sistema. 3ms aprox.
-    ClearMacros;         //Limpia las macros
-    //Initiate CPU
-    pic.dataAddr1 := -1; //Reset flag
-    pic.MsjError := '';
-    //Compila el archivo actual como programa o como unidad
-    pic.InitMemRAM;      //Init RAM and clear.
-    pic.iRam := 0;       //Ubica puntero al inicio.
-    DoAnalyze;
-    if HayError then exit;
-    //Actualiza esta opción al generador de código porque puede haberse cambiado con las directivas.
-    SIF_P65pas.str_nullterm := str_nullterm;
-
-    EndCountElapsed('-- Analyzed in: ');
-    if comp_level >= clAnalOptim then begin  //Hay optimización
-      if not IsUnit then begin
-        {Compila solo los procedimientos usados, leyendo la información del árbol de sintaxis,
-        que debe haber sido actualizado en la primera pasada.}
-        StartCountElapsed;
-//        DoOptimize;
-        if HayError then exit;
-        EndCountElapsed('-- Optimized in: ');
-      end;
-    end;
-    if comp_level >= clComplete then begin  //Hay síntesis
-      if not IsUnit then begin
-        StartCountElapsed;
-        DoGenerateCode;
-        //EndCountElapsed('-- Synthetized in: ');
-        //StartCountElapsed;
-        //Genera archivo hexa, en la misma ruta del programa
-        DoGenerateHexFile(hexfile);
-        EndCountElapsed('-- Output generated in: ');
-      end;
-    end;
-    //-------------------------------------------------
-    //ClearAll;//es necesario por dejar limpio
-  finally
-    StartCountElapsed;
-    ejecProg := false;
-    //Tareas de finalización
-    if OnAfterCompile<>nil then OnAfterCompile;
-    EndCountElapsed('-- OnAfterCompile in: ');
-  end;
-end;
 function AdrStr(absAdr: word): string;
 {formatea una dirección en cadena.}
 begin
@@ -1169,87 +1067,88 @@ procedure TCompiler_PIC16.Exec(srcFile, outFile: string; pars: string);
 {Execute the compiler. Commonly it will compile "srcFile" getting the parameters fron the
 string "pars". Pars must contain a parameter each line.
 This must be the main entry point to the compiler.}
-var
-  parsList: TStringList;
-  txt, tmp: string;
 begin
-  //Default settings for Command line Options
-  mainFile := srcFile;
-  comp_level  := clComplete;
-  ForToRepeat := true;
-  enabDirMsgs := true;
-  OptReuProVar:= false;   //Optimiza reutilizando variables locales de procedimientos.
-  OptRetProc  := false;   //Optimiza el último exit de los procedimientos.
-  RemUnOpcod  := false;
-
-  asmOutType  := 0;  //Normal Assembler
-  asmIncComm  := false;
-  IncVarDec   := false;
-  IncVarName  := false;
-  IncAddress  := false;
-  //Default settings for Directive settings.
-  syntaxMode  := modPicPas;   //Por defecto en sintaxis nueva
-  cpuMode     := cpu6502;
-  bootloader  := bldJMP;
-  str_nullterm:= false;
-  //Load parameters in a list
-  parsList := TStringList.Create;
-  parsList.Text := trim(pars);
-//debugln('--Executing:('+ StringReplace(pars, LineEnding,' ',[rfReplaceAll])+')');
-  //Extract and set parameters
-  unitPaths.Clear;
-  for txt in parsList do begin
-    if length(txt)<2 then continue;
-    if          copy(txt,1,2) = '-C' then begin  //---Compiling options
-      case txt of
-      //Compiler level
-      '-Cn' : comp_level := clNull;
-      '-Ca' : comp_level := clAnalys;
-      '-Cao': comp_level := clAnalOptim;
-      '-C'  : comp_level := clComplete;
-      //Compiler settings
-      '-Cf' : ForToRepeat := false;
-      end;
-    end else if copy(txt,1,2) = '-O' then begin  //---Optimization options
-      case txt of
-      '-Ov' : OptReuProVar := true;
-      '-Or' : OptRetProc   := true;
-      '-Ou' : RemUnOpcod   := true;
-      end;
-    end else if copy(txt,1,2) = '-A' then begin  //---Assembler options
-      case txt of
-      '-A0': asmOutType := 0;    //Output in normal Assembler.
-      '-A1': asmOutType := 1;    //Output in BASIC POKE's loader.
-      '-Ac': asmIncComm := true; //Include commnents in ASM output.
-      '-Av': IncVarDec  := true; //Include variables information section.
-      '-Au': ExcUnused  := true; //Exclude unused variables in variable section.
-      '-An': incVarName := true; //Include nombres de variables en las instrucciones.
-      '-Aa': IncAddress := true; //Include memory address in instructions.
-      end;
-    end else if copy(txt,1,2) = '-F' then begin  //File names and paths
-      if copy(txt,1,3) = '-Fu' then begin  //Add unit path
-        tmp := copy(txt,4,length(txt));
-        if tmp='' then continue;
-        if tmp[1]='"' then delete(tmp,1,1);
-        if tmp[length(tmp)]='"' then delete(tmp,length(tmp),1);
-        unitPaths.Add(tmp);
-      end else if copy(txt,1,3) = '-Fo' then begin  //Set output file
-        tmp := copy(txt,4,length(txt));
-        if tmp='' then continue;
-        if tmp[1]='"' then delete(tmp,1,1);
-        if tmp[length(tmp)]='"' then delete(tmp,length(tmp),1);
-        setHexFile(tmp);
-      end;
-    end else if txt = '-Dn' then begin  //Disable directive messages
-      enabDirMsgs := false;
-    end else begin         //Other.
-
-    end;
-  end;
+  options.mainFile := srcFile;   //Set source file
+  //debugln('--Executing:('+ StringReplace(pars, LineEnding,' ',[rfReplaceAll])+')');
+  options.ReadParameters(pars);  //Set parameters
+  //Options for SIF
+  opt := options;   //Pasa referencia de las opciones del compilador al SIF.
+  SIF_P65pas.cpuMode := opt.cpuMode;   //Actualiza copia
   //Compile
-  DoCompile;
-  //Destroy list
-  parsList.Destroy;
+  if ejecProg then begin   //¿Ya se está ejecutando el compilador?
+    GenError(ER_COMPIL_PROC);
+    exit;  //sale directamente
+  end;
+  debugln('');
+  StartCountElapsed;     //Start timer
+  if options.comp_level = clNull then exit;
+  options.generateHexFileName;   //Genera el nombre del archivo *.hex
+  //se pone en un "try" para capturar errores y para tener un punto salida de salida
+  //único
+  try
+    ejecProg := true;    //Marca bandera
+    ClearError;
+    //Genera instrucciones de inicio
+    lex.ClearContexts;   //Elimina todos los Contextos de entrada
+    //Compila el texto indicado
+    if not lex.OpenContextFrom(options.mainFile) then begin
+      //No lo encuentra
+      GenError(Format(ER_FIL_NOFOUND, [options.mainFile]));
+      exit;
+    end;
+    {-------------------------------------------------}
+    //********** Tal vez, estas tareas con el parser deben hacerse en otra parte
+    mirRep.Clear;
+    par.astProg.Clear;
+    //Asigna nombre y ubicación al nodo principal del astProg
+    par.astProg.name := ExtractFileNameWithoutExt(options.mainFile);
+    par.astProg.srcDec := lex.GetSrcPos;
+    //Continúa con preparación
+
+//    EndCountElapsed('** Setup in: ');
+//    StartCountElapsed; //Start timer
+    CreateSystemUnitInAST;  //Crea los elementos del sistema. 3ms aprox.
+    parDirect.ClearMacros;         //Limpia las macros
+    //Initiate CPU
+    pic.dataAddr1 := -1; //Reset flag
+    pic.MsjError := '';
+    //Compila el archivo actual como programa o como unidad
+    pic.InitMemRAM;      //Init RAM and clear.
+    pic.iRam := 0;       //Ubica puntero al inicio.
+    DoAnalyze;
+    if HayError then exit;
+    //Actualiza esta opción al generador de código porque puede haberse cambiado con las directivas.
+    SIF_P65pas.cpuMode := opt.cpuMode;   //Actualiza copia
+
+    EndCountElapsed('-- Analyzed in: ');
+    if options.comp_level >= clAnalOptim then begin  //Hay optimización
+      if not IsUnit then begin
+        {Compila solo los procedimientos usados, leyendo la información del árbol de sintaxis,
+        que debe haber sido actualizado en la primera pasada.}
+        StartCountElapsed;
+//        DoOptimize;
+        if HayError then exit;
+        EndCountElapsed('-- Optimized in: ');
+      end;
+    end;
+    if options.comp_level >= clComplete then begin  //Hay síntesis
+      if not IsUnit then begin
+        StartCountElapsed;
+        DoGenerateCode;
+        //EndCountElapsed('-- Synthetized in: ');
+        //StartCountElapsed;
+        //Genera archivo hexa, en la misma ruta del programa
+        DoGenerateHexFile(options.hexfile);
+        EndCountElapsed('-- Output generated in: ');
+      end;
+    end;
+  finally
+    StartCountElapsed;
+    ejecProg := false;
+    //Tareas de finalización
+    if OnAfterCompile<>nil then OnAfterCompile;
+    EndCountElapsed('-- OnAfterCompile in: ');
+  end;
 end;
 //Inicialización
 procedure SetCodSysInline(fun: TAstFunDec);
@@ -1951,82 +1850,6 @@ begin
   astProg.CloseElement;
 }end;
 
-procedure TCompiler_PIC16.cbSetGeneralORG(value: integer);
-begin
-   GeneralORG := value
-end;
-procedure TCompiler_PIC16.cbSetCpuMode(value: string);
-begin
-  if value = '6502' then begin
-    cpuMode := cpu6502;
-    picCore.Model := '6502';
-  end;
-  if value = '65C02' then begin
-    cpuMode := cpu65C02;
-    picCore.Model := '65C02';
-  end;
-end;
-procedure TCompiler_PIC16.cbSetFrequency(f: Longint; value: string);
-begin
-  case UpperCase(value) of
-  'KHZ': f := f * 1000;
-  'MHZ': f := f * 1000000;
-  else
-    GenErrorDir('Error in directive.');
-    exit;
-  end;
-  if f>picCore.MaxFreq then begin
-    GenErrorDir('Frequency too high for this device.');
-    exit;
-  end;
-  picCore.frequen:=f; //asigna frecuencia
-end;
-procedure TCompiler_PIC16.cbSetStatRAMCom(value: string);
-begin
-  picCore.SetStatRAMCom(value);
-  if picCore.MsjError<>'' then GenErrorDir(picCore.MsjError);
-end;
-procedure TCompiler_PIC16.cbSetDataAddr(value: string);
-begin
-  picCore.SetDataAddr(value);
-  if picCore.MsjError<>'' then GenErrorDir(picCore.MsjError);
-end;
-procedure TCompiler_PIC16.cbClearStateRam;
-begin
-  picCore.DisableAllRAM;
-end;
-function TCompiler_PIC16.cbReadPicModel(): string;
-begin
-  Result := picCore.Model;
-end;
-procedure TCompiler_PIC16.cbSetPicModel(value: string);
-begin
-  picCore.Model := value;
-end;
-function TCompiler_PIC16.cbReadFrequen(): Single;
-begin
-  Result := picCore.frequen;
-end;
-procedure TCompiler_PIC16.cbSetFrequen(value: single);
-begin
-  picCore.frequen := round(Value);
-end;
-function TCompiler_PIC16.cbReadMaxFreq(): Single;
-begin
-  Result := PICCore.MaxFreq;
-end;
-procedure TCompiler_PIC16.cbSetMaxFreq(value: single);
-begin
-  PICCore.MaxFreq := round(Value);
-end;
-function TCompiler_PIC16.cbReadORG(): Integer;
-begin
-  Result := picCore.iRam;
-end;
-procedure TCompiler_PIC16.cbSetORG(value: integer);
-begin
-  picCore.iRam := value;
-end;
 procedure TCompiler_PIC16.Cod_StartProgram;
 //Codifica la parte inicial del programa
 begin
@@ -2041,25 +1864,7 @@ end;
 constructor TCompiler_PIC16.Create(msg0: TMessageManager);
 begin
   inherited Create(msg0);
-  //OnNewLine:=@cInNewLine;
-  syntaxMode := modPicPas;   //Por defecto en sintaxis nueva
-
   ID := 16;  //Identifica al compilador PIC16
-  //Conecta el parser de directivas al Generador de Cödigo
-  OnSetGeneralORG:= @cbSetGeneralORG;
-  OnSetCpuMode   := @cbSetCpuMode;
-  OnSetFrequency := @cbSetFrequency;
-  OnSetStatRAMCom:= @cbSetStatRAMCom;
-  OnSetDataAddr  := @cbSetDataAddr;
-  OnClearStateRam:= @cbClearStateRam;
-  OnReadPicModel := @cbReadPicModel;
-  OnSetPicModel  := @cbSetPicModel;
-  OnReadFrequen  := @cbReadFrequen;
-  OnSetFrequen   := @cbSetFrequen;
-  OnReadMaxFreq  := @cbReadMaxFreq;
-  OnSetMaxFreq   := @cbSetMaxFreq;
-  OnReadORG      := @cbReadORG;
-  OnSetORG       := @cbSetORG;
 end;
 destructor TCompiler_PIC16.Destroy;
 begin

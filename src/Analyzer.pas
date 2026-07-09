@@ -3,7 +3,7 @@ unit Analyzer;
 interface
 uses
   Classes, SysUtils, Types, alexiaLex, Parser,
-  ParserASM_6502, CompGlobals, ASTunit, MirList;
+  ParserASM_6502, ParserDirec, CompGlobals, ASTunit, MirList, CompOptions;
 type
 
   { TAnalyzer }
@@ -15,31 +15,16 @@ type
     ejecProg  : boolean;     //Indicates the compiler is working
     stopEjec  : boolean;     //To stop compilation
   public   //Componentes del compilador
-    lex    : TAleLexer;        //Analizador léxico
-    par    : TParser;          //Analizador sintáctico
-    msg    : TMessageManager;  //Gestor de mensajes
-    vParserASM_6502 : TParserAsm_6502;
+    lex      : TAleLexer;        //Analizador léxico
+    par      : TParser;          //Analizador sintáctico
+    msg      : TMessageManager;  //Gestor de mensajes
+    parserASM: TParserAsm_6502;
+    parDirect: TParserDirecBase;
+    options  : TCompOptions;
   public  //Mensajes
     procedure ClearError;
     procedure GenError(txt: string);
     procedure GenError(txt: string; const srcPos: TSrcPos);
-  protected //Compiling Options. Set by directives.
-    syntaxMode  : (modPascal, modPicPas);
-    bootloader  : TBootloader;  //Bootloader code for the compiled binary.
-    loaderBytes : array of integer; //Custom Bootloader bytes.
-    str_nullterm: boolean;   //Flag to activate the Null-terminated string for literals.
-  protected //Command line options.
-    mainFile    : string;    //Archivo inicial que se compila.
-    hexFile     : string;    //Nombre de archivo de salida.
-    comp_level  : TCompileLevel; //Compilation level.
-    ForToRepeat : boolean;   //COnvert FOR loop to REPEAT loop.
-    //  incDetComm  : boolean;   //Incluir Comentarios detallados.
-    enabDirMsgs : boolean;   //Bandera para permitir generar mensajes desde las directivas.
-  public    //Files
-    function hexFilePath: string;
-    function mainFilePath: string;
-    function ExpandRelPathToMain(FileName: string): string;
-    procedure setHexFile(newHexFile: string);
   public
     mirRep: TMirList;    //Container for MIR representation
   public    //Access to CPU hardware.
@@ -50,7 +35,7 @@ type
   protected  //Elements processing
     procedure AnalyzeInlineDeclar(elemLocat: TElemLocation);
     procedure DoAnalyze;
-  public
+  public     //Incialización
     constructor Create(msg0: TMessageManager);
     destructor Destroy; override;
   end;
@@ -107,28 +92,7 @@ procedure TAnalyzer.GenError(txt: string; const srcPos: TSrcPos);
 begin
   msg.error(lex.GetMsgInfoE(txt, srcPos));
 end;
-{$region "Files"}
-function TAnalyzer.hexFilePath: string;
-begin
-  Result := ExpandRelPathTo(mainFile, hexfile); //Convierte a ruta absoluta
-end;
-function TAnalyzer.mainFilePath: string;
-begin
-  Result := mainFile;
-end;
-function TAnalyzer.ExpandRelPathToMain(FileName: string): string;
-{Convert a relative path to absolute path, considering the base path is "mainFile".}
-begin
-  Result := ExpandRelPathTo(mainFile, FileName);
-end;
-procedure TAnalyzer.setHexFile(newHexFile: string);
-var
-  filPath: String;
-begin
-  filPath := ExpandRelPathTo(mainFile, newHexFile);  //Completa ruta, si es relativa
-  hexfile := filPath;
-end;
-{$endregion}
+
 procedure TAnalyzer.AnalyzeInlineDeclar(elemLocat: TElemLocation);
 {Compila la declaración de procedimientos INLINE. Tanto procedimientos como funciones
  INLINE se manejan internamente como funciones.
@@ -268,17 +232,24 @@ constructor TAnalyzer.Create(msg0: TMessageManager);
 begin
   //Crea componentes del compilador
   msg := msg0;
-  lex := TAleLexer.Create(msg0);
-  par := TParser.Create(msg0, lex);
-  vParserASM_6502 := TParserAsm_6502.Create(msg0, lex);
-  par.callParseASMblock := @vParserASM_6502.ProcessASMblock;
-//  par.callProcDIRline := @ProcDIRline;
+  lex := TAleLexer.Create(msg);
+  par := TParser.Create(msg, lex);
+  options  := TCompOptions.Create;
+  parserASM := TParserAsm_6502.Create(msg, lex);
+  parDirect := TParserDirecBase.Create(msg, lex, options);
+  mirRep   := TMirList.Create;
+  //Comenta los Parser de Ensamblador y de directivas
+  par.callParseASMblock := @parserASM.ProcessASMblock;
+  par.callProcDIRline := @parDirect.ProcDIRline;
+  //Inicializa variables
   ejecProg := false;
 end;
-
 destructor TAnalyzer.Destroy;
 begin
-  vParserASM_6502.Destroy;
+  mirRep.Destroy;
+  parDirect.Destroy;
+  parserASM.Destroy;
+  options.Destroy;
   par.Destroy;
   lex.Destroy;
   inherited Destroy;

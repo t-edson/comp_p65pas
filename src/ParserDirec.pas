@@ -5,7 +5,7 @@ unit ParserDirec;
 interface
 uses
   Classes, SysUtils, fgl, math, LazLogger, FileUtil,
-  alexiaLex, Parser, CompGlobals, Analyzer, MirList;
+  alexiaLex, Parser, CompGlobals, MirList, CompOptions;
 type  //Tipos para manejo de expresiones
   TDirDatType = (ddtNumber, ddtString);
 
@@ -73,7 +73,11 @@ type
 
 
   { TParserDirecBase }
-  TParserDirecBase = class(TAnalyzer)
+  TParserDirecBase = class
+  private
+    lex     : TAleLexer;       //Reference to the lexer
+    msg     : TMessageManager; //Referencia al gestor de mensajes
+    options : TCompOptions;    //Opciones del compilador
   private  //Mensajes
     function HayError: boolean; inline;          //Flag for errors
     procedure GenInfo(txt: string);
@@ -97,7 +101,6 @@ type
     function jerOp(operad: String): Integer;
     function Evaluar(Op1: TDirOperand; opr: String; Op2: TDirOperand): TDirOperand;
   private  //Instructions implementation
-    function modeStr: string;
     function ScanIFDEF(out tok0: string): boolean;
     procedure ProcCLEAR_STATE_RAM;
     procedure ProcSET_STATE_RAM;
@@ -145,21 +148,7 @@ type
     function AsigVariable(VarName: string; const value: TDirOperand): TDirVar;
   public   //Public
     lexDir : TContext;  //lexer para analizar directivas
-    //Eventos para el generador de código
-    OnSetGeneralORG: procedure(value: integer) of object;
-    OnSetCpuMode: procedure(value: string) of object;
-    OnSetFrequency: procedure(f: Longint; value: string) of object;
-    OnSetStatRAMCom: procedure(value: string) of object;
-    OnSetDataAddr: procedure(value: string) of object;
-    OnClearStateRam: procedure of object;
-    OnReadPicModel: function: String of object;
-    OnSetPicModel: procedure(value: string) of object;
-    OnReadFrequen: function: Single of object;
-    OnSetFrequen: procedure(value: Single) of object;
-    OnReadMaxFreq: function: Single of object;
-    OnSetMaxFreq: procedure(value: Single) of object;
-    OnReadORG: function: integer of object;
-    OnSetORG: procedure(value: integer) of object;
+
     procedure skipWhites;
     procedure GenErrorDir(txt: string);
     procedure GenErrorDir(txt: string; const Args: array of const);
@@ -172,7 +161,8 @@ type
     function DecodeNext: boolean;
     procedure ClearMacros;
   public   //Initialization
-    constructor Create(msg0: TMessageManager);
+    constructor Create(msg0: TMessageManager; lex0: TAleLexer;
+      options0: TCompOptions);
     destructor Destroy; override;
   end;
 var
@@ -772,15 +762,6 @@ begin
     end;
 end;
 //Instructions implementation
-function TParserDirecBase.modeStr: string;
-begin
-  case syntaxMode of
-  modPascal: Result := 'modPascal';
-  modPicPas: Result := 'modPicPas';
-  else
-    Result := 'Unknown';
-  end;
-end;
 function TParserDirecBase.ScanIFDEF(out tok0: string): boolean;
 {Explora el texto, hasta encontrar la directiva $ENDIF o $ELSE.  Si llega al
  final del contexto, sin encontrar alguna de estas directivas, devuelve FALSE.}
@@ -817,10 +798,10 @@ begin
   lexDir.Next;  //pasa al siguiente
   filPath := GetDExpression(0).valStr;
   if HayError then Exit;
-  filPath := ExpandRelPathTo(mainFile, filPath);  //Completa ruta, si es relativa
+  filPath := ExpandRelPathTo(options.mainFile, filPath);  //Completa ruta, si es relativa
   //Por simplicidad se permite realizar esto en la primera y segunda pasada
   //Auqnue lo más práctico sería en la segunda pasada donde se genera el HEX final.
-  hexfile := filPath;
+  options.hexfile := filPath;
 end;
 procedure TParserDirecBase.ProcDEFINE(lin: string);
 var
@@ -995,7 +976,7 @@ begin
 //    //No incluye información de ruta. Asume que está en la misma ruta.
 //    filPath := ExtractFileDir(mainFile) + DirectorySeparator + filPath;
 //  end;
-  filPath := ExpandRelPathToMain(filPath);
+  filPath := options.ExpandRelPathToMain(filPath);
   if not FileExists(filPath) then begin
     GenErrorDir(ER_FILE_NO_FND_, [filPath]);
     exit;
@@ -1047,7 +1028,7 @@ begin
 //    //No incluye información de ruta. Asume que está en la misma ruta.
 //    filPath := ExtractFileDir(mainFile) + DirectorySeparator + filPath;
 //  end;
-  filPath := ExpandRelPathToMain(filPath);
+  filPath := options.ExpandRelPathToMain(filPath);
   if not FileExists(filPath) then begin
     GenErrorDir(ER_FILE_NO_FND_, [filPath]);
     exit;
@@ -1070,6 +1051,21 @@ begin
   //ShowContexts;
 end;
 procedure TParserDirecBase.ProcFREQUENCY;
+  procedure cbSetFrequency(f: Longint; value: string);
+  begin
+    case UpperCase(value) of
+    'KHZ': f := f * 1000;
+    'MHZ': f := f * 1000000;
+    else
+      GenErrorDir('Error in directive.');
+      exit;
+    end;
+    if f>options.MaxFreq then begin
+      GenErrorDir('Frequency too high for this device.');
+      exit;
+    end;
+    options.frequen:=f; //asigna frecuencia
+  end;
 var
   f: Longint;
 begin
@@ -1085,11 +1081,7 @@ begin
   end;
   lexDir.Next;  //pasa al siguiente
   skipWhites;
-  if OnSetFrequency=nil then begin
-    GenError('Not implemented');
-  end else begin
-    OnSetFrequency(f, lexDir.ReadToken);  //Carga directamente en variable global
-  end;
+  cbSetFrequency(f, lexDir.ReadToken);  //Carga directamente en variable global
 end;
 procedure TParserDirecBase.ProcORG;
 var
@@ -1104,11 +1096,8 @@ begin
       exit;
     end;
     //Ya se tiene el valor numérico
-    if OnSetGeneralORG=nil then begin
-      GenError('Not implemented');
-    end else begin
-      OnSetGeneralORG(valOrg);  //Carga directamente en variable global
-    end;
+    options.GeneralORG := valOrg;   //Carga en las opciones
+
     lexDir.Next;
     skipWhites;
     //No debe seguir nada
@@ -1129,11 +1118,7 @@ begin
   lexDir.Next;  //pasa al siguiente
   txtMsg := GetDExpression(0).valStr;
   if HayError then exit;
-  if OnSetStatRAMCom=nil then begin
-    GenError('Not implemented');
-  end else begin
-    OnSetStatRAMCom(txtMsg);  //Carga directamente en variable global
-  end;
+  options.hcCommands.AddObject(txtMsg, TObject(0));  //Identifica el comando con "0".
 end;
 procedure TParserDirecBase.ProcSET_DATA_ADDR;
 var
@@ -1142,11 +1127,7 @@ begin
   lexDir.Next;  //Get SET_DATA_ADDR
   txtMsg := GetDExpression(0).valStr;
   if HayError then exit;
-  if OnSetDataAddr=nil then begin
-    GenError('Not implemented');
-  end else begin
-    OnSetDataAddr(txtMsg);  //Carga directamente en variable global
-  end;
+  options.hcCommands.AddObject(txtMsg, TObject(1));  //Identifica el comando con "1".
 end;
 procedure TParserDirecBase.ProcBOOTLOADER;
   function ReadValue: integer;
@@ -1207,23 +1188,23 @@ begin
     //Can be one of the predefined labels
     parstr := UpCase(lexdir.ReadToken);
     if          parstr = 'NONE' then begin
-      bootloader := bldNone;
+      options.bootloader := bldNone;
     end else if parstr = 'JMP' then begin
-      bootloader := bldJMP;
+      options.bootloader := bldJMP;
     end else if parstr = 'C64' then begin
-      bootloader := bldC64;
+      options.bootloader := bldC64;
     end else begin
       GenErrorDir(ER_SYNTAX_ERRO);
       exit;
     end;
   end else if lexdir.tokType in [tkLitNumber, tkString] then begin
     //Must be a list of values for a custom bootloader.
-    bootloader := bldCUSTOM;
+    options.bootloader := bldCUSTOM;
     n := ReadValue();
     if HayError then exit;
     siz := 0;  //Initial size
-    setlength(loaderBytes, siz+1);
-    loaderBytes[siz] := n;
+    setlength(options.loaderBytes, siz+1);
+    options.loaderBytes[siz] := n;
     skipWhites;
     while lexDir.ReadToken = ',' do begin
       lexdir.Next;
@@ -1231,8 +1212,8 @@ begin
       n := ReadValue();
       if HayError then exit;
       inc(siz);
-      setlength(loaderBytes, siz+1);
-      loaderBytes[siz] := n;
+      setlength(options.loaderBytes, siz+1);
+      options.loaderBytes[siz] := n;
       skipWhites;
     end;
   end else begin
@@ -1253,10 +1234,10 @@ begin
     parstr := UpCase(lexdir.ReadToken);
     if          parstr = 'NULL_TERMINATED' then begin
       lexDir.Next;  //Get option
-      str_nullterm := true;
+      options.str_nullterm := true;
     end else if parstr = 'NONE' then begin
       lexDir.Next;  //Get option
-      str_nullterm := false;
+      options.str_nullterm := false;
     end else begin
       GenErrorDir(ER_SYNTAX_ERRO);
       exit;
@@ -1269,11 +1250,7 @@ end;
 procedure TParserDirecBase.ProcCLEAR_STATE_RAM;
 {Limpia el estado de la memoria RAM}
 begin
-  if OnClearStateRam=nil then begin
-    GenError('Not implemented');
-  end else begin
-    OnClearStateRam;
-  end;
+  options.hcCommands.AddObject('', TObject(2));  //Identifica el comando con "2".
 end;
 procedure TParserDirecBase.ProcINFO;
 var
@@ -1283,7 +1260,7 @@ begin
   txtMsg := GetDExpression(0).valStr;
   if HayError then Exit;
   //Solo muestra en compilación y en la primera pasada
-  if enabDirMsgs then GenInfo(txtMsg);
+  if options.enabDirMsgs then GenInfo(txtMsg);
 end;
 procedure TParserDirecBase.ProcWARNING;
 var
@@ -1293,7 +1270,7 @@ begin
   txtMsg := GetDExpression(0).valStr;
   if HayError then Exit;
   //Solo muestra en compilación y en la primera pasada
-  if enabDirMsgs then GenWarn(txtMsg);
+  if options.enabDirMsgs then GenWarn(txtMsg);
 end;
 procedure TParserDirecBase.ProcERROR;
 var
@@ -1303,7 +1280,7 @@ begin
   txtMsg := GetDExpression(0).valStr;
   if HayError then Exit;
   //Solo muestra en compilación y en la primera pasada
-  if enabDirMsgs then GenError(txtMsg);
+  if options.enabDirMsgs then GenError(txtMsg);
 end;
 procedure TParserDirecBase.ProcSET;
 //Asigna valor a una varaible
@@ -1354,7 +1331,7 @@ begin
   txtMsg := GetDExpression(0).valStr;
   if HayError then Exit;
   //Solo muestra en compilación y en la primera pasada
-  if enabDirMsgs then msg.msgBox(txtMsg);
+  if options.enabDirMsgs then msg.msgBox(txtMsg);
   txtMsg := '';
 end;
 procedure TParserDirecBase.ProcMSGWAR;
@@ -1365,7 +1342,7 @@ begin
   txtMsg := GetDExpression(0).valStr;
   if HayError then Exit;
   //Solo muestra en compilación y en la primera pasada
-  if enabDirMsgs then msg.msgWar(txtMsg);
+  if options.enabDirMsgs then msg.msgWar(txtMsg);
 end;
 procedure TParserDirecBase.ProcMSGERR;
 var
@@ -1375,7 +1352,7 @@ begin
   txtMsg := GetDExpression(0).valStr;
   if HayError then Exit;
   //Solo muestra en compilación y en la primera pasada
-  if enabDirMsgs then msg.msgErr(txtMsg);
+  if options.enabDirMsgs then msg.msgErr(txtMsg);
 end;
 procedure TParserDirecBase.ProcMODE;
 var
@@ -1385,9 +1362,9 @@ begin
   skipWhites;
   txtMode := UpCase(lexDir.ReadToken);
   if txtMode = 'P65PAS' then begin
-    self.syntaxMode := modPicPas;
+    options.syntaxMode := modPicPas;
   end else if txtMode = 'PASCAL' then begin
-    self.syntaxMode := modPascal;
+    options.syntaxMode := modPascal;
   end else begin
     GenErrorDir(ER_MODE_UNKNOWN, [txtMode]);
     exit;
@@ -1400,88 +1377,54 @@ begin
   lexDir.Next;  //Go to next token
   skipWhites;
   txtMode := UpCase(lexDir.ReadToken);
-  if OnSetCpuMode=nil then begin
-    GenError('Not implemented');
+  if txtMode = 'CPU6502' then begin   //The Default
+    options.cpuMode := cpu6502;
+    options.Model := '6502';
+  end else if txtMode = 'CPU65C02' then begin
+    options.cpuMode := cpu65C02;
+    options.Model := '65C02';
   end else begin
-    if txtMode = 'CPU6502' then begin   //The Default
-      OnSetCpuMode('6502');
-    end else if txtMode = 'CPU65C02' then begin
-      OnSetCpuMode('65C02');
-    end else begin
-      GenErrorDir(ER_PROC_UNKNOWN, [txtMode]);
-      exit;
-    end;
+    GenErrorDir(ER_PROC_UNKNOWN, [txtMode]);
+    exit;
   end;
 end;
 
 //Access to system variables
 function TParserDirecBase.read_PIC_MODEL: string;
 begin
-  if OnReadPicModel=nil then begin
-    GenError('Not implemented');
-  end else begin
-    Result := OnReadPicModel();  //Carga directamente en variable global
-  end;
+  Result := options.Model;  //Carga directamente en variable global
 end;
 procedure TParserDirecBase.write_PIC_MODEL(AValue: string);
 begin
-  if OnSetPicModel=nil then begin
-    GenError('Not implemented');
-  end else begin
-    OnSetPicModel(AValue);  //Carga directamente en variable global
-  end;
+  options.Model := AValue;  //Carga directamente en variable global
 end;
 function TParserDirecBase.read_PIC_FREQUEN: Single;
 begin
-  if OnReadFrequen=nil then begin
-    GenError('Not implemented');
-  end else begin
-    Result := OnReadFrequen();  //Carga directamente en variable global
-  end;
+  Result := options.frequen;  //Carga directamente en variable global
 end;
 procedure TParserDirecBase.write_PIC_FREQUEN(AValue: Single);
 begin
-  if OnSetFrequen=nil then begin
-    GenError('Not implemented');
-  end else begin
-    OnSetFrequen(AValue);  //Carga directamente en variable global
-  end;
+  options.frequen := round(AValue); //Carga directamente en opciones
 end;
 function TParserDirecBase.read_PIC_MAXFREQ: Single;
 begin
-  if OnReadMaxFreq=nil then begin
-    GenError('Not implemented');
-  end else begin
-    Result := OnReadMaxFreq();  //Carga directamente en variable global
-  end;
+  Result := options.MaxFreq;
 end;
 procedure TParserDirecBase.write_PIC_MAXFREQ(AValue: Single);
 begin
-  if OnSetMaxFreq=nil then begin
-    GenError('Not implemented');
-  end else begin
-    OnSetMaxFreq(AValue);  //Carga directamente en variable global
-  end;
+  options.MaxFreq := round(AValue);
 end;
 function TParserDirecBase.read_ORG: Single;
 begin
-  if OnReadORG=nil then begin
-    GenError('Not implemented');
-  end else begin
-    Result := OnReadORG();  //Carga directamente en variable global
-  end;
+  Result := options.iRam;
 end;
 procedure TParserDirecBase.write_ORG(AValue: Single);
 begin
-  if OnSetORG=nil then begin
-    GenError('Not implemented');
-  end else begin
-    OnSetORG(round(AValue));  //Carga directamente en variable global
-  end;
+  options.iRam := round(AValue);
 end;
 function TParserDirecBase.read_SYN_MODE: String;
 begin
-  case syntaxMode of
+  case options.syntaxMode of
   modPicPas: Result := 'PicPas';
   modPascal: Result := 'Pascal';
   else
@@ -1867,23 +1810,21 @@ begin
 //  AddSysVariableString('CURRBLOCK'   , @read_CURRBLOCK  , nil);
 end;
 //Initialization
-constructor TParserDirecBase.Create(msg0: TMessageManager);
+constructor TParserDirecBase.Create(msg0: TMessageManager; lex0: TAleLexer;
+                                    options0: TCompOptions);
 begin
-  inherited Create(msg0);
-  //DefLexDirectiv;
+  msg := msg0;  //Toma referencia al gestor de mensajes
+  lex := lex0;  //Toma referencia al lexer
+  options := options0;
   lexDir := TContext.Create();  //crea lexer para analizar directivas
   lexDir.OnDecodeNext := @DecodeNext;
 
   macroList := TDirMacro_list.Create(true);
   varsList := TDirVar_list.Create(true);
   instList := TDirInstruc_list.Create(true);
-  //Initialize functions of Compiler
-  par.callProcDIRline := @ProcDIRline;
-  mirRep    := TMirList.Create;
 end;
 destructor TParserDirecBase.Destroy;
 begin
-  mirRep.Destroy;
   instList.Destroy;
   varsList.Destroy;
   macroList.Destroy;
