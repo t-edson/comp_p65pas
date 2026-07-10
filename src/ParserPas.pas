@@ -8,7 +8,10 @@ unit ParserPas;
 interface
 uses
   Classes, SysUtils, LazLogger, alexiaLex, ASTunit;
-type  //Declaraciones generales
+const
+  //Cantidad máxima de ítems que se puede leer con readListOfIdent().
+  MAX_ITM_LIST = 31;
+type  //Tipos generales
 //Primary location for elements
 {Current location for scan. This tells the compiler where it's scanning. It useful because
 some declarations have to be interpreted in different ways according to the location.}
@@ -18,7 +21,7 @@ TElemLocation = (
               locImplement   //En IMPLEMENTATION de una unidad.
 );
 
-type  //TParser
+type  //TParserPas
 {Clase que implementa al analizador sintáctico (Parser).}
 TParserPas = class
 private
@@ -27,7 +30,7 @@ private
 public    //Componentes principales del compilador
   astProg: TProgram;        //Árbol de sintaxis abstracto de un programa
   astUnit: TUnit;           //Árbol de sintaxis abstracto de una unidad
-private    //Messages
+private   //Messages
   procedure ClearError;
   function HayError: boolean; inline;          //Flag for errors
   //Rutinas de generación de mensajes
@@ -41,8 +44,12 @@ private    //Messages
   procedure GenError(txt: String; const Args: array of const; const srcPos: TSrcPos);
   procedure GenError(txt: string);
   procedure GenError(txt: String; const Args: array of const);
-private   //Objetos auxiliares
-  NamesList: TStringList;
+private   //Elementos auxiliares
+  NamesList: TStringList;     //**** Debe ser reeemplazado por itemList.
+  itemList: array[0..MAX_ITM_LIST] of String[127]; //Lista de ítems.
+  srcList : array[0..MAX_ITM_LIST] of TSrcPos;     //Lista posiciones en el código fuente.
+  nitems  : Integer;                //Cantidad de ítems caragdos en "itemList".
+  function readListOfIdent: boolean;        //Lee una lista de identificadores
 public    //Eventos
   //Calls to Directive Module
   callProcDIRline  : procedure(const AsmLin: string; out ctxChanged: boolean) of object;
@@ -103,8 +110,44 @@ public    // Inicialización
 end;
 
 implementation
-
-{TParserPas}
+{$region "Elementos auxiliares"}
+function TParserPas.readListOfIdent: boolean;
+{Lee, desde la posición actual del lexer, una lista de identificadores separados por comas
+y sus posiciones correspondientes dentro del código fuente.
+La lista de identificadores se devuelve en "itemList" y la lista de posiciones se devuelve
+en "srcList". La cantidad de ítems leídos, se devuelve en "nitems".
+Si hay error, devuelve FALSE.
+El objetivo de esta rutina es que permita hacer lecturas muy rápidas. Por eso, se evita
+manejar estructuras dinámicas en memoria, y no se manejan parámetros de entrada o salida.}
+var
+  n: Integer;
+begin
+  //Se empieza con un tamaño inicial para evitar muchas llamadas a setlength()
+  n := 0;
+  repeat
+    //ahora debe haber un identificador
+    if lex.tokType <> tkIdentifier then begin
+      GenError('Se esperaba un identificador.');
+      exit(false);
+    end;
+    //hay un identificador
+    itemList[n] := lex.token;  //agrega nombre
+    srcList[n] := lex.GetSrcPos;  //agrega ubicación de declaración
+    Next;
+    if tokIdent <> tiCOMMA then break; //sale
+    Next;  //Toma la coma
+    //Hay otro ítem, verifica límite de arreglo
+    inc(n);
+    if n >= MAX_ITM_LIST then begin
+      GenError('Cantidad máxima de identificadores superada.');
+      exit(false);
+    end;
+  until false;
+  //Actualiza cantidad de ítems leídos.
+  nitems := n+1;
+  exit(true);
+end;
+{$endregion}
 {$region "Messages"}
 procedure TParserPas.ClearError;
 {Limpia la bandera de errores. Tomar en cuenta que solo se debe usar para iniciar el
@@ -613,8 +656,7 @@ end;
 procedure TParserPas.ParseParameters(Params: TVarDeclList);
 var
   Param: TVarDecl;
-  SrcPos: TSrcPos;
-  DataTypeName: string;
+  typName: string;
   i: Integer;
   IsVarParam: Boolean;
 begin
@@ -625,39 +667,13 @@ begin
       IsVarParam := True;
       Next;
     end;
-    // Leer lista de identificadores
-    NamesList.Clear;
-    while not HayError do begin
-      if lex.tokType <> tkIdentifier then begin
-        GenError('Se esperaba un identificador para el parámetro');
-        Break;
-      end;
-      NamesList.Add(lex.token);
-      Next;
-      if tokIdent = tiCOMMA then begin
-        Next;
-        if lex.tokType<>tkIdentifier then
-          GenError('Se esperaba un identificador después de ","');
-      end else
-        Break;
-    end;
-    if HayError then Exit;
-    // Verificar el tipo
-    if tokIdent <> tiCOLON then begin
-      GenError('Se esperaba ":" después de los parámetros');
-      Exit;
-    end;
-    Next;
-    if lex.tokType <> tkIdentifier then begin
-      GenError('Se esperaba un tipo de dato');
-      Exit;
-    end;
-    DataTypeName := lex.token;
-    Next;
-    SrcPos := lex.GetSrcPos;
+    // Leer identificadores y tipo
+    if not readListOfIdent then Exit;   //Lee identificadores en "itemList".
+    if not ConsumeTok(tiCOLON, 'Se esperaba ":" después del parámetro(s).') then Exit;
+    if not ConsumeIdent(typName, 'Se esperaba un tipo de dato') then Exit;
     // Crear parámetros
-    for i := 0 to NamesList.Count - 1 do begin
-      Param := TVarDecl.Create(NamesList[i], DataTypeName, SrcPos);
+    for i := 0 to nitems - 1 do begin
+      Param := TVarDecl.Create(itemList[i], typName, srcList[i]);
       Param.IsParameter := True;
       Param.IsByReference := IsVarParam;
       Params.Add(Param);
@@ -772,7 +788,7 @@ begin
     ArrayType.ElementTypeName := lex.token;
     Next;
   end else begin
-    // Definición inline (ej: array[1..10] of record ... end)
+    // Definición Inline: array[1..10] of record ... end)
     ArrayType.ElementTypeDef := ParseTypeDefinition;  //Llamada recursiva
     if HayError then begin
       ArrayType.Free;
@@ -782,60 +798,44 @@ begin
   Result := ArrayType;
 end;
 function TParserPas.ParseRecordTypeDef: TRecordTypeDef;
+{Aanliza la definición de un tipo RECORD y devuelve un objeto "TRecordTypeDef" con la
+estructura del tipo analizado.
+Si se encuentra algún error, se devuelve NIL.}
 var
   RecordType: TRecordTypeDef;
   Field: TFieldDef;
-  SrcPos: TSrcPos;
+  typeName: String;
+  typeDef: TTypeDef;
   i: Integer;
 begin
-  SrcPos := lex.GetSrcPos;
-  RecordType := TRecordTypeDef.Create(SrcPos);
+  //Creamos el tipo. La posición TSrcPos no es relevante ahora.
+  RecordType := TRecordTypeDef.Create(lex.GetSrcPos);
   Next;  //Toma el token "RECORD"
+  //Explora los campos y los agrega a "RecordType".
   while not (HayError or (tokIdent = tiEND)) do begin
-    NamesList.Clear;
-    while not HayError do begin
-      if lex.tokType <> tkIdentifier then begin
-        GenError('Se esperaba un identificador para el campo');
-        Break;
-      end;
-      NamesList.Add(lex.token);
+    if not readListOfIdent then Break;   //Lee identificadores en "itemList".
+    if not ConsumeTok(tiCOLON, 'Se esperaba ":" después del campo(s).') then Break;
+    //Ya tenemos la lista de campos en "itemList". Analizamos al tipo: string, array[], ...
+    if lex.tokType = tkIdentifier then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
+      typeName:= lex.token;
+      typeDef := Nil;
       Next;
-      if tokIdent = tiCOMMA then
-        Next
-      else
+    end else begin //Debe ser una definición Inline: record ... end
+      typeName:= '';
+      typeDef := ParseTypeDefinition;
+      if HayError then begin
+        typeDef.Free;
         Break;
-    end;
-    if HayError then Break;
-    if tokIdent <> tiCOLON then begin
-      GenError('Se esperaba ":" después del nombre del campo');
-      Break;
-    end;
-    Next;  //Dejamos al lexer apuntando al tipo: string, array[], ...
-    SrcPos := lex.GetSrcPos;
-    // Crear los campos
-    for i := 0 to NamesList.Count - 1 do begin
-      Field := TFieldDef.Create(NamesList[i], SrcPos);
-      // Parsear el tipo del campo
-      if lex.tokType = tkIdentifier then begin
-        Field.TypeName := lex.token;
-        //Si estamos en el último ítem de la lista, tomamos el nombre del tipo, y así
-        //estamos listo para leer el siguiente campo del RECORD.
-        if i = NamesList.Count - 1 then Next;
-      end else begin
-        // Definición inline (ej: record ... end dentro de un campo)
-        Field.TypeDef := ParseTypeDefinition;  //*** Esto fallará si son varios campos: "a,b,c: ARRAY[1..3] OF char" porque no se puede parsear la misma definición de tipo varias veces.
-        if HayError then begin
-          Field.Free;
-          RecordType.Free;
-          Exit(nil);
-        end;
       end;
+    end;
+    //Creamos los campos con el tipo "typeDef".
+    for i := 0 to nitems - 1 do begin
+      Field := TFieldDef.Create(itemList[i], srcList[i]);
+      Field.TypeName := typeName;
+      Field.TypeDef  := typeDef;
       RecordType.AddField(Field);
     end;
-    if tokIdent = tiSEMIC then
-      Next
-    else
-      Break;
+    if tokIdent = tiSEMIC then Next else Break;
   end;
   if HayError then begin
     RecordType.Free;
@@ -845,7 +845,7 @@ begin
     RecordType.Free;
     Exit(nil);
   end;
-  Result := RecordType;
+  Exit(RecordType);
 end;
 function TParserPas.ParsePointerType: TPointerTypeDef;
 var
@@ -862,6 +862,8 @@ begin
   Result := TPointerTypeDef.Create(TargetTypeName, lex.GetSrcPos);
 end;
 function TParserPas.ParseTypeDefinition: TTypeDef;
+{Analiza la definición de un tipo, simple o estructurado. Devuelve un nodo "TTypeDef" con
+la estructura del tipo analizado.}
 var
   SrcPos: TSrcPos;
   TypeName: string;
@@ -1042,14 +1044,15 @@ procedure TParserPas.ParseProcedureDeclaration(declars: TDeclarations);
 {Analiza la declaración de un procedimiento.}
 var
   Proc: TProcDecl;
+  SrcPos: TSrcPos;
+  procName: string;
 begin
+  SrcPos := lex.GetSrcPos;
   Next;  // Consume PROCEDURE
-  if lex.tokType <> tkIdentifier then begin
-    GenError('Se esperaba un identificador para el procedimiento');
+  if not ConsumeIdent(procName, 'Se esperaba un identificador para el procedimiento') then begin
     Exit;
   end;
-  Proc := TProcDecl.Create(lex.token, lex.GetSrcPos);
-  Next;
+  Proc := TProcDecl.Create(lex.token, SrcPos);
   // Parsear parámetros
   if tokIdent = tiPAREN_OP then begin   //"("
     Next;

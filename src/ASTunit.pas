@@ -36,6 +36,7 @@ type  //Tipos de nodos
     ntProcDecl,      //Declaración de procedimiento: procedure algo; begin ... end;
     ntFunctDecl,     //Declaración de función.
     ntParamDecl,     //Parámetro de procedimiento/función: var x: byte
+    ntForwardDecl,   //Declaración FORWARD
     //Nodos auxiliares para declaraciones de tipos
     ntArrayRange,    //Rango de arreglo (1..10)
     ntFieldDecl,     //Campo dentro de un RECORD
@@ -593,6 +594,28 @@ type  //Nodos de declaraciones
     function ToString: string; override;
     constructor Create(const AName: string; const ASrcPos: TSrcPos);
   end;
+  // Declaración FORWARD
+  TForwardDecl = class(TASTNode)
+  private
+    FName: string;
+    FIsFunction: Boolean;        // True = función, False = procedimiento
+    FParameters: TVarDeclList;
+    FReturnTypeName: string;     // Solo para funciones
+    FReturnTypeDef: TTypeDef;    // Resuelto en análisis semántico
+  public
+    procedure AddParameter(Param: TVarDecl);
+    property Name: string read FName;
+    property IsFunction: Boolean read FIsFunction;
+    property Parameters: TVarDeclList read FParameters;
+    property ReturnTypeName: string read FReturnTypeName write FReturnTypeName;
+    property ReturnTypeDef: TTypeDef read FReturnTypeDef write FReturnTypeDef;
+  public  //Inicialización y depuración
+    constructor Create(const AName: string; AIsFunction: Boolean;
+                       const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
 type  //Definiciones previas para declaraciones de tipos
   //Clase base para las declaraciones de tipo
   TTypeDef = class(TASTnode)
@@ -624,25 +647,22 @@ type  //Definiciones previas para declaraciones de tipos
   end;
   TArrayRangeList = specialize TFPGObjectList<TArrayRange>;
 
-  // Definición de campo (para registros)
-  // ============================================================
-  TFieldDef = class
+  // Definición de campo de registros (RECORD)
+  TFieldDef = class(TASTNode)
   private
     FName: string;
     FTypeName: string;
     FTypeDef: TTypeDef;  // Para tipos definidos inline
-    FSrcPos: TSrcPos;
   public
-    constructor Create(const AName: string; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
     property Name: string read FName;
     property TypeName: string read FTypeName write FTypeName;
     property TypeDef: TTypeDef read FTypeDef write FTypeDef;
     property SrcPos: TSrcPos read FSrcPos;
-
-    function ToString: string;
-    procedure PrintDebug(Indent: Integer = 0);
+  public  //Inicialización y depuración
+    constructor Create(const AName: string; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   TFieldDefList = specialize TFPGObjectList<TFieldDef>;
 
@@ -1718,6 +1738,62 @@ begin
   inherited Create(ntProcDecl, ASrcPos);
   FName := AName;
 end;
+// TForwardDecl
+constructor TForwardDecl.Create(const AName: string; AIsFunction: Boolean;
+                                const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntForwardDecl, ASrcPos);
+  FName := AName;
+  FIsFunction := AIsFunction;
+  FParameters := TVarDeclList.Create(True);
+  FReturnTypeName := '';
+  FReturnTypeDef := nil;
+end;
+destructor TForwardDecl.Destroy;
+begin
+  FParameters.Free;
+  FReturnTypeDef.Free;
+  inherited;
+end;
+procedure TForwardDecl.AddParameter(Param: TVarDecl);
+begin
+  Param.IsParameter := True;
+  FParameters.Add(Param);
+end;
+function TForwardDecl.ToString: string;
+begin
+  if FIsFunction then
+    Result := Format('ForwardDecl(Function): %s', [FName])
+  else
+    Result := Format('ForwardDecl(Procedure): %s', [FName]);
+
+  if FParameters.Count > 0 then
+    Result := Result + Format(' (%d params)', [FParameters.Count]);
+
+  if FIsFunction and (FReturnTypeName <> '') then
+    Result := Result + Format(' returns %s', [FReturnTypeName]);
+
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TForwardDecl.PrintDebug(Indent: Integer = 0);
+var
+  i: Integer;
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+
+  if FParameters.Count > 0 then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Parameters:');
+    for i := 0 to FParameters.Count - 1 do
+      FParameters[i].PrintDebug(Indent + 4);
+  end;
+
+  if FIsFunction and (FReturnTypeDef <> nil) then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Return type:');
+    FReturnTypeDef.PrintDebug(Indent + 4);
+  end;
+end;
 // TFunctDecl
 function TFunctDecl.ToString: string;
 begin
@@ -1771,8 +1847,8 @@ end;
 // TFieldDef
 constructor TFieldDef.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
+  inherited Create(ntFieldDecl, ASrcPos);
   FName := AName;
-  FSrcPos := ASrcPos;
   FTypeName := '';
   FTypeDef := nil;
 end;

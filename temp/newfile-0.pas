@@ -1,22 +1,22 @@
 program muestra; 
 uses Commodore64;
+type 
+   objeto = record
+    a,b,c: array[0..2] of byte;
+   end;
 const
   consName = 0; 
   consName1: array[1..10] of byte = 0; 
+//procedure MostrarMensaje; forward;
+  
 begin
   a := 'aaa';
 //  case a of 
 //  'a': hola;
 //  1: aaa;
-//  1,2,3: hola;
-//  aaa: asdsadsa;
-//  aa..bb: asdas;
-//  end;
 //  y := aaa.bbb[5];
 //  y := bbb.aaa(1);  *** Falta implementar
 //  y := aaa[i];
-//  y := fun(i);
-
 //  empleado.Evaluaciones[1] := 5;
 //  x := -1 + 2;
 //  aaa(12) := 1;
