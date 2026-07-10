@@ -5,7 +5,7 @@ unit ParserDirec;
 interface
 uses
   Classes, SysUtils, fgl, math, LazLogger, FileUtil,
-  alexiaLex, Parser, CompGlobals, MirList, CompOptions;
+  alexiaLex, ParserPas, CompGlobals, MirList, CompOptions;
 type  //Tipos para manejo de expresiones
   TDirDatType = (ddtNumber, ddtString);
 
@@ -72,8 +72,8 @@ type
   TDirInstruc_list = specialize TFPGObjectList<TDirInstruc>;
 
 
-  { TParserDirecBase }
-  TParserDirecBase = class
+  { TParserDirective }
+  TParserDirective = class
   private
     lex     : TAleLexer;       //Reference to the lexer
     msg     : TMessageManager; //Referencia al gestor de mensajes
@@ -253,34 +253,34 @@ begin
   OnReadStr := ReadStr;        //asigna eventos
   OnWriteStr := WriteStr;
 end;
-{ TParserDirecBase }
+{ TParserDirective }
 //Mensajes
-function TParserDirecBase.HayError: boolean;
+function TParserDirective.HayError: boolean;
 begin
   exit(msg.nErrors>0);
 end;
-procedure TParserDirecBase.GenInfo(txt: string);
+procedure TParserDirective.GenInfo(txt: string);
 {Genera un mensaje de Información, en la posición actual del contexto. }
 begin
   msg.info(lex.GetMsgInfo(txt));
 end;
-procedure TParserDirecBase.GenWarn(txt: string);
+procedure TParserDirective.GenWarn(txt: string);
 {Genera un mensaje de Advertencia, en la posición actual del contexto. }
 begin
   msg.warn(lex.GetMsgInfo(txt));
 end;
-procedure TParserDirecBase.GenError(txt: string);
+procedure TParserDirective.GenError(txt: string);
 {Genera un mensaje de error en la posición actual a la posición del contexto actual.}
 begin
   msg.error(lex.GetMsgInfoE(txt));
 end;
-procedure TParserDirecBase.GenError(txt: string; const srcPos: TSrcPos);
+procedure TParserDirective.GenError(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de error en la posición indicada.}
 begin
   msg.error(lex.GetMsgInfoE(txt, srcPos));
 end;
 //Parser and Expressions evaluation
-function TParserDirecBase.GetIdent: string;
+function TParserDirective.GetIdent: string;
 begin
   if lexDir.tokType = tkSpace then
     lexDir.Next;  //quita espacios
@@ -292,11 +292,11 @@ begin
   Result := lexDir.ReadToken;
   lexDir.Next;  //toma identificador
 end;
-function TParserDirecBase.tokTyp: TTokenKind;
+function TParserDirective.tokTyp: TTokenKind;
 begin
   Result := lexdir.tokType;
 end;
-function TParserDirecBase.GetDOperand: TDirOperand;
+function TParserDirective.GetDOperand: TDirOperand;
 {Coge un operando en la posición actual del contexto. Si no enceuntra
 el operando o es erróneo, genera Error.}
 var
@@ -441,7 +441,7 @@ begin
     exit;  //no devuelve nada
   end;
 end;
-function TParserDirecBase.GetDCharERR(car: char): Boolean;
+function TParserDirective.GetDCharERR(car: char): Boolean;
 {Coge el caracter indicado. Si no lo encuentra genera error y devuelve FALSE.}
 begin
   if lexDir.ReadToken=car then begin
@@ -453,7 +453,7 @@ begin
     exit(false);
   end;
 end;
-function TParserDirecBase.GetDExpression(jerar: Integer): TDirOperand;
+function TParserDirective.GetDExpression(jerar: Integer): TDirOperand;
 { Evaluador de expresiones. Toma una expresión completa, en la posición actual del
 contenido. Si no encuentra una expresión, genera error. }
 var Op1, Op2 : TDirOperand;
@@ -503,7 +503,7 @@ begin
     end;
     Result := Op1;
 end;
-function TParserDirecBase.GetDExpressionPar: TDirOperand;
+function TParserDirective.GetDExpressionPar: TDirOperand;
 {Coge una expresión que debe estar encerrada entre paréntesis. Puede genera error}
 begin
   if not GetDCharERR('(') then exit;  //sale con error
@@ -512,7 +512,7 @@ begin
   skipWhites;
   if not GetDCharERR(')') then exit;  //sale con error
 end;
-function TParserDirecBase.GetDNNumber(var n: Double): boolean;
+function TParserDirective.GetDNNumber(var n: Double): boolean;
 {Veririfca si lo que sigues es un número y de ser así, intenta tomarlo.
 Puede generar error al convertir el número}
 var
@@ -535,7 +535,7 @@ begin
   lexdir.Next;
   Result := true;  //indica que hubo número
 end;
-function TParserDirecBase.GetDIdentif(out s: string): boolean;
+function TParserDirective.GetDIdentif(out s: string): boolean;
 {Veririfca si lo que sigues es un identificador y de ser así, intenta tomarlo.}
 begin
   if tokTyp = tkSpace then
@@ -548,7 +548,7 @@ begin
   lexDir.Next;  //Take identifier
   exit(true);
 end;
-function TParserDirecBase.GetDOperator: String;
+function TParserDirective.GetDOperator: String;
 {Coge un operador en la posición del contexto actual. Si no encuentra
  devuelve cadena vacía y no coge caracteres, salvo espacios iniciales.}
 begin
@@ -626,7 +626,7 @@ begin
       end;
   end;
 end;
-function TParserDirecBase.jerOp(operad: String): Integer;
+function TParserDirective.jerOp(operad: String): Integer;
 //Devuelve la jerarquía de un operador ver documentación técnica.
 begin
     case operad of
@@ -640,7 +640,7 @@ begin
       Result := 0;
     end;
 End;
-function TParserDirecBase.Evaluar(Op1: TDirOperand; opr: String; Op2: TDirOperand): TDirOperand;
+function TParserDirective.Evaluar(Op1: TDirOperand; opr: String; Op2: TDirOperand): TDirOperand;
 //Devuelve el resultado y tipo de una operación
 begin
     Case opr of
@@ -762,7 +762,7 @@ begin
     end;
 end;
 //Instructions implementation
-function TParserDirecBase.ScanIFDEF(out tok0: string): boolean;
+function TParserDirective.ScanIFDEF(out tok0: string): boolean;
 {Explora el texto, hasta encontrar la directiva $ENDIF o $ELSE.  Si llega al
  final del contexto, sin encontrar alguna de estas directivas, devuelve FALSE.}
 var
@@ -791,7 +791,7 @@ begin
   //No encontró
   exit(false);
 end;
-procedure TParserDirecBase.ProcOUTPUTHEX(lin: string);
+procedure TParserDirective.ProcOUTPUTHEX(lin: string);
 var
   filPath: String;
 begin
@@ -803,7 +803,7 @@ begin
   //Auqnue lo más práctico sería en la segunda pasada donde se genera el HEX final.
   options.hexfile := filPath;
 end;
-procedure TParserDirecBase.ProcDEFINE(lin: string);
+procedure TParserDirective.ProcDEFINE(lin: string);
 var
   Ident, value: String;
 begin
@@ -830,7 +830,7 @@ begin
     NewMacro(Ident, value);
   end;
 end;
-procedure TParserDirecBase.ProcIFDEF(lin: string; negated: boolean);
+procedure TParserDirective.ProcIFDEF(lin: string; negated: boolean);
   function EvaluateExp(const Ident: string): boolean;
   {Evalúa el resultado de la expresión de la directiva $IFDEF.
   Debería ejecutarse solo una vez, en ProcIFDEF(()}
@@ -872,7 +872,7 @@ begin
     GenErrorDir(ER_SYNTAX_ERRO);
   end;
 end;
-procedure TParserDirecBase.ProcIF(lin: string; negated: boolean);
+procedure TParserDirective.ProcIF(lin: string; negated: boolean);
   function EvaluateExp: boolean;
   {Evalúa el resultado de la expresión de la directiva $IFDEF.
   Debería ejecutarse solo una vez, en ProcIFDEF(()}
@@ -923,7 +923,7 @@ begin
     end;
   end;
 end;
-procedure TParserDirecBase.ProcELSE;
+procedure TParserDirective.ProcELSE;
 var
   direc: string;
 begin
@@ -951,7 +951,7 @@ begin
     exit;
   end;
 end;
-procedure TParserDirecBase.ProcENDIF;
+procedure TParserDirective.ProcENDIF;
 begin
   if WaitForEndIF>0 then begin
     //Se es peraba el delimitador
@@ -962,7 +962,7 @@ begin
     exit;
   end;
 end;
-procedure TParserDirecBase.ProcINCLUDE(lin: string; var ctxChanged: boolean);
+procedure TParserDirective.ProcINCLUDE(lin: string; var ctxChanged: boolean);
 {Implementa la inclusión de un archivo externo en el código}
 var
   filPath: string;
@@ -994,7 +994,7 @@ begin
   lex.curCtx.autoReturn := true;   //Para que retorne, al finalizar
   ctxChanged := true;   //Marca bandera para indicar que se ha cambiado de contexto
 end;
-procedure TParserDirecBase.ProcBIN2CSV(lin: string; var ctxChanged: boolean);
+procedure TParserDirective.ProcBIN2CSV(lin: string; var ctxChanged: boolean);
 {Incluye un archivo binario, en el código fuente, pero como valores separados por comas.}
   function binaryToCsv(binFile: string; out csv: string): boolean;
   {Lee un archivo binario y devuelve en "csv" un teto de valores separador por comas.}
@@ -1050,7 +1050,7 @@ begin
   ctxChanged := true;   //Marca bandera para indicar que se ha cambiado de contexto
   //ShowContexts;
 end;
-procedure TParserDirecBase.ProcFREQUENCY;
+procedure TParserDirective.ProcFREQUENCY;
   procedure cbSetFrequency(f: Longint; value: string);
   begin
     case UpperCase(value) of
@@ -1083,7 +1083,7 @@ begin
   skipWhites;
   cbSetFrequency(f, lexDir.ReadToken);  //Carga directamente en variable global
 end;
-procedure TParserDirecBase.ProcORG;
+procedure TParserDirective.ProcORG;
 var
   valOrg: Longint;
 begin
@@ -1111,7 +1111,7 @@ begin
     exit;
   end;
 end;
-procedure TParserDirecBase.ProcSET_STATE_RAM;
+procedure TParserDirective.ProcSET_STATE_RAM;
 var
   txtMsg: String;
 begin
@@ -1120,7 +1120,7 @@ begin
   if HayError then exit;
   options.hcCommands.AddObject(txtMsg, TObject(0));  //Identifica el comando con "0".
 end;
-procedure TParserDirecBase.ProcSET_DATA_ADDR;
+procedure TParserDirective.ProcSET_DATA_ADDR;
 var
   txtMsg: String;
 begin
@@ -1129,7 +1129,7 @@ begin
   if HayError then exit;
   options.hcCommands.AddObject(txtMsg, TObject(1));  //Identifica el comando con "1".
 end;
-procedure TParserDirecBase.ProcBOOTLOADER;
+procedure TParserDirective.ProcBOOTLOADER;
   function ReadValue: integer;
   {Read a value from the input context. Translate the value if it's a special
   string. If not a valid value is found, an error is geenrated.}
@@ -1221,7 +1221,7 @@ begin
     exit;
   end;
 end;
-procedure TParserDirecBase.ProcSTRING;
+procedure TParserDirective.ProcSTRING;
 var
   parstr: String;
   n: Longint;
@@ -1247,12 +1247,12 @@ begin
     exit;
   end;
 end;
-procedure TParserDirecBase.ProcCLEAR_STATE_RAM;
+procedure TParserDirective.ProcCLEAR_STATE_RAM;
 {Limpia el estado de la memoria RAM}
 begin
   options.hcCommands.AddObject('', TObject(2));  //Identifica el comando con "2".
 end;
-procedure TParserDirecBase.ProcINFO;
+procedure TParserDirective.ProcINFO;
 var
   txtMsg: String;
 begin
@@ -1262,7 +1262,7 @@ begin
   //Solo muestra en compilación y en la primera pasada
   if options.enabDirMsgs then GenInfo(txtMsg);
 end;
-procedure TParserDirecBase.ProcWARNING;
+procedure TParserDirective.ProcWARNING;
 var
   txtMsg: String;
 begin
@@ -1272,7 +1272,7 @@ begin
   //Solo muestra en compilación y en la primera pasada
   if options.enabDirMsgs then GenWarn(txtMsg);
 end;
-procedure TParserDirecBase.ProcERROR;
+procedure TParserDirective.ProcERROR;
 var
   txtMsg: String;
 begin
@@ -1282,7 +1282,7 @@ begin
   //Solo muestra en compilación y en la primera pasada
   if options.enabDirMsgs then GenError(txtMsg);
 end;
-procedure TParserDirecBase.ProcSET;
+procedure TParserDirective.ProcSET;
 //Asigna valor a una varaible
 var
   varName, unitInf: String;
@@ -1323,7 +1323,7 @@ begin
   end;
   AsigVariable(varName, varValue);
 end;
-procedure TParserDirecBase.ProcMSGBOX;
+procedure TParserDirective.ProcMSGBOX;
 var
   txtMsg: String;
 begin
@@ -1334,7 +1334,7 @@ begin
   if options.enabDirMsgs then msg.msgBox(txtMsg);
   txtMsg := '';
 end;
-procedure TParserDirecBase.ProcMSGWAR;
+procedure TParserDirective.ProcMSGWAR;
 var
   txtMsg: String;
 begin
@@ -1344,7 +1344,7 @@ begin
   //Solo muestra en compilación y en la primera pasada
   if options.enabDirMsgs then msg.msgWar(txtMsg);
 end;
-procedure TParserDirecBase.ProcMSGERR;
+procedure TParserDirective.ProcMSGERR;
 var
   txtMsg: String;
 begin
@@ -1354,7 +1354,7 @@ begin
   //Solo muestra en compilación y en la primera pasada
   if options.enabDirMsgs then msg.msgErr(txtMsg);
 end;
-procedure TParserDirecBase.ProcMODE;
+procedure TParserDirective.ProcMODE;
 var
   txtMode: String;
 begin
@@ -1370,7 +1370,7 @@ begin
     exit;
   end;
 end;
-procedure TParserDirecBase.ProcPROCESSOR;
+procedure TParserDirective.ProcPROCESSOR;
 var
   txtMode: String;
 begin
@@ -1390,39 +1390,39 @@ begin
 end;
 
 //Access to system variables
-function TParserDirecBase.read_PIC_MODEL: string;
+function TParserDirective.read_PIC_MODEL: string;
 begin
   Result := options.Model;  //Carga directamente en variable global
 end;
-procedure TParserDirecBase.write_PIC_MODEL(AValue: string);
+procedure TParserDirective.write_PIC_MODEL(AValue: string);
 begin
   options.Model := AValue;  //Carga directamente en variable global
 end;
-function TParserDirecBase.read_PIC_FREQUEN: Single;
+function TParserDirective.read_PIC_FREQUEN: Single;
 begin
   Result := options.frequen;  //Carga directamente en variable global
 end;
-procedure TParserDirecBase.write_PIC_FREQUEN(AValue: Single);
+procedure TParserDirective.write_PIC_FREQUEN(AValue: Single);
 begin
   options.frequen := round(AValue); //Carga directamente en opciones
 end;
-function TParserDirecBase.read_PIC_MAXFREQ: Single;
+function TParserDirective.read_PIC_MAXFREQ: Single;
 begin
   Result := options.MaxFreq;
 end;
-procedure TParserDirecBase.write_PIC_MAXFREQ(AValue: Single);
+procedure TParserDirective.write_PIC_MAXFREQ(AValue: Single);
 begin
   options.MaxFreq := round(AValue);
 end;
-function TParserDirecBase.read_ORG: Single;
+function TParserDirective.read_ORG: Single;
 begin
   Result := options.iRam;
 end;
-procedure TParserDirecBase.write_ORG(AValue: Single);
+procedure TParserDirective.write_ORG(AValue: Single);
 begin
   options.iRam := round(AValue);
 end;
-function TParserDirecBase.read_SYN_MODE: String;
+function TParserDirective.read_SYN_MODE: String;
 begin
   case options.syntaxMode of
   modPicPas: Result := 'PicPas';
@@ -1431,12 +1431,12 @@ begin
       Result := '';
   end;
 end;
-procedure TParserDirecBase.write_SYN_MODE(AValue: String);
+procedure TParserDirective.write_SYN_MODE(AValue: String);
 begin
 
 end;
 //Macros
-procedure TParserDirecBase.NewMacro(macName, macValue: string);
+procedure TParserDirective.NewMacro(macName, macValue: string);
 {Agrega una nueva macro a la lista de macros}
 var
   mac: TDirMacro;
@@ -1448,7 +1448,7 @@ begin
   mac.posDef := lex.GetCtxState;
   macroList.Add(mac);
 end;
-function TParserDirecBase.DefinedMacro(macName: string): boolean;
+function TParserDirective.DefinedMacro(macName: string): boolean;
 {Indicate if a macro has been defined.}
 var
   mac: TDirMacro;
@@ -1462,7 +1462,7 @@ begin
 //No se encontró
   exit(false);
 end;
-function TParserDirecBase.DefinedMacro(macName: string; out dmac: TDirMacro): boolean;
+function TParserDirective.DefinedMacro(macName: string; out dmac: TDirMacro): boolean;
 begin
   macName := UpCase(macName);
   for dmac in macroList do begin
@@ -1474,7 +1474,7 @@ begin
   exit(false);
 end;
 //Instructions and Variables
-procedure TParserDirecBase.AddInstruction(instName: string;
+procedure TParserDirective.AddInstruction(instName: string;
   callProc: TDirEveCallProc);
 {Add a new instruction to the Directive engine.}
 var
@@ -1485,9 +1485,9 @@ begin
   dins.OnCall := callProc;
   instList.Add(dins);
 end;
-function TParserDirecBase.DefinedInstruc(insName: string; out dins: TDirInstruc): boolean;
+function TParserDirective.DefinedInstruc(insName: string; out dins: TDirInstruc): boolean;
 {Indica si "insName" es una de las instrucciones definidas con
-TParserDirecBase.AddInstruction().}
+TParserDirective.AddInstruction().}
 begin
     insName := UpCase(insName);
     for dins in instList do begin
@@ -1498,7 +1498,7 @@ begin
   //No se encontró
     exit(false);
 end;
-function TParserDirecBase.DefinedVar(cad: string; out dvar: TDirVar): boolean;
+function TParserDirective.DefinedVar(cad: string; out dvar: TDirVar): boolean;
 {Indica si un identificador corresponde a una variable. Devuelve la referencia a la
 variable encontrada.}
 begin
@@ -1510,7 +1510,7 @@ begin
   end;
   exit(false);
 end;
-function TParserDirecBase.AsigVariable(VarName: string; const value: TDirOperand): TDirVar;
+function TParserDirective.AsigVariable(VarName: string; const value: TDirOperand): TDirVar;
 {Asigna un valor numérico o de cadena a una variable. Si no existe la crea.
 Devuelve la referencia a la variable asignada.}
 begin
@@ -1527,13 +1527,13 @@ begin
   varsList.Add(Result);
 end;
 //Public
-procedure TParserDirecBase.skipWhites;
+procedure TParserDirective.skipWhites;
 begin
   if tokTyp = tkSpace then begin
     lexDir.Next;  //quita espacios
   end;
 end;
-procedure TParserDirecBase.GenErrorDir(txt: string);
+procedure TParserDirective.GenErrorDir(txt: string);
 {Genera un error corrigiendo la posición horizontal}
 var
   p: TSrcPos;
@@ -1542,7 +1542,7 @@ begin
   p.col := tokIni + lexDir.col0;  //corrige columna
   GenError(txt, p);
 end;
-procedure TParserDirecBase.GenErrorDir(txt: string; const Args: array of const);
+procedure TParserDirective.GenErrorDir(txt: string; const Args: array of const);
 var
   p: TSrcPos;
 begin
@@ -1550,7 +1550,7 @@ begin
   p.col := tokIni + lexDir.col0;  //corrige columna
   GenError(Format(txt, Args), p);
 end;
-procedure TParserDirecBase.AddSysVariableNumber(varName: string;
+procedure TParserDirective.AddSysVariableNumber(varName: string;
   ReadNum: TDirEveReadNum; WriteNum: TDirEveWriteNum);
 {Add a new system variable of type number, to the Directive engine.}
 var
@@ -1561,7 +1561,7 @@ begin
   dvar.ReflectToNumber(ReadNum, WriteNum);
   varsList.Add(dvar);
 end;
-procedure TParserDirecBase.AddSysVariableString(varName: string;
+procedure TParserDirective.AddSysVariableString(varName: string;
   ReadStr: TDirEveReadStr; WriteStr: TDirEveWriteStr);
 var
   dvar: TDirVar;
@@ -1571,7 +1571,7 @@ begin
   dvar.ReflectToString(ReadStr, WriteStr);
   varsList.Add(dvar);
 end;
-procedure TParserDirecBase.ProcDIRline(const directiveLine: string; out ctxChanged: boolean);
+procedure TParserDirective.ProcDIRline(const directiveLine: string; out ctxChanged: boolean);
 {Procesa una directiva, que ha sido definida, para que solo ocupe una sola línea,
 para simplificar el procesamiento, ya que si las macros ocupan más de una línea,
 complican tremendamente la exploración del lexer y la ubicación de errores.
@@ -1670,7 +1670,7 @@ begin
     end;
   end;
 end;
-function TParserDirecBase.DecodeNext: boolean;
+function TParserDirective.DecodeNext: boolean;
 {Decode the token in the current position, indicated by (frow, fcol), and returns:
  - Token type in "toktyp". Can be:
      tkIdentifier, tkLitNumber, tkString, tkSpace, tkDirDelim, tkOperator, tkNull, tkEol
@@ -1794,7 +1794,7 @@ begin
   end;
   exit(false);
 end;
-procedure TParserDirecBase.ClearMacros;
+procedure TParserDirective.ClearMacros;
 begin
   macroList.Clear;
   WaitForEndIF := 0;
@@ -1810,7 +1810,7 @@ begin
 //  AddSysVariableString('CURRBLOCK'   , @read_CURRBLOCK  , nil);
 end;
 //Initialization
-constructor TParserDirecBase.Create(msg0: TMessageManager; lex0: TAleLexer;
+constructor TParserDirective.Create(msg0: TMessageManager; lex0: TAleLexer;
                                     options0: TCompOptions);
 begin
   msg := msg0;  //Toma referencia al gestor de mensajes
@@ -1823,7 +1823,7 @@ begin
   varsList := TDirVar_list.Create(true);
   instList := TDirInstruc_list.Create(true);
 end;
-destructor TParserDirecBase.Destroy;
+destructor TParserDirective.Destroy;
 begin
   instList.Destroy;
   varsList.Destroy;

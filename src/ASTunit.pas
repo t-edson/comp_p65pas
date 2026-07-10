@@ -482,7 +482,7 @@ type  //Nodos de sentencias
   TAsmOperand = object
     val: integer;    {The value of instruction operand, when it's a simple number.
                       When it's -1, the operand is a reference to an element and
-                      should be read in "operRef".}
+                      should be read in "ref".}
     ref: TASTNode;   {Reference to element when operand refers to some Pascal or
                       ASM element.}
     nam: string;     {Operand name. Used when operand is an unsolved reference}

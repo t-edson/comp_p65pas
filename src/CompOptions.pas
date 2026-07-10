@@ -36,10 +36,11 @@ type
     ForToRepeat : boolean;      //Convert FOR loop to REPEAT loop.
   public   //CPU parameters. Estas propiedades deberán leerse en la síntesis.
     cpuMode  : TCpuMode;
-    Model    : string;       //Modelo de PIC
+    Model    : string;       //Modelo de CPU o PIC
     frequen  : integer;      //Frecuencia del reloj
     MaxFreq  : integer;      //Máxima frecuencia del reloj en Hz.
     iRam     : integer;      //Puntero a la memoria RAM, para escribir cuando se ensambla o compila código.
+    RAMmax   : Integer;
   public   //Optimization options
     OptReuProVar: boolean;   //Optimiza reutilizando variables locales de procedimientos.
     OptRetProc  : boolean;   //Optimiza el último exit de los procedimientos.
@@ -102,24 +103,36 @@ end;
 procedure TCompOptions.SetDefault;
 {FIja las opciones por defecto para el compilador}
 begin
-  comp_level  := clComplete;
-  ForToRepeat := true;
+  //Syntax options
+  syntaxMode  := modPicPas;   //Por defecto en sintaxis nueva
   enabDirMsgs := true;
+  //Compiling options
+  comp_level  := clComplete;
+  GeneralORG  := 0;
+  bootloader  := bldJMP;
+  loaderBytes := [];
+  str_nullterm:= false;
+  ForToRepeat := true;
+  //CPU parameters
+  cpuMode     := cpu6502;
+  Model       := '';
+  frequen     := 1000;
+  MaxFreq     := 1000000;
+  iRam        := 0;
+  RAMmax      := 65535;
+  //Optimization options
   OptReuProVar:= false;   //Optimiza reutilizando variables locales de procedimientos.
   OptRetProc  := false;   //Optimiza el último exit de los procedimientos.
   RemUnOpcod  := false;
-
+  //Assembler options
   asmOutType  := 0;  //Normal Assembler
   asmIncComm  := false;
   IncVarDec   := false;
+  ExcUnused   := false;
   IncVarName  := false;
   IncAddress  := false;
-  //Default settings for Directive settings.
-  syntaxMode  := modPicPas;   //Por defecto en sintaxis nueva
-  bootloader  := bldJMP;
-
-  str_nullterm:= false;
-  cpuMode     := cpu6502;
+  //Configuration commands
+  hcCommands.Clear;
 end;
 
 procedure TCompOptions.ReadParameters(const pars: string);

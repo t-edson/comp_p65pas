@@ -6,7 +6,7 @@ unit Compiler_PIC16;
 interface
 uses
   Classes, SysUtils, fgl, LazLogger, LazFileUtils, StrUtils,
-  P65C02utils, CPUCore, Parser, ParserDirec, CompGlobals, AstElemP65,
+  P65C02utils, CPUCore, ParserPas, ParserDirec, CompGlobals, AstElemP65,
   Analyzer, ParserASM_6502, MirList, alexiaLex, SIF_P65pas, CompOptions;
 type
   { TCompiler_PIC16 }
@@ -644,7 +644,7 @@ begin
 //  for fun in usedFuncs do begin
 //    if not fun.IsTerminal2 then continue;
 //    //DebugLn('función terminal: %s con %d var.loc.', [fun.name, fun.nLocalVars]);
-//    //Los parámetros y variables locales aparecen como elementos de la función
+//    //Los parserámetros y variables locales aparecen como elementos de la función
 //    for elem in fun.elements do if elem.idClass = eleVarDec then begin  //Para todas sus variables.
 //      xvar := TAstVarDec(elem);
 //      if xvar.IsParameter or  //If function is used, we assume the all the parameters too.
@@ -660,7 +660,7 @@ begin
 //  //Explora solo a las funciones que no son terminales
 //  for fun in usedFuncs do begin
 //    if fun.IsTerminal2 then continue;
-//    //Los parámetros y variables locales aparecen como elementos de la función
+//    //Los parserámetros y variables locales aparecen como elementos de la función
 //    for elem in fun.elements do if elem.idClass = eleVarDec then begin  //Para todas sus variables.
 //      xvar := TAstVarDec(elem);
 //      if xvar.IsParameter or  //If function is used, we assume the all the parameters too.
@@ -698,7 +698,7 @@ begin
     mirFun := TMirFunDec(mirRep.root.items[i]);
     if not mirFun.IsTerminal2 then continue;
     //DebugLn('función terminal: %s con %d var.loc.', [mirFun.name, mirFun.nLocalVars]);
-    //Los parámetros y variables locales aparecen como elementos de la función
+    //Los parserámetros y variables locales aparecen como elementos de la función
     for mirEle in mirFun.declars do if mirEle.mirType = mtyVarDec then begin  //Para todas sus variables.
       vardec := TMirVarDec(mirEle);
       if vardec.IsParameter then begin  //If function is used, we assume the all the parameters too.
@@ -714,7 +714,7 @@ begin
   for i:=1 to mirRep.root.items.Count-2 do begin
     mirFun := TMirFunDec(mirRep.root.items[i]);
     if mirFun.IsTerminal2 then continue;
-    //Los parámetros y variables locales aparecen como elementos de la función
+    //Los parserámetros y variables locales aparecen como elementos de la función
     for mirEle in mirFun.declars do if mirEle.mirType = mtyVarDec then begin  //Para todas sus variables.
       vardec := TMirVarDec(mirEle);
       if vardec.IsParameter {or  //If function is used, we assume the all the parameters too.
@@ -916,7 +916,7 @@ begin
         //Es una asignación.
         {Una asignación es también, en la práctica, una llamada a una función, pero
         se trata de forma diferente porque:
-         - Tiene una forma especial (siempre una variable por modificar como 1er parámetro)
+         - Tiene una forma especial (siempre una variable por modificar como 1er parserámetro)
          - Los algoritmos de optimización del MIR necesitan a las asignaciones en su forma canónica.}
         SplitSet(Op1)  //Might generate additional assignments sentences
       end else begin
@@ -1022,8 +1022,8 @@ begin
 //            //if HayError then exit;   //Puede haber error
 //          end;
 //      end;
-//      //Actualizmos los parámetros MIR después de explorar los elementos
-//      //internas astProg (que incluye a los parámetros).
+//      //Actualizmos los parserámetros MIR después de explorar los elementos
+//      //internas astProg (que incluye a los parserámetros).
 //      mirFunDec.ReadParamsFromAST(astFunDec);
 //    end else if astFunDec.callType = ctSysNormal then begin
 //      mirFunDec := AddMirFunDecSNF(mirRep.root.declars, astFunDec);
@@ -1089,9 +1089,9 @@ begin
     ejecProg := true;    //Marca bandera
     ClearError;
     //Genera instrucciones de inicio
-    lex.ClearContexts;   //Elimina todos los Contextos de entrada
+    lexer.ClearContexts;   //Elimina todos los Contextos de entrada
     //Compila el texto indicado
-    if not lex.OpenContextFrom(options.mainFile) then begin
+    if not lexer.OpenContextFrom(options.mainFile) then begin
       //No lo encuentra
       GenError(Format(ER_FIL_NOFOUND, [options.mainFile]));
       exit;
@@ -1099,16 +1099,16 @@ begin
     {-------------------------------------------------}
     //********** Tal vez, estas tareas con el parser deben hacerse en otra parte
     mirRep.Clear;
-    par.astProg.Clear;
+    parser.astProg.Clear;
     //Asigna nombre y ubicación al nodo principal del astProg
-    par.astProg.name := ExtractFileNameWithoutExt(options.mainFile);
-    par.astProg.srcDec := lex.GetSrcPos;
+    parser.astProg.name := ExtractFileNameWithoutExt(options.mainFile);
+    parser.astProg.srcDec := lexer.GetSrcPos;
     //Continúa con preparación
 
 //    EndCountElapsed('** Setup in: ');
 //    StartCountElapsed; //Start timer
     CreateSystemUnitInAST;  //Crea los elementos del sistema. 3ms aprox.
-    parDirect.ClearMacros;         //Limpia las macros
+    parserDir.ClearMacros;         //Limpia las macros
     //Initiate CPU
     pic.dataAddr1 := -1; //Reset flag
     pic.MsjError := '';
@@ -1174,7 +1174,7 @@ var
    funimp: TAstFunImp;
    tmpLoc: TElemLocation;
 begin
-{  tmpLoc := lex.curLocation;     //Save current location. We are going to change it.
+{  tmpLoc := lexer.curLocation;     //Save current location. We are going to change it.
   {Note that we add declaration e implementation at the interface section. This is not
   the normal but the compiler works OK}
   lex.curLocation := locInterface;
@@ -1188,7 +1188,7 @@ begin
   SetCodSysInline(Result);  //Set routine to generate code o SIF routine.
   astProg.CloseElement;  //Close body
   astProg.CloseElement;  //Close function implementation
-  lex.curLocation := tmpLoc;   //Restore current location
+  lexer.curLocation := tmpLoc;   //Restore current location
 }end;
 function TCompiler_PIC16.AddSNFtoUnit(name: string; retType: TAstTypeDec; const srcPos: TSrcPos;
                var pars: TAstParamArray; codSys: TCodSysNormal): TAstFunDec;
@@ -1227,15 +1227,15 @@ var
    i: Integer;
 begin
 {  extract_local_vars();
-  tmpLoc := lex.curLocation;     //Save current location. We are going to change it.
+  tmpLoc := lexer.curLocation;     //Save current location. We are going to change it.
   //Add declaration
-  lex.curLocation := locInterface;
+  lexer.curLocation := locInterface;
   fundec := AddFunctionDEC(name, retType, srcPos, pars, false);
   fundec.callType := ctSysNormal;
   //Implementation
   {Note that implementation is added always after declarartion. It's not the usual
   in common units, where all declarations are first}
-  lex.curLocation := locImplement;
+  lexer.curLocation := locImplement;
   funimp := AddFunctionIMP(name, retType, srcPos, fundec, true);
   //Create local variables
   for i:=0 to high(local_vars) do begin
@@ -1253,7 +1253,7 @@ begin
   fundec.codSysNormal := codSys;  //Set routine to generate code SIF.
   astProg.CloseElement;  //Close body
   astProg.CloseElement;  //Close function implementation
-  lex.curLocation := tmpLoc;   //Restore current location
+  lexer.curLocation := tmpLoc;   //Restore current location
   exit(fundec);
 }end;
 procedure TCompiler_PIC16.AddParam(var pars: TAstParamArray; parName: string; const srcPos: TSrcPos;
@@ -1752,7 +1752,7 @@ begin
   uni := CreateEleUnit('System');  //System unit
   astProg.AddElementAndOpen(uni);  //Open Unit
   CreateSystemTypesAndVars;
-  lex.curLocation := locInterface;   {Maybe not needed because element here are created directly.}
+  lexer.curLocation := locInterface;   {Maybe not needed because element here are created directly.}
   //Creates operations
   CreateBooleanOperations;
   CreateByteOperations;
@@ -1773,7 +1773,7 @@ begin
 
   //Create system function "exit"
   setlength(pars, 0);  //Reset parameters
-  AddSIFtoUnit('exit', SFI_EXIT0, AstTree.typNull, srcPosNull, pars);  //Versión sin parámetros
+  AddSIFtoUnit('exit', SFI_EXIT0, AstTree.typNull, srcPosNull, pars);  //Versión sin parserámetros
   sifFunInc :=
   AddSIFtoUnit('exit', SFI_EXIT1, AstTree.typNull, srcPosNull, pars1null);
   //Create system function "inc"

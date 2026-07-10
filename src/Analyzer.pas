@@ -2,7 +2,7 @@ unit Analyzer;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, alexiaLex, Parser,
+  Classes, SysUtils, Types, alexiaLex, ParserPas,
   ParserASM_6502, ParserDirec, CompGlobals, ASTunit, MirList, CompOptions;
 type
 
@@ -15,25 +15,21 @@ type
     ejecProg  : boolean;     //Indicates the compiler is working
     stopEjec  : boolean;     //To stop compilation
   public   //Componentes del compilador
-    lex      : TAleLexer;        //Analizador léxico
-    par      : TParser;          //Analizador sintáctico
     msg      : TMessageManager;  //Gestor de mensajes
-    parserASM: TParserAsm_6502;
-    parDirect: TParserDirecBase;
-    options  : TCompOptions;
+    lexer    : TAleLexer;        //Analizador léxico
+    parser   : TParserPas;       //Analizador sintáctico
+    parserASM: TParserAsm6502;  //Parser para ensamblador
+    parserDir: TParserDirective; //Parser para directivas
+    options  : TCompOptions;     //Opciones del compilador
   public  //Mensajes
     procedure ClearError;
     procedure GenError(txt: string);
     procedure GenError(txt: string; const srcPos: TSrcPos);
   public
     mirRep: TMirList;    //Container for MIR representation
-  public    //Access to CPU hardware.
-    function PICName: string; virtual; abstract;
-    function RAMmax: integer; virtual; abstract;
   private
     procedure TestAllConstructs;
   protected  //Elements processing
-    procedure AnalyzeInlineDeclar(elemLocat: TElemLocation);
     procedure DoAnalyze;
   public     //Incialización
     constructor Create(msg0: TMessageManager);
@@ -85,132 +81,12 @@ end;
 procedure TAnalyzer.GenError(txt: string);
 {Genera un mensaje de error en la posición actual a la posición del contexto actual.}
 begin
-  msg.error(lex.GetMsgInfoE(txt));
+  msg.error(lexer.GetMsgInfoE(txt));
 end;
 procedure TAnalyzer.GenError(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de error en la posición indicada.}
 begin
-  msg.error(lex.GetMsgInfoE(txt, srcPos));
-end;
-
-procedure TAnalyzer.AnalyzeInlineDeclar(elemLocat: TElemLocation);
-{Compila la declaración de procedimientos INLINE. Tanto procedimientos como funciones
- INLINE se manejan internamente como funciones.
- IsImplementation, se usa para cuando se está compilando en la sección IMPLEMENTATION.}
-begin
-//  {Este método, solo se ejecutará en la primera pasada, en donde todos los procedimientos
-//  se codifican al inicio de la memoria, y las variables y registros se ubican al
-//  inicio de la memoria RAM, ya que lo que importa es simplemente recabar información
-//  del procedimiento, y no tanto codificarlo. }
-//  CallResetRAM;   //Limpia RAM y FLASH, y fija CurrBank
-//  case elemLocat of
-//  locInterface: begin
-//    //Los procedimientos en INTERFACE, no se procesan aquí. Se procesan en CompileUnit().
-//  end;
-//  locImplement:  begin
-//    //Se compila para implementación.
-//    {Este proceso es más complejo. La idea es compilar el encabezado de cualquier función,
-//    y luego comparar para ver si corresponde a una implementación o no. Si es
-//    implementación, se elimina el nodo creado y se trabaja con el de la declaración.}
-//    ReadInlineHeader(procName, retType, srcPos, pars);
-//    if HayError then exit;
-//    //Verifica si es implementación de una función en la INTERFACE o no.
-//    ParentElems := astProg.curNode.elements;  //Para comparar
-//    {Se supone que esta exploración solo se hará en la primera pasada, así que no hay
-//    problema, en hacer una exploración común.}
-//    //debugln('Buscando declaración de %s en nodo %s desde 0 hasta %d', [fun.name, ParentElems.name, ParentElems.elements.Count-2]);
-//    Found := false;
-//    uname := upcase(procName);
-//    for ele in ParentElems do begin
-//      if ele.location = locInterface then begin
-//        //Es elemento de INTERFACE
-//        if ele.uname = uname then begin
-//          //Hay coincidencia de nombre
-//          if ele.idClass = eleFuncImp then begin
-//            //Para las funciones, se debe comparar los parámetros
-//            fun := TxpEleInlin(ele);
-//            if fun.SameParamsType(pars) then begin
-//              Found := true;
-//              break;
-//            end;
-//          end else begin
-//            //Si tiene el mismo nombre que cualquier otro elemento, es conflicto
-//            GenError('Identifier "%s" already defined', [uname]);
-//            exit;
-//          end;
-//        end;
-//      end else begin
-//        {Debe ser elemento de IMPLEMENTATION, no hay otra opción porque se supone que
-//        estamos en la sección de IMPLEMENTATION, así que el Parent, debe ser una unidad.}
-//        GenErrorPos(ER_DUPLIC_FUNC_,[procName], srcPos);  //Está duplicada en IMPLEMENTATION
-//        exit;
-//      end;
-//    end;
-//    if Found then begin
-//      //Es una implementación. No vale la pena tener otro nodo.
-//      astProg.OpenElement(fun);  //Abre el nodo anterior
-//    end else begin
-//      //Debe ser una función privada. No declarada en Interface.
-//      //La creamos con seguridad porque ya verificamos que no hay conflicto en IMPLEMENTATION.
-//      fun := AddInline(procName, retType, srcPos, pars, CallFunctParam, CallFunctCall);
-//      //Un caso especial de proced. declarado solo en IMPLEMENTATION.
-//      fun.location := locImplement;
-//    end;
-//  end;
-//  locMain: begin
-//    //Es una compilación en el programa principal. ¿Y si es FORWARD?
-//    ReadInlineHeader(procName, retType, srcPos, pars);  //Procesa el encabezado
-//    if HayError then exit;
-//    if astProg.InlineExistInCur(procName, pars) then begin
-//      GenErrorPos(ER_DUPLIC_FUNC_,[procName], srcPos);
-//      exit;
-//    end;
-//    fun := AddInline(procName, retType, srcPos, pars, CallFunctParam, CallFunctCall);
-//    //Aquí estamos en el entorno de la función.
-//    fun.location := locMain;
-//  end
-//  else
-//    GenError(ER_NOT_IMPLEM_, ['locMain in TCompMain.CompileInlineDeclar()']);
-//  end;
-//  //Aquí ya se tiene "fun" abierta, validada y apuntando a la declaración.
-//  //Empiezan las declaraciones VAR, CONST, PROCEDURE, TYPE
-//  while StartOfSection do begin
-//    if tokL = 'var' then begin
-//      Next;    //lo toma
-//      while not StartOfSection and (tokL <>'begin') do begin
-//        AnalyzeVarDeclar;
-//        if HayError then exit;;
-//      end;
-//    end else if tokL = 'const' then begin
-//      Next;    //lo toma
-//      while not StartOfSection and (tokL <>'begin') do begin
-//        AnalyzeConstDeclar;
-//        if HayError then exit;;
-//      end;
-////    end else if tokL = 'procedure' then begin
-////      Next;    //lo toma
-////      AnalyzeProcDeclar;
-//    end else begin
-//      GenError('Expected VAR, CONST or BEGIN.');
-//      exit;
-//    end;
-//  end;
-//  if tokL <> 'begin' then begin
-//    GenError('Expected "begin", "var", "type" or "const".');
-//    exit;
-//  end;
-//  //Ahora empieza el cuerpo de la función o las declaraciones
-//  fun.posCtx := PosAct;  //Guarda posición para la segunda compilación
-//  bod := CreateBody;   //crea elemento del cuerpo de la función
-//  bod.srcDec := GetSrcPos;
-//  astProg.AddElementAndOpen(bod);  //Abre nodo Body
-//  CompileInlineBody(fun);
-//  astProg.CloseElement;  //Cierra Nodo Body
-//  astProg.CloseElement; //cierra espacio de nombres de la función
-//  bod.srcEnd := GetSrcPos;  //Fin de cuerpo
-////  fun.adrReturn := pic.iRam-1;  //Guarda dirección del i_RETURN
-//  if not CaptureTok(';') then exit;
-//  ProcComments;  //Quita espacios. Puede salir con error
+  msg.error(lexer.GetMsgInfoE(txt, srcPos));
 end;
 
 //Compilación de secciones
@@ -219,11 +95,11 @@ procedure TAnalyzer.DoAnalyze;
 Input: The current context.
 Output: The AST.}
 begin
-  IsUnit := par.GetUnitDeclaration();
+  IsUnit := parser.GetUnitDeclaration();
   if IsUnit then begin
     //DoAnalyzeUnit(astProg);
   end else begin
-    par.ParseProgram;
+    parser.ParseProgram;
   end;
   //TestAllConstructs;  //Llena el astProg con código de ejemplo
 end;
@@ -232,26 +108,26 @@ constructor TAnalyzer.Create(msg0: TMessageManager);
 begin
   //Crea componentes del compilador
   msg := msg0;
-  lex := TAleLexer.Create(msg);
-  par := TParser.Create(msg, lex);
+  lexer := TAleLexer.Create(msg);
+  parser := TParserPas.Create(msg, lexer);
   options  := TCompOptions.Create;
-  parserASM := TParserAsm_6502.Create(msg, lex);
-  parDirect := TParserDirecBase.Create(msg, lex, options);
+  parserASM := TParserAsm6502.Create(msg, lexer);
+  parserDir := TParserDirective.Create(msg, lexer, options);
   mirRep   := TMirList.Create;
   //Comenta los Parser de Ensamblador y de directivas
-  par.callParseASMblock := @parserASM.ProcessASMblock;
-  par.callProcDIRline := @parDirect.ProcDIRline;
+  parser.callParseASMblock := @parserASM.ProcessASMblock;
+  parser.callProcDIRline := @parserDir.ProcDIRline;
   //Inicializa variables
   ejecProg := false;
 end;
 destructor TAnalyzer.Destroy;
 begin
   mirRep.Destroy;
-  parDirect.Destroy;
+  parserDir.Destroy;
   parserASM.Destroy;
   options.Destroy;
-  par.Destroy;
-  lex.Destroy;
+  parser.Destroy;
+  lexer.Destroy;
   inherited Destroy;
 end;
 procedure TAnalyzer.TestAllConstructs;
@@ -268,7 +144,7 @@ var
   ProcBody, FuncBody: TBlock;
   astProg: TProgram;
   begin
-    astProg := par.astProg;
+    astProg := parser.astProg;
     astProg.Clear;
     // Inicializar posición (simulando la del lexer)
     SrcPos.idCtx := 1;
@@ -295,7 +171,7 @@ var
     SrcPos.col := 1;
     Proc := TProcDecl.Create('Sumar', SrcPos);
 
-    // Añadir parámetro
+    // Añadir parserámetro
     SrcPos.row := 5;
     SrcPos.col := 15;
     Param := TVarDecl.Create('a', 'byte', SrcPos);

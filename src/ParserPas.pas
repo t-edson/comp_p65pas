@@ -1,9 +1,10 @@
-{Parser
+{ParserPas
 Clase para la creación de un analizador sintáctico en Pascal.
-Todas las rutinas definidas aquí son independientes de la de CPU.
+Todas las rutinas definidas aquí son independientes de la de CPU, a excepción del AST que
+incluye un tipo de nodo que representa a los bloques ensamblador.
 }
 //{$Define LogExpres}
-unit Parser;
+unit ParserPas;
 interface
 uses
   Classes, SysUtils, LazLogger, alexiaLex, ASTunit;
@@ -19,7 +20,7 @@ TElemLocation = (
 
 type  //TParser
 {Clase que implementa al analizador sintáctico (Parser).}
-TParser = class
+TParserPas = class
 private
   lex    : TAleLexer;       //Analizador léxico
   msg    : TMessageManager; //Referencia al gestor de mensajes
@@ -103,9 +104,9 @@ end;
 
 implementation
 
-{TParser}
+{TParserPas}
 {$region "Messages"}
-procedure TParser.ClearError;
+procedure TParserPas.ClearError;
 {Limpia la bandera de errores. Tomar en cuenta que solo se debe usar para iniciar el
 procesamiento de errores. Limpiar errores en medio de la compilación, podría hacer que
 se pierda el rastro de errores anteriores, y que inclusive, la compilación termine sin
@@ -117,58 +118,58 @@ begin
   msg.nInfos := 0;
   msg.nWarns := 0;
 end;
-function TParser.HayError: boolean;
+function TParserPas.HayError: boolean;
 begin
   exit(msg.nErrors>0);
 end;
-procedure TParser.GenInfo(txt: string; const srcPos: TSrcPos);
+procedure TParserPas.GenInfo(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de información, en la posición indicada.}
 begin
   msg.info(lex.GetMsgInfo(txt, srcPos));
 end;
-procedure TParser.GenInfo(txt: string);
+procedure TParserPas.GenInfo(txt: string);
 {Genera un mensaje de Información, en la posición actual del contexto. }
 begin
   msg.info(lex.GetMsgInfo(txt));
 end;
-procedure TParser.GenWarn(txt: string; const srcPos: TSrcPos);
+procedure TParserPas.GenWarn(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de advertencia en la posición indicada.}
 { #todo : Considerar usar directamente un parámetro de tipo TMsgInfo}
 begin
   msg.warn(lex.GetMsgInfo(txt, srcPos));
 end;
-procedure TParser.GenWarn(txt: string);
+procedure TParserPas.GenWarn(txt: string);
 {Genera un mensaje de Advertencia, en la posición actual del contexto. }
 begin
   msg.warn(lex.GetMsgInfo(txt));
 end;
-procedure TParser.GenError(txt: string; const srcPos: TSrcPos);
+procedure TParserPas.GenError(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de error en la posición indicada.}
 begin
   msg.error(lex.GetMsgInfoE(txt, srcPos));
 end;
-procedure TParser.GenError(txt: String; const Args: array of const; const srcPos: TSrcPos);
+procedure TParserPas.GenError(txt: String; const Args: array of const; const srcPos: TSrcPos);
 {Versión con parámetros de GenError.}
 begin
   msg.error(lex.GetMsgInfoE(Format(txt, Args), srcPos));
 end;
-procedure TParser.GenError(txt: string);
+procedure TParserPas.GenError(txt: string);
 {Genera un mensaje de error en la posición actual a la posición del contexto actual.}
 begin
   msg.error(lex.GetMsgInfoE(txt));
 end;
-procedure TParser.GenError(txt: String; const Args: array of const);
+procedure TParserPas.GenError(txt: String; const Args: array of const);
 {Genera un mensaje de error en la posición actual del contexto.}
 begin
   msg.error(lex.GetMsgInfoE(Format(txt, Args)));
 end;
 {$EndRegion}
 {$region "Métodos auxiliares para el parser"}
-function TParser.tokIdent: TTokenIdent;
+function TParserPas.tokIdent: TTokenIdent;
 begin
   exit(lex.curCtx.tokIdent);
 end;
-function TParser.CaptureSemicolon: boolean;
+function TParserPas.CaptureSemicolon: boolean;
 //Verifica si sigue el delimitador de expresión ";". Si no encuentra devuelve false.
 begin
   if tokIdent = tiSEMIC then begin //encontró
@@ -179,7 +180,7 @@ begin
     exit(false);  //sale con error
   end;
 end;
-procedure TParser.SkipWhites;
+procedure TParserPas.SkipWhites;
 {Consume comentarios y directivas del código fuente.
 Notar que este procedimiento puede detectar varios errores en el mismo bloque, y que
 pasa al siguiente token, aún cuando detecta errores. }
@@ -207,7 +208,7 @@ begin
     lex.SkipWhites;  //limpia blancos
   end;
 end;
-procedure TParser.SkipWhitesNoDirect;
+procedure TParserPas.SkipWhitesNoDirect;
 {Similar a SkipWhites(), pero no ejecuta directivas.}
 begin
   lex.SkipWhites;
@@ -216,7 +217,7 @@ begin
     Next;
   end;
 end;
-procedure TParser.Next;
+procedure TParserPas.Next;
 {Versión de SkipWhites() que primero consume un token con lex.Next. Se evita llamar a
 SkipWhites(), y se duplica parte del código,  para evitar la sobrecarga de una llamada
 adiconal.}
@@ -245,7 +246,7 @@ begin
     lex.SkipWhites;  //limpia blancos
   end;
 end;
-function TParser.ConsumeTok(tokId: TTokenIdent; const msgErr: string): boolean;
+function TParserPas.ConsumeTok(tokId: TTokenIdent; const msgErr: string): boolean;
 {Consume el token identificado por "tokIdent", y pasa al siguiente token saltando
 blancos, comentarios o directivas.
 Si no encuentra al token "tokIdent", genera el mensaje de error "msgErr", en la posición
@@ -260,7 +261,7 @@ begin
     exit(False);
   end;
 end;
-function TParser.ConsumeIdent(out token: string; const msgErr: string): boolean;
+function TParserPas.ConsumeIdent(out token: string; const msgErr: string): boolean;
 {Consume un token de tipo identificador, lo devuelve en "token", y pasa al siguiente
 token saltando blancos, comentarios o directivas.
 Si no encuentra un identificador, genera el mensaje de error "msgErr", en la posición
@@ -278,7 +279,7 @@ begin
 end;
 {$endregion}
 {$region "Expresiones"}
-function TParser.ParseNumberLiteral: TNumberLiteral;
+function TParserPas.ParseNumberLiteral: TNumberLiteral;
 var
   Value: Integer;
   ValueF: Double;
@@ -294,7 +295,7 @@ begin
   end;
   Next;
 end;
-function TParser.ParseIdentifier: TExpression;
+function TParserPas.ParseIdentifier: TExpression;
 {Extrae un identificador, en la posición actual del lexer. El identificador puede ser:
  - Un identificador simple, como "var1" o "func1".
  - Una llamada a función, como "func1()".
@@ -404,7 +405,7 @@ begin
   //Busca si hay modificadores del operando ".", "[" o "^".
   Result := ParseModifiers(BaseExpr);
 end;
-function TParser.ParseStringLiteral: TStringLiteral;
+function TParserPas.ParseStringLiteral: TStringLiteral;
 var
   SrcPos: TSrcPos;
 begin
@@ -417,7 +418,7 @@ begin
   Result := TStringLiteral.Create(lex.token, SrcPos);
   Next;
 end;
-function TParser.ParseArrayLiteral: TArrayLiteral;
+function TParserPas.ParseArrayLiteral: TArrayLiteral;
 var
   SrcPos: TSrcPos;
   ArrayLit: TArrayLiteral;
@@ -470,7 +471,7 @@ begin
   Next;  // Consumir ']'
   Result := ArrayLit;
 end;
-function TParser.ParseFactor: TExpression;
+function TParserPas.ParseFactor: TExpression;
 {Analiza un operando, o factor, que puede ser de diversos tipos.
 Si no reconoce al operando, devuelve NIL }
 var
@@ -519,7 +520,7 @@ begin
     Result := nil;
   end;
 end;
-function TParser.ParseTerm: TExpression;
+function TParserPas.ParseTerm: TExpression;
 var
   Left, Right: TExpression;
   Op: string;
@@ -546,7 +547,7 @@ begin
 
   Result := Left;
 end;
-function TParser.ParseSimpleExpression: TExpression;
+function TParserPas.ParseSimpleExpression: TExpression;
 var
   Left, Right: TExpression;
   Op: string;
@@ -583,7 +584,7 @@ begin
 
   Result := Left;
 end;
-function TParser.ParseExpression: TExpression;
+function TParserPas.ParseExpression: TExpression;
 {Analiza una expresión y devuelve un objeto "TExpression" (un árbol sintáctico) que
 representa a la expresión analizada.}
 var
@@ -609,7 +610,7 @@ begin
 end;
 {$endregion}
 {$region "Métodos auxiliares para las declaraciones"}
-procedure TParser.ParseParameters(Params: TVarDeclList);
+procedure TParserPas.ParseParameters(Params: TVarDeclList);
 var
   Param: TVarDecl;
   SrcPos: TSrcPos;
@@ -670,7 +671,7 @@ begin
     end;
   end;
 end;
-function TParser.ParseSubrangeType: TSubrangeTypeDef;
+function TParserPas.ParseSubrangeType: TSubrangeTypeDef;
 var
   LowExpr, HighExpr: TExpression;
 begin
@@ -694,7 +695,7 @@ begin
   end;
   Result := TSubrangeTypeDef.Create(LowExpr, HighExpr, lex.GetSrcPos);
 end;
-function TParser.ParseEnumType: TEnumTypeDef;
+function TParserPas.ParseEnumType: TEnumTypeDef;
 var
   EnumType: TEnumTypeDef;
 begin
@@ -723,7 +724,7 @@ begin
   Next;
   Result := EnumType;
 end;
-function TParser.ParseArrayTypeDef: TArrayTypeDef;
+function TParserPas.ParseArrayTypeDef: TArrayTypeDef;
 var
   ArrayType: TArrayTypeDef;
   LowExpr, HighExpr: TExpression;
@@ -780,7 +781,7 @@ begin
   end;
   Result := ArrayType;
 end;
-function TParser.ParseRecordTypeDef: TRecordTypeDef;
+function TParserPas.ParseRecordTypeDef: TRecordTypeDef;
 var
   RecordType: TRecordTypeDef;
   Field: TFieldDef;
@@ -846,7 +847,7 @@ begin
   end;
   Result := RecordType;
 end;
-function TParser.ParsePointerType: TPointerTypeDef;
+function TParserPas.ParsePointerType: TPointerTypeDef;
 var
   TargetTypeName: string;
 begin
@@ -860,7 +861,7 @@ begin
   Next;
   Result := TPointerTypeDef.Create(TargetTypeName, lex.GetSrcPos);
 end;
-function TParser.ParseTypeDefinition: TTypeDef;
+function TParserPas.ParseTypeDefinition: TTypeDef;
 var
   SrcPos: TSrcPos;
   TypeName: string;
@@ -903,7 +904,7 @@ begin
 end;
 {$endregion}
 {$region "Declaraciones"}
-procedure TParser.ParseUsesClause(const unitContainer: TUnitRefList);
+procedure TParserPas.ParseUsesClause(const unitContainer: TUnitRefList);
 var
   untName: string;  //Nombre de la unidad.
 begin
@@ -926,7 +927,7 @@ begin
     GenError('Se esperaba ";" después de la sección USES');
   Next;  //Consumir ';'
 end;
-procedure TParser.ParseVarDeclaration(declars: TDeclarations);
+procedure TParserPas.ParseVarDeclaration(declars: TDeclarations);
   procedure ReadNamesList;
   //Lee una lista de identificadores en la lista "NamesList".
   begin
@@ -983,7 +984,7 @@ begin
     end;
   until lex.tokType = tkKeyword;  //Sige otra declaración o BEGIN
 end;
-procedure TParser.ParseConstDeclaration(declars: TDeclarations);
+procedure TParserPas.ParseConstDeclaration(declars: TDeclarations);
 var
   ConstName, TypeName: string;
   ConstValue: TExpression;
@@ -1037,7 +1038,7 @@ begin
     CaptureSemicolon;
   end;
 end;
-procedure TParser.ParseProcedureDeclaration(declars: TDeclarations);
+procedure TParserPas.ParseProcedureDeclaration(declars: TDeclarations);
 {Analiza la declaración de un procedimiento.}
 var
   Proc: TProcDecl;
@@ -1081,7 +1082,7 @@ begin
     declars.Add(Proc);
   end;
 end;
-procedure TParser.ParseFunctionDeclaration(declars: TDeclarations);
+procedure TParserPas.ParseFunctionDeclaration(declars: TDeclarations);
 var
   Func: TFunctDecl;
 begin
@@ -1138,7 +1139,7 @@ begin
     declars.Add(Func);
   end;
 end;
-procedure TParser.ParseTypeDeclaration(declars: TDeclarations);
+procedure TParserPas.ParseTypeDeclaration(declars: TDeclarations);
 var
   TypeName: string;
   TypeDef: TTypeDef;
@@ -1169,7 +1170,7 @@ begin
 end;
 {$endregion}
 {$region "Instrucciones"}
-procedure TParser.ParseAssigOrProcedureCall(var Block: TBlock);
+procedure TParserPas.ParseAssigOrProcedureCall(var Block: TBlock);
 var
   Operand1, Value: TExpression;
 begin
@@ -1199,7 +1200,7 @@ begin
     Exit;
   end;
 end;
-procedure TParser.ParseIfStatement(var Block: TBlock);
+procedure TParserPas.ParseIfStatement(var Block: TBlock);
 var
   Condition: TExpression;
   ThenBranch, ElseBranch: TBlock;
@@ -1226,7 +1227,7 @@ begin
     Block.AddStatement(TIfStatement.Create(Condition, ThenBranch, ElseBranch, SrcPos));
   end;
 end;
-procedure TParser.ParseWhileLoop(var Block: TBlock);
+procedure TParserPas.ParseWhileLoop(var Block: TBlock);
 var
   Condition: TExpression;
   Body: TBlock;
@@ -1247,7 +1248,7 @@ begin
   if not HayError then
     Block.AddStatement(TWhileLoop.Create(Condition, Body, SrcPos));
 end;
-procedure TParser.ParseForLoop(var Block: TBlock);
+procedure TParserPas.ParseForLoop(var Block: TBlock);
 var
   ControlVar: TVariableRef;
   Direction: TForDirection;
@@ -1299,7 +1300,7 @@ begin
   if not HayError then
     Block.AddStatement(TForLoop.Create(ControlVar, Direction, StartExpr, EndExpr, Body, SrcPos));
 end;
-procedure TParser.ParseRepeatUntil(var Block: TBlock);
+procedure TParserPas.ParseRepeatUntil(var Block: TBlock);
 var
   Body: TBlock;
   Condition: TExpression;
@@ -1323,7 +1324,7 @@ begin
   if not HayError then
     Block.AddStatement(TRepeatUntil.Create(Body, Condition, SrcPos));
 end;
-function TParser.ParseCaseBranch: TCaseBranch;
+function TParserPas.ParseCaseBranch: TCaseBranch;
 var
   Branch: TCaseBranch;
   SrcPos: TSrcPos;
@@ -1401,7 +1402,7 @@ begin
   end;
   Result := Branch;
 end;
-procedure TParser.ParseCaseStatement(var Block: TBlock);
+procedure TParserPas.ParseCaseStatement(var Block: TBlock);
 var
   Selector: TExpression;
   CaseStmt: TCaseStatement;
@@ -1454,7 +1455,7 @@ begin
   end;
   Block.AddStatement(CaseStmt);
 end;
-procedure TParser.ParseWithStatement(var Block: TBlock);
+procedure TParserPas.ParseWithStatement(var Block: TBlock);
 var
   SrcPos: TSrcPos;
   RecordVar: TExpression;
@@ -1484,7 +1485,7 @@ begin
   end;
   Block.AddStatement(TWithStatement.Create(RecordVar, Body, SrcPos));
 end;
-procedure TParser.ParseExitStatement(var Block: TBlock);
+procedure TParserPas.ParseExitStatement(var Block: TBlock);
 var
   SrcPos: TSrcPos;
   ReturnValue: TExpression;
@@ -1514,7 +1515,7 @@ begin
 end;
 {$endregion}
 {$region "Sentencia, bloque y programa"}
-procedure TParser.ParseStatement(Body: TBlock);
+procedure TParserPas.ParseStatement(Body: TBlock);
 begin
   if Body = nil then begin
     Body := TBlock.Create(lex.GetSrcPos);
@@ -1557,7 +1558,7 @@ begin
     Next;
   end;
 end;
-procedure TParser.ParseDeclarations(Declars: TDeclarations);
+procedure TParserPas.ParseDeclarations(Declars: TDeclarations);
 begin
   while not HayError do begin
     if tokIdent = tiVAR then
@@ -1574,7 +1575,7 @@ begin
       Break;  // No hay más declaraciones
   end;
 end;
-procedure TParser.ParseBody(Body: TBlock);
+procedure TParserPas.ParseBody(Body: TBlock);
 begin
   if tokIdent<>tiBEGIN then begin
     GenError('Se esperaba "begin"');
@@ -1597,7 +1598,7 @@ begin
     end;
   end;
 end;
-procedure TParser.ParseProgram;
+procedure TParserPas.ParseProgram;
 {Realiza en análisis sintáctico de un programa y construye el AST.
 El lexer debe haber sido cargado previamente con el código fuente del programa, y el AST
 debe haber sido limpiado}
@@ -1648,7 +1649,7 @@ begin
       GenError('Código extra después del final del programa');
   end;
 end;
-procedure TParser.ParseUnit;
+procedure TParserPas.ParseUnit;
 var
   untName: string;
 begin
@@ -1708,7 +1709,7 @@ begin
 end;
 {$endregion}
 {$region "Inicialización"}
-function TParser.GetUnitDeclaration: boolean;
+function TParserPas.GetUnitDeclaration: boolean;
 {Indica si el archivo del contexto actual, es una unidad. Debe llamarse al inico de la
 exploración del archivo.}
 begin
@@ -1722,13 +1723,13 @@ begin
   lex.curCtx.StartScan;   //retorna al inicio
   exit(false);
 end;
-procedure TParser.Clear;
+procedure TParserPas.Clear;
 begin
   ClearError;
   astProg.Clear;
   astUnit.Clear;
 end;
-constructor TParser.Create(msg0: TMessageManager; lex0: TAleLexer);
+constructor TParserPas.Create(msg0: TMessageManager; lex0: TAleLexer);
 begin
   //inherited;
   lex := lex0;
@@ -1738,7 +1739,7 @@ begin
   NamesList := TStringList.Create;
   ClearError;   //inicia motor de errores
 end;
-destructor TParser.Destroy;
+destructor TParserPas.Destroy;
 begin
   NamesList.Destroy;
   astUnit.Destroy;

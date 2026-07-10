@@ -10,8 +10,8 @@ interface
 uses
   Classes, SysUtils, fgl, alexiaLex, CompGlobals, P65C02utils, ASTunit;
 type
-  { TParserAsm_6502 }
-  TParserAsm_6502 = class
+  { TParserAsm6502 }
+  TParserAsm6502 = class
   private
     lex     : TAleLexer;       //Reference to the lexer
     msg     : TMessageManager; //Referencia al gestor de mensajes
@@ -61,27 +61,27 @@ begin
   {$I _language\tra_ParserAsm.pas}
 end;
 // Mensajes
-function TParserAsm_6502.HayError: boolean;
+function TParserAsm6502.HayError: boolean;
 begin
   exit(msg.nErrors>0);
 end;
-procedure TParserAsm_6502.GenWarn(txt: string);
+procedure TParserAsm6502.GenWarn(txt: string);
 {Genera un mensaje de Advertencia, en la posición actual del contexto. }
 begin
   msg.warn(lex.GetMsgInfo(txt));
 end;
-procedure TParserAsm_6502.GenError(txt: string);
+procedure TParserAsm6502.GenError(txt: string);
 {Genera un mensaje de error en la posición actual a la posición del contexto actual.}
 begin
   msg.error(lex.GetMsgInfoE(txt));
 end;
-procedure TParserAsm_6502.GenError(txt: string; const srcPos: TSrcPos);
+procedure TParserAsm6502.GenError(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de error en la posición indicada.}
 begin
   msg.error(lex.GetMsgInfoE(txt, srcPos));
 end;
 
-function TParserAsm_6502.GetFaddressByte(addr: integer): byte;
+function TParserAsm6502.GetFaddressByte(addr: integer): byte;
 {Obtiene una dirección de registro para una isntrucción ASM, truncando, si es necesario,
 los bits adicionales.}
 begin
@@ -92,7 +92,7 @@ begin
   end;
   Result := addr;
 end;
-function TParserAsm_6502.IsLabelDeclared(txt: string; out
+function TParserAsm6502.IsLabelDeclared(txt: string; out
   lblEle: TAsmInstruction): boolean;
 {Indica si un nombre es una etiqueta. Si lo es, devuelve TRUE, y devuelve en lblEle, la
 referencia a la instrucción de la etiqueta.}
@@ -109,7 +109,7 @@ begin
   //No encontró
   exit(false);
 end;
-function TParserAsm_6502.CaptureParenthes: boolean;
+function TParserAsm6502.CaptureParenthes: boolean;
 {Captura el paréntesis ')'. Si no encuentra devuelve error}
 begin
   lex.SkipWhitesNoEOL;
@@ -121,7 +121,7 @@ begin
     exit(false);
   end;
 end;
-function TParserAsm_6502.CaptureOperand(var operand: TAsmOperand;
+function TParserAsm6502.CaptureOperand(var operand: TAsmOperand;
                                         out undefLabel: boolean): boolean;
 {Capture the operand (value, label or address) of an ASM instruction, including
 operations if exist.
@@ -361,11 +361,11 @@ begin
     exit(false);
   end;
 end;
-procedure TParserAsm_6502.StartASM; //Inicia el procesamiento de código ASM
+procedure TParserAsm6502.StartASM; //Inicia el procesamiento de código ASM
 begin
   labels.Clear;   //limpia etiquetas
 end;
-procedure TParserAsm_6502.EndASM;  //Termina el procesamiento de código ASM
+procedure TParserAsm6502.EndASM;  //Termina el procesamiento de código ASM
   function CompleteUndefJump(var operand: TAsmOperand): boolean;
   {Completa la instrucción "unsInstruct", buscando en la lista de etiquetas.
   Si no encuentra la etiqueta, devuelve FALSE.}
@@ -404,7 +404,7 @@ begin
     end;
   end;
 end;
-procedure TParserAsm_6502.ProcInstrASM(idInst: TP6502Inst; var blkEnd: boolean);
+procedure TParserAsm6502.ProcInstrASM(idInst: TP6502Inst; var blkEnd: boolean);
 {Proccess an 6502 ASM instruction. Instruction must be previously validated and
  identified in "idInst".
  Basically this procedure, add a new TAsmInstruction (including instruction, addresing
@@ -576,7 +576,7 @@ begin
     end;
   end;
 end;
-procedure TParserAsm_6502.ProcASMline(out blkEnd: boolean);
+procedure TParserAsm6502.ProcASMline(out blkEnd: boolean);
 {Process a line of ASM code. That line can be a mnemonic, a label, a comment, ...
  A line of ASM ends with the EOL or with the END reserved word.
  If found END, returns TRUE in "blkEnd".
@@ -696,7 +696,7 @@ begin
     lex.Next;      //Pass to the start of the next line.
   end;
 end;
-procedure TParserAsm_6502.AddInstruction(const inst: TP6502Inst;
+procedure TParserAsm6502.AddInstruction(const inst: TP6502Inst;
   addMode: TP6502AddMode; param: integer; const srcDec: TSrcPos);
 {Add a new instruction to the current ASM block element. Set "curInst" pointing
 to the instruction added.}
@@ -711,7 +711,7 @@ begin
   curInst.addMode := ord(addMode);
   curInst.operand.Val := param;
 end;
-procedure TParserAsm_6502.AddInstructionLabel(lblName: string);
+procedure TParserAsm6502.AddInstructionLabel(lblName: string);
 {Add a new instruction to the current ASM block element. Set "curInst" pointing
 to the instruction added.
 If operand of the instruction is expression, it mus be added in the child nodes.}
@@ -723,7 +723,7 @@ begin
   curBlock.AddInstruction(curInst);
   labels.add(curInst);  //Agrega a la lista de etiquetas
 end;
-procedure TParserAsm_6502.AddDirectiveORG(param: word);
+procedure TParserAsm6502.AddDirectiveORG(param: word);
 begin
   curInst := TAsmInstruction.Create(lex.GetSrcPos);
   curInst.name := 'ORG';
@@ -732,7 +732,7 @@ begin
   curBlock.AddInstruction(curInst);
   curInst.operand.Val := param;
 end;
-procedure TParserAsm_6502.AddDirectiveDB;
+procedure TParserAsm6502.AddDirectiveDB;
 begin
   curInst := TAsmInstruction.Create(lex.GetSrcPos);
   curInst.name := 'DB';
@@ -740,7 +740,7 @@ begin
   curInst.iType := itDefByte;  //Represents DB
   curBlock.AddInstruction(curInst);
 end;
-procedure TParserAsm_6502.AddDirectiveDW;
+procedure TParserAsm6502.AddDirectiveDW;
 begin
   curInst := TAsmInstruction.Create(lex.GetSrcPos);
   curInst.name := 'DW';
@@ -749,7 +749,7 @@ begin
   curBlock.AddInstruction(curInst);
 end;
 //Inicialización
-procedure TParserAsm_6502.ProcessASMblock(Body: TBlock);
+procedure TParserAsm6502.ProcessASMblock(Body: TBlock);
 var
   blkEnd: boolean;
 begin
@@ -771,7 +771,7 @@ begin
   lex.curCtx.OnDecodeNext := nil;   //Restore lexer here, in order to take the "END" with the new lexer and avoid problems of syntax.
   lex.Next;   //Take END with default lexer.
 end;
-function TParserAsm_6502.DecodeNext: boolean;
+function TParserAsm6502.DecodeNext: boolean;
 {Decode the token in the current position, indicated by (frow, fcol), and returns:
  - Token type in "toktyp".
  - Start of next token in (frow, fcol).
@@ -856,14 +856,14 @@ begin
   end;
   exit(false);
 end;
-constructor TParserAsm_6502.Create(msg0: TMessageManager; lex0: TAleLexer);
+constructor TParserAsm6502.Create(msg0: TMessageManager; lex0: TAleLexer);
 begin
   inherited Create;
   msg := msg0;  //Toma referencia al gestor de mensajes
   lex := lex0;  //Toma referencia al lexer
   labels := TAsmInstructionList.Create(false);
 end;
-destructor TParserAsm_6502.Destroy;
+destructor TParserAsm6502.Destroy;
 begin
   labels.Destroy;
   inherited Destroy;
