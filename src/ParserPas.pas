@@ -56,7 +56,7 @@ public    //Eventos
   callParseASMblock: procedure(Body: TBlock) of object;
 protected // Métodos auxiliares para el parser
   function tokIdent: TTokenIdent; inline;
-  function CaptureSemicolon: boolean;
+  function ConsumeSemicolon: boolean;
   procedure SkipWhites;
   procedure SkipWhitesNoDirect;
   procedure Next;
@@ -72,7 +72,7 @@ private   // Expresiones
   function ParseSimpleExpression: TExpression;
   function ParseExpression: TExpression;
 private   // Métodos auxiliares para las declaraciones
-  procedure ParseParameters(Params: TVarDeclList);
+  procedure ParseParameters(var Params: TVarDeclList);
   function ParseSubrangeType: TSubrangeTypeDef;
   function ParseEnumType: TEnumTypeDef;
   function ParseArrayTypeDef: TArrayTypeDef;
@@ -212,17 +212,6 @@ function TParserPas.tokIdent: TTokenIdent;
 begin
   exit(lex.curCtx.tokIdent);
 end;
-function TParserPas.CaptureSemicolon: boolean;
-//Verifica si sigue el delimitador de expresión ";". Si no encuentra devuelve false.
-begin
-  if tokIdent = tiSEMIC then begin //encontró
-    Next;   //pasa al siguiente
-    exit(true);
-  end else begin   //es un error
-    GenError('Se esperaba delimitador ";".');
-    exit(false);  //sale con error
-  end;
-end;
 procedure TParserPas.SkipWhites;
 {Consume comentarios y directivas del código fuente.
 Notar que este procedimiento puede detectar varios errores en el mismo bloque, y que
@@ -287,6 +276,17 @@ begin
     //Pasa a siguiente
     lex.Next;
     lex.SkipWhites;  //limpia blancos
+  end;
+end;
+function TParserPas.ConsumeSemicolon: boolean;
+//Verifica si sigue el delimitador de expresión ";". Si no encuentra devuelve false.
+begin
+  if lex.curCtx.tokIdent = tiSEMIC then begin //encontró
+    Next;   //pasa al siguiente
+    exit(true);
+  end else begin   //es un error
+    GenError('Se esperaba delimitador ";".');
+    exit(false);  //sale con error
   end;
 end;
 function TParserPas.ConsumeTok(tokId: TTokenIdent; const msgErr: string): boolean;
@@ -653,13 +653,26 @@ begin
 end;
 {$endregion}
 {$region "Métodos auxiliares para las declaraciones"}
-procedure TParserPas.ParseParameters(Params: TVarDeclList);
+procedure TParserPas.ParseParameters(var Params: TVarDeclList);
+{Lee parámetros de un procedimiento o función en la lista "Params", que debe ser solo una
+referencia a TVarDeclList, pero sin instanciar.
+Si se encuentra al menos un parámetro, se crea la lista "Params" y se le agregan los
+parámetros.
+Si no se encuentran parámetros, se devuelve NIL en "Params".
+Si se encuentra algún error, se libera "Params" (si se creó) y se pone a NIL.}
 var
   Param: TVarDecl;
   typName: string;
   i: Integer;
   IsVarParam: Boolean;
 begin
+  Params := nil;
+  if tokIdent <> tiPAREN_OP then Exit;   //"("
+  Next;       //Consume "(".
+  if tokIdent = tiPAREN_CL then begin
+    Next;
+    Exit;
+  end;
   while not HayError do begin
     // Verificar si es parámetro var
     IsVarParam := False;
@@ -669,13 +682,22 @@ begin
     end;
     // Leer identificadores y tipo
     if not readListOfIdent then Exit;   //Lee identificadores en "itemList".
-    if not ConsumeTok(tiCOLON, 'Se esperaba ":" después del parámetro(s).') then Exit;
-    if not ConsumeIdent(typName, 'Se esperaba un tipo de dato') then Exit;
+    if not ConsumeTok(tiCOLON, 'Se esperaba ":" después del parámetro(s).') then begin
+      Params.Free;
+      Params := Nil;
+      Exit;
+    end;
+    if not ConsumeIdent(typName, 'Se esperaba un tipo de dato') then begin
+      Params.Free;
+      Params := Nil;
+      Exit;
+    end;
     // Crear parámetros
     for i := 0 to nitems - 1 do begin
       Param := TVarDecl.Create(itemList[i], typName, srcList[i]);
       Param.IsParameter := True;
       Param.IsByReference := IsVarParam;
+      if Params = nil then Params:= TVarDeclList.Create(true);
       Params.Add(Param);
     end;
     // Verificar si hay más parámetros
@@ -686,6 +708,8 @@ begin
       Break;
     end;
   end;
+  //Ya no se encuentran más parámetros.
+  ConsumeTok(tiPAREN_CL, 'Se esperaba ")" después de los parámetros');
 end;
 function TParserPas.ParseSubrangeType: TSubrangeTypeDef;
 var
@@ -798,7 +822,7 @@ begin
   Result := ArrayType;
 end;
 function TParserPas.ParseRecordTypeDef: TRecordTypeDef;
-{Aanliza la definición de un tipo RECORD y devuelve un objeto "TRecordTypeDef" con la
+{Analiza la definición de un tipo RECORD y devuelve un objeto "TRecordTypeDef" con la
 estructura del tipo analizado.
 Si se encuentra algún error, se devuelve NIL.}
 var
@@ -930,60 +954,46 @@ begin
   Next;  //Consumir ';'
 end;
 procedure TParserPas.ParseVarDeclaration(declars: TDeclarations);
-  procedure ReadNamesList;
-  //Lee una lista de identificadores en la lista "NamesList".
-  begin
-    NamesList.Clear;
-    // Leer lista de identificadores
-    while not HayError do begin
-      if lex.tokType<>tkIdentifier then begin
-        GenError('Se esperaba un identificador');
-        Break;
-      end;
-      NamesList.Add(lex.token);
-      Next;
-      // Verificar si hay más variables
-      if tokIdent = tiCOMMA then begin
-        Next;  // Consumir coma
-        if lex.tokType<>tkIdentifier then
-          GenError('Se esperaba un identificador después de ","');
-        // Continuar con la siguiente variable
-      end else
-        Break;  // No hay más variables en esta línea
-    end;
-  end;
 var
-  SrcPos: TSrcPos;
-  DataTypeName: string;
+  typeName: string;
   i: Integer;
+  typeDef: TTypeDef;
+  varDecl: TVarDecl;
 begin
   Next;  //Consume VAR
   repeat
     //Lee un bloque de declaraciones: VAR a, b, c: byte;
-    ReadNamesList;
-    if HayError then Exit;
-
-    if not ConsumeTok(tiCOLON, 'Se esperaba ":" después de las variables') then Exit;
-
-    // Leer el tipo
-    if lex.tokType<>tkIdentifier then begin
-      GenError('Se esperaba un tipo de dato');
-      Exit;
-    end;
-    DataTypeName := lex.token;
-    // Crear declaraciones para cada variable
-    SrcPos := lex.GetSrcPos;   //Usa una sola ubicación
-    for i := 0 to NamesList.Count - 1 do begin
-      declars.Add(TVarDecl.Create(NamesList[i], DataTypeName, SrcPos));
-    end;
-    Next;  //Pasa el nombre del tipo
-    if tokIdent = tiSEMIC then begin
-      // Consumir ';' opcional
+    if not readListOfIdent then Exit;   //Lee identificadores en "itemList".
+    if not ConsumeTok(tiCOLON, 'Se esperaba ":" después de la variable(s).') then Exit;
+    //Leer el tipo
+    if lex.tokType = tkIdentifier then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
+      typeName:= lex.token;
+      typeDef := Nil;
       Next;
-    end else begin
-      //Puede que siga otro tipo de declaración o sea un error.
-      Break;
+    end else begin //Debe ser una definición Inline: record ... end
+      typeName:= '';
+      typeDef := ParseTypeDefinition;
+      if HayError then begin
+        typeDef.Free;
+        Break;
+      end;
     end;
+    //Crear declaraciones para cada variable.
+    {Notar que si se ha definido un tipo estructurado, todas las variables creadas en un
+    solo bloque, como "a,b,c: <tipo estructurado>", entonces todas las variables apuntan
+    al mismo tipo definido "typeDef".}
+    for i := 0 to nitems - 1 do begin
+      varDecl := TVarDecl.Create(itemList[i], typeName, srcList[i]);
+      varDecl.TypeDef := typeDef;
+      if (typeDef<>nil) and (i=0) then
+        //Ponemos, como propietario del tipo, solo a la primera declaración, para evitar
+        //que varios objetos intenten destruirlo.
+        varDecl.TypeOwner := true
+      else
+        varDecl.TypeOwner := false;
+      declars.Add(varDecl);
+    end;
+    if not ConsumeSemicolon then Exit;   //Debe terminar con ";".
   until lex.tokType = tkKeyword;  //Sige otra declaración o BEGIN
 end;
 procedure TParserPas.ParseConstDeclaration(declars: TDeclarations);
@@ -1037,7 +1047,7 @@ begin
       Break;
     end;
     //Consumimos ';', y generamos el error si se omite.
-    CaptureSemicolon;
+    ConsumeSemicolon;
   end;
 end;
 procedure TParserPas.ParseProcedureDeclaration(declars: TDeclarations);
@@ -1046,100 +1056,80 @@ var
   Proc: TProcDecl;
   SrcPos: TSrcPos;
   procName: string;
+  Params: TVarDeclList;     //Lista de parámetros;
 begin
   SrcPos := lex.GetSrcPos;
   Next;  // Consume PROCEDURE
-  if not ConsumeIdent(procName, 'Se esperaba un identificador para el procedimiento') then begin
-    Exit;
-  end;
-  Proc := TProcDecl.Create(lex.token, SrcPos);
-  // Parsear parámetros
-  if tokIdent = tiPAREN_OP then begin   //"("
-    Next;
-    ParseParameters(Proc.Parameters);
-    if not HayError then begin
-      if tokIdent <> tiPAREN_CL then  //")"
-        GenError('Se esperaba ")" después de los parámetros');
-      Next;
-    end;
-  end;
-  if HayError then begin
-    Proc.Destroy;
-    Exit;
-  end;
-  if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then begin
-    Proc.Destroy;
-    Exit;
-  end;
-  //Procesar declaraciones
-  ParseDeclarations(Proc.Declarations);
-  if HayError then begin
-    Proc.Destroy;
-    Exit;
-  end;
-  //Parsear cuerpo
-  ParseBody(Proc.Body);
-  if HayError then begin
-    Proc.Destroy;
-  end else begin
+  if not ConsumeIdent(procName, 'Se esperaba un identificador para el procedimiento') then Exit;
+  //Parsear parámetros
+  ParseParameters(Params);
+  if HayError then Exit;
+  if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then Exit;
+  if tokIdent = tiFORWARD then begin      //Es declaración FORWARD
+    Next;     //Consume FORWARD
+    if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then Exit;
+    Proc := TProcDecl.Create(procName, SrcPos, True);
+    Proc.Parameters := Params;  //Puede ser NIL.
     declars.Add(Proc);
+  end else begin   //Es declaración de procedimiento
+    Proc := TProcDecl.Create(procName, SrcPos, False);
+    Proc.Parameters := Params;  //Puede ser NIL.
+    //Procesar declaraciones
+    ParseDeclarations(Proc.Declarations);
+    if HayError then begin
+      Proc.Destroy;
+      Exit;
+    end;
+    //Parsear cuerpo
+    ParseBody(Proc.Body);
+    if HayError then begin
+      Proc.Destroy;
+    end else begin
+      declars.Add(Proc);
+    end;
   end;
 end;
 procedure TParserPas.ParseFunctionDeclaration(declars: TDeclarations);
 var
-  Func: TFunctDecl;
+  Proc: TFunctDecl;
+  SrcPos: TSrcPos;
+  procName, returnType: string;
+  Params: TVarDeclList;
 begin
+  SrcPos := lex.GetSrcPos;
   Next;  // Consume FUNCTION
-  if lex.tokType <> tkIdentifier then begin
-    GenError('Se esperaba un identificador para la función');
-    Exit;
-  end;
-  Func := TFunctDecl.Create(lex.token, lex.GetSrcPos);
-  Next;
+  if not ConsumeIdent(procName, 'Se esperaba un identificador para la función') then Exit;
   // Parsear parámetros
-  if tokIdent = tiPAREN_OP then begin   //'('
-    Next;
-    ParseParameters(Func.Parameters);
-    if not HayError then begin
-      if tokIdent <> tiPAREN_CL then  //")"
-        GenError('Se esperaba ")" después de los parámetros');
-      Next;
-    end;
-  end;
-  if HayError then begin
-    Func.Destroy;
-    Exit;
-  end;
-  if tokIdent <> tiCOLON  then begin  //":"
-    GenError('Se esperaba ":" después del nombre');
-    Func.Destroy;
-    Exit;
-  end;
-  Next;
+  ParseParameters(Params);
+  if HayError then Exit;
   //Lee tipo devuelto
-  if lex.tokType <> tkIdentifier then begin
-    GenError('Se esperaba el tipo de retorno');
-    Func.Destroy;
-    Exit;
-  end;
-  Func.ReturnTypeName := lex.token;
-  Next;
-  if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then begin
-    Func.Destroy;
-    Exit;
-  end;
-  //Procesar declaraciones
-  ParseDeclarations(Func.Declarations);
-  if HayError then begin
-    Func.Destroy;
-    Exit;
-  end;
-  //Parsear cuerpo
-  ParseBody(Func.Body);
-  if HayError then begin
-    Func.Destroy;
+  if not ConsumeTok(tiCOLON, 'Se esperaba ":" después del nombre') then Exit;
+  if not ConsumeIdent(returnType, 'Se esperaba el tipo de retorno.') then Exit;
+  if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then Exit;
+  if tokIdent = tiFORWARD then begin      //Es declaración FORWARD
+    Next;
+    if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then Exit;
+    Proc := TFunctDecl.Create(procName, SrcPos, True);
+    Proc.Parameters := Params;  //Puede ser NIL.
+    Proc.ReturnTypeName := lex.token;
+    declars.Add(Proc);
   end else begin
-    declars.Add(Func);
+    Proc := TFunctDecl.Create(procName, SrcPos, False);
+    Proc.Parameters := Params;
+    Proc.ReturnTypeName := lex.token;
+    //Procesar declaraciones
+    ParseDeclarations(Proc.Declarations);
+    if HayError then begin
+      Proc.Destroy;
+      Exit;
+    end;
+    //Parsear cuerpo
+    ParseBody(Proc.Body);
+    if HayError then begin
+      Proc.Destroy;
+    end else begin
+      declars.Add(Proc);
+    end;
   end;
 end;
 procedure TParserPas.ParseTypeDeclaration(declars: TDeclarations);
@@ -1617,7 +1607,7 @@ debe haber sido limpiado}
       astProg.Name := lex.token;
       astProg.srcDec := lex.GetSrcPos;
       Next;  //Toma el nombre y pasa al siguiente
-      if not CaptureSemicolon then exit;
+      if not ConsumeSemicolon then exit;
     end;
     if lex.atEof then begin
       GenError('Expected "program", "begin", "var", "type" or "const".');
@@ -1660,7 +1650,7 @@ begin
   //Encabezado: unit Nombre;
   if not ConsumeTok(tiUNIT, 'Se esperaba "unit"') then Exit;
   if not ConsumeIdent(untName, 'Se esperaba un nombre para la unidad') then Exit;
-  CaptureSemicolon;
+  ConsumeSemicolon;
   //Sección INTERFACE
   if not ConsumeTok(tiINTERF, 'Se esperaba "interface"') then begin
     Exit;

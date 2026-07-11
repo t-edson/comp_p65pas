@@ -169,7 +169,7 @@ var
     // ============================================================
     SrcPos.row := 5;
     SrcPos.col := 1;
-    Proc := TProcDecl.Create('Sumar', SrcPos);
+    Proc := TProcDecl.Create('Sumar', SrcPos, False);
 
     // Añadir parserámetro
     SrcPos.row := 5;
@@ -191,7 +191,7 @@ var
     // ============================================================
     SrcPos.row := 8;
     SrcPos.col := 1;
-    Func := TFunctDecl.Create('Calcular', SrcPos);
+    Func := TFunctDecl.Create('Calcular', SrcPos, False);
     Func.ReturnTypeName := 'integer';
 
     // Cuerpo de la función (vacío)

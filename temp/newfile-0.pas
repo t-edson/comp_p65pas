@@ -1,14 +1,14 @@
 program muestra; 
 uses Commodore64;
-type 
+{type 
    objeto = record
     a,b,c: array[0..2] of byte;
    end;
-const
-  consName = 0; 
-  consName1: array[1..10] of byte = 0; 
-//procedure MostrarMensaje; forward;
-  
+}
+var a: record
+      x: integer;
+      y: integer;
+    end;
 begin
   a := 'aaa';
 //  case a of 

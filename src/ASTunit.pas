@@ -114,22 +114,26 @@ type  //Declaraciones y clases base para el AST
 
   {Clase abstracta base para contenedores de código (procedimientos, funciones y programa
   principal)}
+
+  { TCodeContainer }
+
   TCodeContainer = class(TASTNode)
   private
     FName: string;
-    FParameters: TVarDeclList;
     FDeclarations: TDeclarations;
     FBody: TBlock;
+    FIsForward: Boolean;  //True si es declaración FORWARD
   public
+    Parameters: TVarDeclList;   //Lista de parámetros. Si no hay parámetros contiene NIL.
     property Name: string read FName write FName;
-    property Parameters: TVarDeclList read FParameters;
     property Declarations: TDeclarations read FDeclarations;
     property Body: TBlock read FBody write FBody;
     procedure AddParameter(Param: TVarDecl);
+    property IsForward: Boolean read FIsForward;
   public
     procedure Clear;
     procedure PrintDebug(Indent: Integer = 0); override;
-    constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
+    constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos; AIsForward: Boolean);
     destructor Destroy; override;
   end;
 type  //Nodos de expresiones
@@ -538,19 +542,27 @@ type  //Nodos de declaraciones
   // Declaraciones de variables
   TVarDecl = class(TASTNode)
   private
-    FName: string;
-    FDataTypeName: string;
+    FName    : string;
+    FTypeName: string;   //Indentificador del tipo, cuando es un tipo identificado
     FIsParameter: Boolean;
     FIsByReference: Boolean;
   public
-    constructor Create(const AName: string;
-                       const ADataTypeName: string; const ASrcPos: TSrcPos);
-
+    //Referencia al tipo cuando el tipo es estructurado
+    TypeDef  : TTypeDef;
+    //Bandera para indicar que este nodo es propietario del tipo y, en consecuencia, debe
+    //responsabilizarse de destruirlo. Esta variable es necesaria porque las declaraciones
+    //de la forma:
+    // VAR a,b,c: <tipo estructurado>
+    //comparten un mismo objeto "TTypeDef".
+    TypeOwner: boolean;
     property Name: string read FName;
-    property DataTypeName: string read FDataTypeName;
+    property DataTypeName: string read FTypeName;
     property IsParameter: Boolean read FIsParameter write FIsParameter;
     property IsByReference: Boolean read FIsByReference write FIsByReference;
 
+    constructor Create(const AName: string;
+                       const ADataTypeName: string; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
@@ -580,41 +592,21 @@ type  //Nodos de declaraciones
   TProcDecl = class(TCodeContainer)
   public  //Inicialización y depuración
     function ToString: string; override;
-    constructor Create(const AName: string; const ASrcPos: TSrcPos);
+    constructor Create(const AName: string; const ASrcPos: TSrcPos;
+      AIsForward: Boolean);
   end;
   { TFunctDecl }
   // Declaración de función
   TFunctDecl = class(TCodeContainer)
   private
-    //FReturnType: TDataType;
     FReturnTypeName: string;
-  public
-    property ReturnTypeName: string read FReturnTypeName write FReturnTypeName;
-  public  //Inicialización y depuración
-    function ToString: string; override;
-    constructor Create(const AName: string; const ASrcPos: TSrcPos);
-  end;
-  // Declaración FORWARD
-  TForwardDecl = class(TASTNode)
-  private
-    FName: string;
-    FIsFunction: Boolean;        // True = función, False = procedimiento
-    FParameters: TVarDeclList;
-    FReturnTypeName: string;     // Solo para funciones
     FReturnTypeDef: TTypeDef;    // Resuelto en análisis semántico
   public
-    procedure AddParameter(Param: TVarDecl);
-    property Name: string read FName;
-    property IsFunction: Boolean read FIsFunction;
-    property Parameters: TVarDeclList read FParameters;
     property ReturnTypeName: string read FReturnTypeName write FReturnTypeName;
-    property ReturnTypeDef: TTypeDef read FReturnTypeDef write FReturnTypeDef;
   public  //Inicialización y depuración
-    constructor Create(const AName: string; AIsFunction: Boolean;
-                       const ASrcPos: TSrcPos);
-    destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
+    constructor Create(const AName: string; const ASrcPos: TSrcPos;
+      AIsForward: Boolean);
   end;
 type  //Definiciones previas para declaraciones de tipos
   //Clase base para las declaraciones de tipo
@@ -650,9 +642,9 @@ type  //Definiciones previas para declaraciones de tipos
   // Definición de campo de registros (RECORD)
   TFieldDef = class(TASTNode)
   private
-    FName: string;
+    FName    : string;
     FTypeName: string;
-    FTypeDef: TTypeDef;  // Para tipos definidos inline
+    FTypeDef : TTypeDef;  //Para tipos definidos Innline
   public
     property Name: string read FName;
     property TypeName: string read FTypeName write FTypeName;
@@ -881,7 +873,7 @@ end;
 procedure TCodeContainer.AddParameter(Param: TVarDecl);
 begin
   Param.IsParameter := True;
-  FParameters.Add(Param);
+  Parameters.Add(Param);
 end;
 procedure TCodeContainer.Clear;
 {Limpia al árbol de sintaxis del programa o subprograma, y lo deja listo para iniciar el
@@ -897,10 +889,10 @@ var
   i: Integer;
 begin
   WriteLn(StringOfChar(' ', Indent), ToString);
-  if FParameters.Count > 0 then begin
+  if Parameters.Count > 0 then begin
     WriteLn(StringOfChar(' ', Indent + 2), 'Parameters:');
-    for i := 0 to FParameters.Count - 1 do
-      FParameters[i].PrintDebug(Indent + 4);
+    for i := 0 to Parameters.Count - 1 do
+      Parameters[i].PrintDebug(Indent + 4);
   end;
 
   if FDeclarations.Items.Count > 0 then
@@ -913,23 +905,33 @@ begin
     FBody.PrintDebug(Indent + 4);
   end;
 end;
-constructor TCodeContainer.Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
+constructor TCodeContainer.Create(ANodeType: TASTNodeType;
+  const ASrcPos: TSrcPos; AIsForward: Boolean);
 begin
   inherited Create(ANodeType, ASrcPos);
-  FDeclarations := TDeclarations.Create(ASrcPos);
-  {Crea los elementos fijos del programa. Notar que FBody (que representa al cuerpo
-  del programa principal o subprograma) se crea en la misma posición que el programa,
-  lo cual no es tan consistente porque FBody debería apuntar al BEGIN del programa,
-  pero se puede actualizar después.
-  Se crea aquí, al crear al programa, para controlar su construcción y destrucción.}
-  FBody := TBlock.Create(ASrcPos);
-  FParameters := TVarDeclList.Create(True);
+  //Crea los elementos fijos del programa.
+  if FIsForward then begin
+    //En declaraciones FORWARD no es necesario crear las declaraciones y el cuerpo.
+    FDeclarations := Nil;  //Marca para que no intenten destruirla.
+    FBody := Nil;          //Marca para que no intenten destruirla.
+  end else begin
+    {Notar que FDeclarations y FBody se crean en la misma posición que el programa, lo
+    cual no es preciso, pero se pueden actualizar después.}
+    FDeclarations := TDeclarations.Create(ASrcPos);
+    FBody := TBlock.Create(ASrcPos);
+  end;
+  {No creamos la lista de parámetros aquí, por los siguientes motivos:
+   - Para no usar memoria dinámica si el procedimiento/función no usa parámetros.
+   - Para permitir que la lista de parámetros se cree previamente a la creación del
+     procedimiento/función, y así facilitar el análisis sintáctico de procedimientos,
+     funciones o declaraciones FORWARD.}
+  Parameters := nil;
 end;
 destructor TCodeContainer.Destroy;
 begin
-  FParameters.Destroy;
-  FBody.Destroy;
-  FDeclarations.Destroy;
+  Parameters.Free;     //Destruye si se ha creado.
+  FBody.Free;          //Destruye si se ha creado.
+  FDeclarations.Free;  //Destruye si se ha creado.
   inherited;
 end;
 {$endregion}
@@ -1657,13 +1659,24 @@ constructor TVarDecl.Create(const AName: string; const ADataTypeName: string;
 begin
   inherited Create(ntVarDecl, ASrcPos);
   FName := AName;
-  FDataTypeName := ADataTypeName;
+  FTypeName := ADataTypeName;
+  TypeDef := nil;
   FIsParameter := False;
   FIsByReference := False;
 end;
+
+destructor TVarDecl.Destroy;
+begin
+  if TypeOwner then begin
+    //Este nodo es el propietario del tipo. Lo destruimos.
+    TypeDef.Destroy;
+  end;
+  inherited Destroy;
+end;
+
 function TVarDecl.ToString: string;
 begin
-  Result := Format('VarDecl: %s: %s', [FName, FDataTypeName]);
+  Result := Format('VarDecl: %s: %s', [FName, FTypeName]);
   if FIsParameter then
   begin
     Result := Result + ' (parameter';
@@ -1730,84 +1743,29 @@ end;
 function TProcDecl.ToString: string;
 begin
   Result := Format('Procedure: %s (%d params, %d locals)',
-                   [FName, FParameters.Count, FDeclarations.Items.Count]);
+                   [FName, Parameters.Count, FDeclarations.Items.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-constructor TProcDecl.Create(const AName: string; const ASrcPos: TSrcPos);
+constructor TProcDecl.Create(const AName: string; const ASrcPos: TSrcPos; AIsForward: Boolean);
 begin
-  inherited Create(ntProcDecl, ASrcPos);
+  inherited Create(ntProcDecl, ASrcPos, AIsForward);
   FName := AName;
-end;
-// TForwardDecl
-constructor TForwardDecl.Create(const AName: string; AIsFunction: Boolean;
-                                const ASrcPos: TSrcPos);
-begin
-  inherited Create(ntForwardDecl, ASrcPos);
-  FName := AName;
-  FIsFunction := AIsFunction;
-  FParameters := TVarDeclList.Create(True);
-  FReturnTypeName := '';
-  FReturnTypeDef := nil;
-end;
-destructor TForwardDecl.Destroy;
-begin
-  FParameters.Free;
-  FReturnTypeDef.Free;
-  inherited;
-end;
-procedure TForwardDecl.AddParameter(Param: TVarDecl);
-begin
-  Param.IsParameter := True;
-  FParameters.Add(Param);
-end;
-function TForwardDecl.ToString: string;
-begin
-  if FIsFunction then
-    Result := Format('ForwardDecl(Function): %s', [FName])
-  else
-    Result := Format('ForwardDecl(Procedure): %s', [FName]);
-
-  if FParameters.Count > 0 then
-    Result := Result + Format(' (%d params)', [FParameters.Count]);
-
-  if FIsFunction and (FReturnTypeName <> '') then
-    Result := Result + Format(' returns %s', [FReturnTypeName]);
-
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TForwardDecl.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-
-  if FParameters.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Parameters:');
-    for i := 0 to FParameters.Count - 1 do
-      FParameters[i].PrintDebug(Indent + 4);
-  end;
-
-  if FIsFunction and (FReturnTypeDef <> nil) then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Return type:');
-    FReturnTypeDef.PrintDebug(Indent + 4);
-  end;
 end;
 // TFunctDecl
 function TFunctDecl.ToString: string;
 begin
   Result := Format('Function: %s: %s (%d params, %d locals)',
-           [FName, FReturnTypeName, FParameters.Count, FDeclarations.Items.Count]);
+           [FName, FReturnTypeName, Parameters.Count, FDeclarations.Items.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-constructor TFunctDecl.Create(const AName: string; const ASrcPos: TSrcPos);
+constructor TFunctDecl.Create(const AName: string; const ASrcPos: TSrcPos; AIsForward: Boolean);
 begin
-  inherited Create(ntFunctDecl, ASrcPos);
+  inherited Create(ntFunctDecl, ASrcPos, AIsForward);
   FName := AName;
-  //Para simplificar el análisis sintáctico, conviene que el tipo de retorno se actualice
-  //después de leer los parámetros por eso no se incluye en el constructor.
-  //FReturnTypeName := AReturnTypeName;
+  {Para simplificar el análisis sintáctico, conviene que el tipo de retorno se actualice
+  después de leer los parámetros por eso no se incluye en el constructor.
+      FReturnTypeName := AReturnTypeName;
+  }
 end;
 {$endregion}
 {$region "Definiciones previas para declaraciones de tipos"}
@@ -2142,7 +2100,7 @@ end;
 // TProgram
 constructor TProgram.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntProgram, ASrcPos);
+  inherited Create(ntProgram, ASrcPos, False);
   FName := AName;
   FUsedUnits := TUnitRefList.Create(True);
 end;
@@ -2192,7 +2150,7 @@ end;
 // TUnit
 constructor TUnit.Create(const AUnitName: string; const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntUnit, ASrcPos);
+  inherited Create(ntUnit, ASrcPos, False);
   FUnitName := AUnitName;
   FInterfaceUses := TUnitRefList.Create(True);
   FImplementationUses := TUnitRefList.Create(True);
