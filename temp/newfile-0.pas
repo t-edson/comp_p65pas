@@ -7,7 +7,7 @@ uses Commodore64;
 }
 var a: record
       x: integer;
-      y: integer;
+      y: array;
     end;
 begin
   a := 'aaa';

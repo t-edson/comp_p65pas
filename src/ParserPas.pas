@@ -45,7 +45,6 @@ private   //Messages
   procedure GenError(txt: string);
   procedure GenError(txt: String; const Args: array of const);
 private   //Elementos auxiliares
-  NamesList: TStringList;     //**** Debe ser reeemplazado por itemList.
   itemList: array[0..MAX_ITM_LIST] of String[127]; //Lista de ítems.
   srcList : array[0..MAX_ITM_LIST] of TSrcPos;     //Lista posiciones en el código fuente.
   nitems  : Integer;                //Cantidad de ítems caragdos en "itemList".
@@ -125,14 +124,14 @@ begin
   //Se empieza con un tamaño inicial para evitar muchas llamadas a setlength()
   n := 0;
   repeat
-    //ahora debe haber un identificador
+    //Debe haber un identificador
     if lex.tokType <> tkIdentifier then begin
       GenError('Se esperaba un identificador.');
       exit(false);
     end;
-    //hay un identificador
-    itemList[n] := lex.token;  //agrega nombre
-    srcList[n] := lex.GetSrcPos;  //agrega ubicación de declaración
+    //Hay un identificador
+    itemList[n] := lex.token;    //Agrega nombre
+    srcList[n] := lex.GetSrcPos; //Agrega ubicación de declaración
     Next;
     if tokIdent <> tiCOMMA then break; //sale
     Next;  //Toma la coma
@@ -980,8 +979,8 @@ begin
     end;
     //Crear declaraciones para cada variable.
     {Notar que si se ha definido un tipo estructurado, todas las variables creadas en un
-    solo bloque, como "a,b,c: <tipo estructurado>", entonces todas las variables apuntan
-    al mismo tipo definido "typeDef".}
+    solo bloque, como "a,b,c: <tipo estructurado>", apuntan al mismo tipo definido
+    "typeDef".}
     for i := 0 to nitems - 1 do begin
       varDecl := TVarDecl.Create(itemList[i], typeName, srcList[i]);
       varDecl.TypeDef := typeDef;
@@ -1729,12 +1728,10 @@ begin
   msg := msg0;
   astProg := TProgram.Create('prog', lex.GetSrcPos);
   astUnit := TUnit.Create('unit', lex.GetSrcPos);
-  NamesList := TStringList.Create;
   ClearError;   //inicia motor de errores
 end;
 destructor TParserPas.Destroy;
 begin
-  NamesList.Destroy;
   astUnit.Destroy;
   astProg.Destroy;
   inherited Destroy;
