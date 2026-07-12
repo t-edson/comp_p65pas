@@ -16,7 +16,7 @@ type  //Tipos de nodos
     ntFunctionCall,  //Llamada a función: max(a, b).
     ntFieldAccess,   //Acceso a campo (persona.nombre).
     ntPointerDeref,  //Acceso a dirección de puntero (p^).
-    ntArrayIndex,    //Acceso a arreglo (variable[index]).
+    ntArrayRefer,    //Acceso a arreglo (variable[index]).
     //Nodos de sentencias
     ntAssignment,    //Asignación de valor a variable.
     ntIfStatement,   //Condicional IF-THEN-ELSE.
@@ -39,7 +39,7 @@ type  //Tipos de nodos
     ntForwardDecl,   //Declaración FORWARD
     //Nodos auxiliares para declaraciones de tipos
     ntArrayRange,    //Rango de arreglo (1..10)
-    ntFieldDecl,     //Campo dentro de un RECORD
+    //ntFieldDecl,     //Campo dentro de un RECORD. *** No se usa.
     //Nodos de declaraciones de tipos
     ntSimpleType,    //Tipo simple, ya predefinido por el sistema.
     ntSubrangeType,  //Subrango
@@ -107,8 +107,12 @@ type  //Declaraciones y clases base para el AST
   end;
 
   // Expresión (clase abstracta)
+
+  { TExpression }
+
   TExpression = class(TASTNode)
   public
+    function ValueStr: String;
     constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
   end;
 
@@ -183,10 +187,9 @@ type  //Nodos de expresiones
   private
     FValue: Boolean;
   public
-    constructor Create(AValue: Boolean; const ASrcPos: TSrcPos);
-
     property Value: Boolean read FValue;
 
+    constructor Create(AValue: Boolean; const ASrcPos: TSrcPos);
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
@@ -633,22 +636,10 @@ type  //Definiciones previas para declaraciones de tipos
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
   TArrayRangeList = specialize TFPGObjectList<TArrayRange>;
-  // Definición de campo de registros (RECORD)
-  TFieldDef = class(TASTNode)
-  private
-    FTypeName: string;
-    FTypeDef : TTypeDef;  //Para tipos definidos Innline
-  public
-    Name: string;
-    property TypeName: string read FTypeName write FTypeName;
-    property TypeDef: TTypeDef read FTypeDef write FTypeDef;
-  public  //Inicialización y depuración
-    constructor Create(const AName: string; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-    function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
-  end;
-  TFieldDefList = specialize TFPGObjectList<TFieldDef>;
+  //Definición de campo de RECORD. No se usa. Se está usando TVarDecl para los campos.
+  //TFieldDef = class(TASTNode)
+  //end;
+  //TFieldDefList = specialize TFPGObjectList<TFieldDef>;
 
 type  //Nodos de declaraciones de tipos
   // Declaración de tipos pedefinidos (integer, byte, boolean, etc.)
@@ -723,14 +714,11 @@ type  //Nodos de declaraciones de tipos
   // Registro (record ... end)
   TRecordTypeDef = class(TTypeDef)
   private
-    FFields: TFieldDefList;  // Lista de TFieldDef
   public
+    Fields: TASTNodeList;  //Declaraciones de variables, y, a futuro, métodos y constantes.
+  public  //Inicialización y depuración
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
-
-    procedure AddField(Field: TFieldDef);
-    property Fields: TFieldDefList read FFields;
-
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
@@ -857,6 +845,19 @@ begin
   WriteLn(StringOfChar(' ', Indent), ToString);
 end;
 // TExpression
+function TExpression.ValueStr: String;
+{Devuelve una cadena conteniendo el valor de la expresión, cuando es un literal.}
+begin
+  if self.NodeType = ntNumberLiteral then begin
+    exit(TNumberLiteral(self).AsString);
+  end else if self.NodeType = ntBooleanLiteral then begin
+    if TBooleanLiteral(self).Value then Exit('true') else Exit('false');
+  end else if self.NodeType = ntStringLiteral then begin
+    exit(TStringLiteral(self).Value);
+  end else begin
+    exit('<expres>');
+  end;
+end;
 constructor TExpression.Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
 begin
   inherited Create(ANodeType, ASrcPos);
@@ -1222,7 +1223,7 @@ begin
 end;
 constructor TArrayIndex.Create(AArrayVar: TExpression; const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntArrayIndex, ASrcPos);
+  inherited Create(ntArrayRefer, ASrcPos);
   FArrayVar := AArrayVar;
   FIndices := TExpressionList.Create(True);
 end;
@@ -1275,7 +1276,7 @@ begin
   case FTarget.NodeType of
     ntVariableRef:
       TargetStr := TVariableRef(FTarget).Name;
-    ntArrayIndex:
+    ntArrayRefer:
       TargetStr := TArrayIndex(FTarget).ArrayVar.ToString + '[...]';
     ntFieldAccess:
       TargetStr := TFieldAccess(FTarget).RecordVar.ToString + '.' +
@@ -1794,33 +1795,6 @@ begin
   else
     WriteLn(StringOfChar(' ', Indent + 4), '(nil)');
 end;
-// TFieldDef
-constructor TFieldDef.Create(const AName: string; const ASrcPos: TSrcPos);
-begin
-  inherited Create(ntFieldDecl, ASrcPos);
-  Name := AName;
-  FTypeName := '';
-  FTypeDef := nil;
-end;
-destructor TFieldDef.Destroy;
-begin
-  FTypeDef.Free;
-  inherited;
-end;
-function TFieldDef.ToString: string;
-var
-  typName: String;
-begin
-  if FTypeDef <> nil then typName := FTypeDef.TypeName
-  else typName := FTypeName;
-  Result := Format('Field: %s: %s', [Name, typName]);
-end;
-procedure TFieldDef.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  if FTypeDef <> nil then
-    FTypeDef.PrintDebug(Indent + 2);
-end;
 // TTypeDef
 constructor TTypeDef.Create(ANodeType: TASTNodeType; const ATypeName: string;
                             const ASrcPos: TSrcPos);
@@ -1965,20 +1939,16 @@ end;
 constructor TRecordTypeDef.Create(const ASrcPos: TSrcPos);
 begin
   inherited Create(ntRecordType, '', ASrcPos);
-  FFields := TFieldDefList.Create(True);
+  Fields := TASTNodeList.Create(True);
 end;
 destructor TRecordTypeDef.Destroy;
 begin
-  FFields.Free;
+  Fields.Free;
   inherited;
-end;
-procedure TRecordTypeDef.AddField(Field: TFieldDef);
-begin
-  FFields.Add(Field);
 end;
 function TRecordTypeDef.ToString: string;
 begin
-  Result := Format('Record: %d fields', [FFields.Count]);
+  Result := Format('Record: %d fields', [Fields.Count]);
 end;
 procedure TRecordTypeDef.PrintDebug(Indent: Integer = 0);
 var
@@ -1986,8 +1956,8 @@ var
 begin
   WriteLn(StringOfChar(' ', Indent), ToString);
   WriteLn(StringOfChar(' ', Indent + 2), 'Fields:');
-  for i := 0 to FFields.Count - 1 do
-    FFields[i].PrintDebug(Indent + 4);
+  for i := 0 to Fields.Count - 1 do
+    Fields[i].PrintDebug(Indent + 4);
 end;
 // TPointerTypeDef
 constructor TPointerTypeDef.Create(const ATargetTypeName: string;

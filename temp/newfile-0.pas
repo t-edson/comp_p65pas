@@ -1,10 +1,11 @@
 program muestra; 
 uses Commodore64;
-{type 
+type 
+   tarray3 = array[0..2] of byte;
    objeto = record
-    a,b,c: array[0..2] of byte;
+    x,y: byte;
+    a,b,c: string;
    end;
-}
 var a: byte;
     b,c: array[0..2] of byte;
 //procedure MostrarMensaje; forward;

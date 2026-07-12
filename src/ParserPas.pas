@@ -27,6 +27,7 @@ TParserPas = class
 private
   lex    : TAleLexer;       //Analizador léxico
   msg    : TMessageManager; //Referencia al gestor de mensajes
+  procedure ParseVariableBlockDeclar(varContainer: TASTNodeList);
 public    //Componentes principales del compilador
   astProg: TProgram;        //Árbol de sintaxis abstracto de un programa
   astUnit: TUnit;           //Árbol de sintaxis abstracto de una unidad
@@ -655,6 +656,64 @@ begin
 end;
 {$endregion}
 {$region "Métodos auxiliares para las declaraciones"}
+procedure TParserPas.ParseVariableBlockDeclar(varContainer: TASTNodeList);
+{Analiza una declaracíon de tipo:
+  a, b, c: tipo_simple;
+o también:
+  a, b, c: <declaración de tipo estructurado>
+Conforme va reconociendo los ítems, va creando las variables correspondientes en la lista
+"varContainer".}
+var
+  i, idxVarIni: Integer;
+  typeDef: TTypeDef;
+  varDecl: TVarDecl;
+begin
+  idxVarIni := varContainer.Count;  //Guardamos la posición de la primera variable
+  repeat
+    if lex.tokType <> tkIdentifier then begin
+      GenError('Se esperaba un identificador.');
+      Exit;
+    end;
+    //Hay un identificador. Vamos creando la variable.
+    varDecl := TVarDecl.Create(lex.token, lex.GetSrcPos);
+    varContainer.Add(varDecl);   //La agregamos
+    Next;
+    if tokIdent <> tiCOMMA then Break; //Se asume que termina la lista de identificadores.
+    Next;  //Toma la coma
+  until false;
+  if not ConsumeTok(tiCOLON, 'Se esperaba ":" después de la variable(s).') then
+    Exit;   //No es necesario limpiar nada adicional
+  //Lee el tipo y completa esa información en las variables creadas.
+  if lex.tokType = tkIdentifier then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
+    //Actualiza el tipo en todas las variables creadas.
+    for i := idxVarIni to varContainer.Count-1 do begin
+      //Todos estos ítems deben ser los que hemos agregados
+      varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
+      varDecl.TypeName := lex.token;  //Es tipo simple
+      //varDecl.TypeDef := Nil;  //No es necesario actualizar
+    end;
+    Next;   //Consume el identificador de tipo
+  end else begin //Debe ser una definición Inline: record ... end
+    typeDef := ParseTypeDefinition;
+    if HayError then begin
+      typeDef.Free; //Por si acaso
+      Exit;
+    end;
+    //Actualiza el tipo en todas las variables creadas, haciendo que todas las variables
+    //creadas en un solo bloque, apunten al mismo tipo definido "typeDef".
+    for i := idxVarIni to varContainer.Count-1 do begin
+      //Todos estos ítems deben ser los que hemos agregados
+      varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
+      //varDecl.TypeName := '';   //No es necesario actualizar
+      varDecl.TypeDef := typeDef;  //No es tipo estructurado o anónimo.
+      if i = idxVarIni then begin
+        //Ponemos, como propietario del tipo, solo a la primera declaración, para evitar
+        //que varios objetos intenten destruirlo.
+        varDecl.TypeOwner := true
+      end;
+    end;
+  end;
+end;
 procedure TParserPas.ParseParameters(var Params: TVarDeclList);
 {Lee parámetros de un procedimiento o función en la lista "Params", que debe ser solo una
 referencia a TVarDeclList, pero sin instanciar.
@@ -830,38 +889,13 @@ estructura del tipo analizado.
 Si se encuentra algún error, se devuelve NIL.}
 var
   RecordType: TRecordTypeDef;
-  Field: TFieldDef;
-  typeName: String;
-  typeDef: TTypeDef;
-  i: Integer;
 begin
   //Creamos el tipo. La posición TSrcPos no es relevante ahora.
   RecordType := TRecordTypeDef.Create(lex.GetSrcPos);
   Next;  //Toma el token "RECORD"
   //Explora los campos y los agrega a "RecordType".
   while not (HayError or (tokIdent = tiEND)) do begin
-    if not readListOfIdent then Break;   //Lee identificadores en "itemList".
-    if not ConsumeTok(tiCOLON, 'Se esperaba ":" después del campo(s).') then Break;
-    //Ya tenemos la lista de campos en "itemList". Analizamos al tipo: string, array[], ...
-    if lex.tokType = tkIdentifier then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
-      typeName:= lex.token;
-      typeDef := Nil;
-      Next;
-    end else begin //Debe ser una definición Inline: record ... end
-      typeName:= '';
-      typeDef := ParseTypeDefinition;
-      if HayError then begin
-        typeDef.Free;
-        Break;
-      end;
-    end;
-    //Creamos los campos con el tipo "typeDef".
-    for i := 0 to nitems - 1 do begin
-      Field := TFieldDef.Create(itemList[i], srcList[i]);
-      Field.TypeName := typeName;
-      Field.TypeDef  := typeDef;
-      RecordType.AddField(Field);
-    end;
+    ParseVariableBlockDeclar(RecordType.Fields);
     if tokIdent = tiSEMIC then Next else Break;
   end;
   if HayError then begin
@@ -957,59 +991,11 @@ begin
   Next;  //Consumir ';'
 end;
 procedure TParserPas.ParseVarDeclaration(declars: TDeclarations);
-var
-  i, idxVarIni: Integer;
-  typeDef: TTypeDef;
-  varDecl: TVarDecl;
 begin
   Next;  //Consume VAR
   repeat
-    //Lee un bloque de declaraciones: a, b, c: byte;
-    idxVarIni := declars.Items.Count;  //Guardamos la posición de la primera variable
-    repeat
-      if lex.tokType <> tkIdentifier then begin
-        GenError('Se esperaba un identificador.');
-        Exit;
-      end;
-      //Hay un identificador. Vamos creando la variable.
-      varDecl := TVarDecl.Create(lex.token, lex.GetSrcPos);
-      declars.Add(varDecl);   //La agregamos
-      Next;
-      if tokIdent <> tiCOMMA then Break; //Se asume que termina la lista de identificadores.
-      Next;  //Toma la coma
-    until false;
-    if not ConsumeTok(tiCOLON, 'Se esperaba ":" después de la variable(s).') then
-      Exit;   //No es necesario limpiar nada adicional
-    //Lee el tipo y completa esa información en las variables creadas.
-    if lex.tokType = tkIdentifier then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
-      //Actualiza el tipo en todas las variables creadas.
-      for i := idxVarIni to declars.Items.Count-1 do begin
-        //Todos estos ítems deben ser los que hemos agregados
-        varDecl := TVarDecl(declars.Items[i]);   //Todas deben ser TVarDecl
-        varDecl.TypeName := lex.token;  //Es tipo simple
-        //varDecl.TypeDef := Nil;  //No es necesario actualizar
-      end;
-      Next;   //Consume el identificador de tipo
-    end else begin //Debe ser una definición Inline: record ... end
-      typeDef := ParseTypeDefinition;
-      if HayError then begin
-        typeDef.Free; //Por si acaso
-        Exit;
-      end;
-      //Actualiza el tipo en todas las variables creadas, haciendo que todas las variables
-      //creadas en un solo bloque, apunten al mismo tipo definido "typeDef".
-      for i := idxVarIni to declars.Items.Count-1 do begin
-        //Todos estos ítems deben ser los que hemos agregados
-        varDecl := TVarDecl(declars.Items[i]);   //Todas deben ser TVarDecl
-        //varDecl.TypeName := '';   //No es necesario actualizar
-        varDecl.TypeDef := typeDef;  //No es tipo estructurado o anónimo.
-        if i = idxVarIni then begin
-          //Ponemos, como propietario del tipo, solo a la primera declaración, para evitar
-          //que varios objetos intenten destruirlo.
-          varDecl.TypeOwner := true
-        end;
-      end;
-    end;
+    ParseVariableBlockDeclar(declars.Items);
+    if HayError then Exit;
     if not ConsumeSemicolon then Exit;   //Debe terminar con ";".
   until lex.tokType = tkKeyword;  //Sige otra declaración o BEGIN
 end;
