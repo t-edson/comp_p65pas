@@ -139,6 +139,16 @@ type  //Declaraciones y clases base para el AST
   private
     FName: string;
   public
+    //Indentificador del tipo, cuando es un tipo identificado.
+    TypeName : string;
+    //Referencia al tipo cuando el tipo es estructurado
+    TypeDef  : TTypeDef;
+    //Bandera para indicar que este nodo es propietario del tipo y, en consecuencia, debe
+    //responsabilizarse de destruirlo. Esta variable es necesaria porque las declaraciones
+    //de la forma:
+    // VAR a,b,c: <tipo estructurado>
+    //comparten un mismo objeto "TTypeDef".
+    TypeOwner: boolean;
     property Name: string read FName;
     constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -554,16 +564,6 @@ type  //Nodos de declaraciones
     FIsParameter: Boolean;
     FIsByReference: Boolean;
   public
-    //Indentificador del tipo, cuando es un tipo identificado.
-    TypeName : string;
-    //Referencia al tipo cuando el tipo es estructurado
-    TypeDef  : TTypeDef;
-    //Bandera para indicar que este nodo es propietario del tipo y, en consecuencia, debe
-    //responsabilizarse de destruirlo. Esta variable es necesaria porque las declaraciones
-    //de la forma:
-    // VAR a,b,c: <tipo estructurado>
-    //comparten un mismo objeto "TTypeDef".
-    TypeOwner: boolean;
     property IsParameter: Boolean read FIsParameter write FIsParameter;
     property IsByReference: Boolean read FIsByReference write FIsByReference;
   public  //Inicialización y depuración
@@ -646,11 +646,7 @@ type  //Definiciones previas para declaraciones de tipos
   // Definición de campo de registros (RECORD)
   TFieldDef = class(TNameTypeDecl)
   private
-    FTypeName: string;
-    FTypeDef : TTypeDef;  //Para tipos definidos Innline
   public
-    property TypeName: string read FTypeName write FTypeName;
-    property TypeDef: TTypeDef read FTypeDef write FTypeDef;
   public  //Inicialización y depuración
     constructor Create(const AName: string; const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -940,6 +936,10 @@ constructor TNameTypeDecl.Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos
   );
 begin
   inherited Create(ANodeType, ASrcPos);
+  //La información de tipo debe completarse después
+  TypeName := '';
+  TypeDef := nil;
+  TypeOwner := False;
 end;
 destructor TNameTypeDecl.Destroy;
 begin
@@ -1679,10 +1679,6 @@ begin
   FName := AName;
   FIsParameter := False;
   FIsByReference := False;
-  //La información de tipo debe completarse después
-  TypeName := '';
-  TypeDef := nil;
-  TypeOwner := False;
 end;
 destructor TVarDecl.Destroy;
 begin
@@ -1826,27 +1822,25 @@ constructor TFieldDef.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntFieldDecl, ASrcPos);
   FName := AName;
-  FTypeName := '';
-  FTypeDef := nil;
 end;
 destructor TFieldDef.Destroy;
 begin
-  FTypeDef.Free;
+  TypeDef.Free;
   inherited;
 end;
 function TFieldDef.ToString: string;
 var
   typName: String;
 begin
-  if FTypeDef <> nil then typName := FTypeDef.TypeName
-  else typName := FTypeName;
+  if TypeDef <> nil then typName := TypeDef.TypeName
+  else typName := TypeName;
   Result := Format('Field: %s: %s', [FName, typName]);
 end;
 procedure TFieldDef.PrintDebug(Indent: Integer = 0);
 begin
   WriteLn(StringOfChar(' ', Indent), ToString);
-  if FTypeDef <> nil then
-    FTypeDef.PrintDebug(Indent + 2);
+  if TypeDef <> nil then
+    TypeDef.PrintDebug(Indent + 2);
 end;
 // TTypeDef
 constructor TTypeDef.Create(ANodeType: TASTNodeType; const ATypeName: string;
