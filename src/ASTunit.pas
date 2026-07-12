@@ -134,27 +134,6 @@ type  //Declaraciones y clases base para el AST
     destructor Destroy; override;
   end;
 
-  {Clase base para declaraciones con nombre y tipo como variables o campos de un registro}
-  TNameTypeDecl = class(TASTNode)
-  private
-    FName: string;
-  public
-    //Indentificador del tipo, cuando es un tipo identificado.
-    TypeName : string;
-    //Referencia al tipo cuando el tipo es estructurado
-    TypeDef  : TTypeDef;
-    //Bandera para indicar que este nodo es propietario del tipo y, en consecuencia, debe
-    //responsabilizarse de destruirlo. Esta variable es necesaria porque las declaraciones
-    //de la forma:
-    // VAR a,b,c: <tipo estructurado>
-    //comparten un mismo objeto "TTypeDef".
-    TypeOwner: boolean;
-    property Name: string read FName;
-    constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-    function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
-  end;
 type  //Nodos de expresiones
   // Referencia a variable
   TVariableRef = class(TExpression)
@@ -559,11 +538,22 @@ type  //Nodos de sentencias
   end;
 type  //Nodos de declaraciones
   // Declaraciones de variables
-  TVarDecl = class(TNameTypeDecl)
+  TVarDecl = class(TASTNode)
   private
     FIsParameter: Boolean;
     FIsByReference: Boolean;
   public
+    Name: string;
+    //Indentificador del tipo, cuando es un tipo identificado.
+    TypeName : string;
+    //Referencia al tipo cuando el tipo es estructurado
+    TypeDef  : TTypeDef;
+    //Bandera para indicar que este nodo es propietario del tipo y, en consecuencia, debe
+    //responsabilizarse de destruirlo. Esta variable es necesaria porque las declaraciones
+    //de la forma:
+    // VAR a,b,c: <tipo estructurado>
+    //comparten un mismo objeto "TTypeDef".
+    TypeOwner: boolean;
     property IsParameter: Boolean read FIsParameter write FIsParameter;
     property IsByReference: Boolean read FIsByReference write FIsByReference;
   public  //Inicialización y depuración
@@ -644,9 +634,14 @@ type  //Definiciones previas para declaraciones de tipos
   end;
   TArrayRangeList = specialize TFPGObjectList<TArrayRange>;
   // Definición de campo de registros (RECORD)
-  TFieldDef = class(TNameTypeDecl)
+  TFieldDef = class(TASTNode)
   private
+    FTypeName: string;
+    FTypeDef : TTypeDef;  //Para tipos definidos Innline
   public
+    Name: string;
+    property TypeName: string read FTypeName write FTypeName;
+    property TypeDef: TTypeDef read FTypeDef write FTypeDef;
   public  //Inicialización y depuración
     constructor Create(const AName: string; const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -930,28 +925,6 @@ begin
   FBody.Free;          //Destruye si se ha creado.
   FDeclarations.Free;  //Destruye si se ha creado.
   inherited;
-end;
-// TNameTypeDecl
-constructor TNameTypeDecl.Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos
-  );
-begin
-  inherited Create(ANodeType, ASrcPos);
-  //La información de tipo debe completarse después
-  TypeName := '';
-  TypeDef := nil;
-  TypeOwner := False;
-end;
-destructor TNameTypeDecl.Destroy;
-begin
-  inherited Destroy;
-end;
-function TNameTypeDecl.ToString: string;
-begin
-  Result := inherited ToString;
-end;
-procedure TNameTypeDecl.PrintDebug(Indent: Integer);
-begin
-  inherited PrintDebug(Indent);
 end;
 {$endregion}
 {$region "Nodos de expresiones"}
@@ -1676,9 +1649,13 @@ end;
 constructor TVarDecl.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntVarDecl, ASrcPos);
-  FName := AName;
+  Name := AName;
   FIsParameter := False;
   FIsByReference := False;
+  //La información de tipo debe completarse después
+  TypeName := '';
+  TypeDef := nil;
+  TypeOwner := False;
 end;
 destructor TVarDecl.Destroy;
 begin
@@ -1691,7 +1668,7 @@ end;
 
 function TVarDecl.ToString: string;
 begin
-  Result := Format('VarDecl: %s: %s', [FName, TypeName]);
+  Result := Format('VarDecl: %s: %s', [Name, TypeName]);
   if FIsParameter then
   begin
     Result := Result + ' (parameter';
@@ -1821,26 +1798,28 @@ end;
 constructor TFieldDef.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntFieldDecl, ASrcPos);
-  FName := AName;
+  Name := AName;
+  FTypeName := '';
+  FTypeDef := nil;
 end;
 destructor TFieldDef.Destroy;
 begin
-  TypeDef.Free;
+  FTypeDef.Free;
   inherited;
 end;
 function TFieldDef.ToString: string;
 var
   typName: String;
 begin
-  if TypeDef <> nil then typName := TypeDef.TypeName
-  else typName := TypeName;
-  Result := Format('Field: %s: %s', [FName, typName]);
+  if FTypeDef <> nil then typName := FTypeDef.TypeName
+  else typName := FTypeName;
+  Result := Format('Field: %s: %s', [Name, typName]);
 end;
 procedure TFieldDef.PrintDebug(Indent: Integer = 0);
 begin
   WriteLn(StringOfChar(' ', Indent), ToString);
-  if TypeDef <> nil then
-    TypeDef.PrintDebug(Indent + 2);
+  if FTypeDef <> nil then
+    FTypeDef.PrintDebug(Indent + 2);
 end;
 // TTypeDef
 constructor TTypeDef.Create(ANodeType: TASTNodeType; const ATypeName: string;
