@@ -156,12 +156,14 @@ var
     // ============================================================
     SrcPos.row := 3;
     SrcPos.col := 1;
-    VarDeclX := TVarDecl.Create('x', 'byte', SrcPos);
+    VarDeclX := TVarDecl.Create('x', SrcPos);
+    VarDeclX.TypeName := 'byte';
     astProg.Declarations.Add(VarDeclX);
 
     SrcPos.row := 3;
     SrcPos.col := 7;
-    VarDeclY := TVarDecl.Create('y', 'byte', SrcPos);
+    VarDeclY := TVarDecl.Create('y', SrcPos);
+    VarDeclY.TypeName := 'byte';
     astProg.Declarations.Add(VarDeclY);
 
     // ============================================================
@@ -174,7 +176,8 @@ var
     // Añadir parserámetro
     SrcPos.row := 5;
     SrcPos.col := 15;
-    Param := TVarDecl.Create('a', 'byte', SrcPos);
+    Param := TVarDecl.Create('a', SrcPos);
+    Param.TypeName := 'byte';
     Param.IsParameter := True;
     Proc.AddParameter(Param);
 

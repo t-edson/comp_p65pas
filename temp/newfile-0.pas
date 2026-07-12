@@ -5,10 +5,9 @@ uses Commodore64;
     a,b,c: array[0..2] of byte;
    end;
 }
-var a: record
-      x: integer;
-      y: array;
-    end;
+var a: byte;
+    b,c: array[0..2] of byte;
+//procedure MostrarMensaje; forward;
 begin
   a := 'aaa';
 //  case a of 
