@@ -6,6 +6,8 @@ type
     x,y: byte;
     a,b,c: string;
    end;
+const 
+    ccc: array[0..2] of byte = (1,2);
 var a: byte;
     b,c: array[0..2] of byte;
 //procedure MostrarMensaje; forward;

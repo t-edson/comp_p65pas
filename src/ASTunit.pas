@@ -854,6 +854,8 @@ begin
     if TBooleanLiteral(self).Value then Exit('true') else Exit('false');
   end else if self.NodeType = ntStringLiteral then begin
     exit(TStringLiteral(self).Value);
+  end else if self.NodeType = ntArrayLiteral then begin
+    exit('lit_array[]');
   end else begin
     exit('<expres>');
   end;

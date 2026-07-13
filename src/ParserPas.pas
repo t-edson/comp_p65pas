@@ -523,7 +523,8 @@ Si no reconoce al operando, devuelve NIL }
 var
   SrcPos: TSrcPos;
   UnaryOp: string;
-  Expr: TExpression;
+  Expr, Value: TExpression;
+  ArrayLit: TArrayLiteral;
 begin
   SrcPos := lex.GetSrcPos;
   //Detecta el operador unario, si existe.
@@ -553,12 +554,34 @@ begin
   end else if tokIdent = tiPAREN_OP then begin  //'('
     Next;
     Result := ParseExpression;
-    if not HayError then begin
-      if tokIdent <> tiPAREN_CL then begin
-        GenError('Se esperaba ")"');
-      end;
+    if HayError then Exit;
+    if tokIdent = tiCOMMA then begin
+      //Se debe tratar de un literal de arreglo.
       Next;
+      ArrayLit := TArrayLiteral.Create(SrcPos);
+      ArrayLit.AddValue(Result);    //Agregamos el primer elemento
+      while not HayError do begin
+        Value := ParseExpression;
+        if HayError then begin
+          ArrayLit.Free;
+          Exit(nil);
+        end;
+        ArrayLit.AddValue(Value);
+        // Verificar si hay más elementos
+        if tokIdent = tiCOMMA then Next else Break;
+      end;
+      if tokIdent <> tiPAREN_CL then begin
+        GenError('Se esperaba ")" para cerrar el literal.');
+        ArrayLit.Free;
+        Exit(Nil);
+      end;
+      Next;  // Consumir ')'
+      Exit(ArrayLit);   //Devuelve el arreglo
     end;
+    if tokIdent <> tiPAREN_CL then begin
+      GenError('Se esperaba ")"');
+    end;
+    Next;
   end else if tokIdent = tiBRACK_OP then begin
     Result := ParseArrayLiteral;
   end else begin
