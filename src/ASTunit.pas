@@ -42,6 +42,7 @@ type  //Tipos de nodos
     //Nodos auxiliares para declaraciones de tipos
     ntArrayRange,    //Rango de arreglo (1..10)
     //ntFieldDecl,     //Campo dentro de un RECORD. *** No se usa.
+    ntVariantBranch, //Una rama de los casos RECORD con variantes.
     //Nodos de declaraciones de tipos
     ntSimpleType,    //Tipo simple, ya predefinido por el sistema.
     ntSubrangeType,  //Subrango
@@ -88,7 +89,6 @@ type  //Declaraciones y clases base para el AST
   TProcDeclList = specialize TFPGObjectList<TProcDecl>;
   TFunctionDeclList = specialize TFPGObjectList<TFunctDecl>;
   TExpressionList = specialize TFPGObjectList<TExpression>;
-  TCaseBranchList = specialize TFPGObjectList<TCaseBranch>;
 
   // Nodo base (clase abstracta)
   TASTNode = class
@@ -434,6 +434,22 @@ type  //Nodos de sentencias
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
+  // Rama de CASE (constante: instrucción)
+  TCaseBranch = class(TASTNode)
+  private
+    FConstants: TExpressionList;  // Lista de constantes
+    FStatement: TBlock;           // Instrucción a ejecutar
+  public
+    procedure AddConstant(ConstExpr: TExpression);
+    property Constants: TExpressionList read FConstants;
+    property Statement: TBlock read FStatement write FStatement;
+  public  //Inicialización y depuración
+    constructor Create(const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+  TCaseBranchList = specialize TFPGObjectList<TCaseBranch>;
   // Sentencia CASE
   TCaseStatement = class(TASTNode)
   private
@@ -449,21 +465,6 @@ type  //Nodos de sentencias
     property ElseBranch: TBlock read FElseBranch write FElseBranch;
   public  //Inicialización y depuración
     constructor Create(ASelector: TExpression; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-    function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
-  end;
-  // Rama de CASE (constante: instrucción)
-  TCaseBranch = class(TASTNode)
-  private
-    FConstants: TExpressionList;  // Lista de constantes
-    FStatement: TBlock;           // Instrucción a ejecutar
-  public
-    procedure AddConstant(ConstExpr: TExpression);
-    property Constants: TExpressionList read FConstants;
-    property Statement: TBlock read FStatement write FStatement;
-  public  //Inicialización y depuración
-    constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
@@ -659,12 +660,11 @@ type  //Definiciones previas para declaraciones de tipos
     FLowExpr: TExpression;   // Límite inferior
     FHighExpr: TExpression;  // Límite superior
   public
-    constructor Create(ALowExpr, AHighExpr: TExpression; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
     property LowExpr: TExpression read FLowExpr;
     property HighExpr: TExpression read FHighExpr;
-
+  public  //Inicialización y depuración
+    constructor Create(ALowExpr, AHighExpr: TExpression; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
@@ -674,6 +674,27 @@ type  //Definiciones previas para declaraciones de tipos
   //end;
   //TFieldDefList = specialize TFPGObjectList<TFieldDef>;
 
+  // Nodo para una variante (rama de un CASE dentro de un RECORD)
+  TVariantBranch = class(TASTNode)
+  private
+    //Lista de valores que activan esta variante.
+    {Por lo general será un solo valor constante como 0 o 1, pero se soportan listas}
+    FSelectorValues: TExpressionList;
+    //Lista de campos que se usarán en esta variante.
+    {Estos campos incluyen sus variables y tipos. Similar a TRecordTypeDef.Fields.}
+    FFields: TASTNodeList;
+  public
+    procedure AddSelectorValue(Value: TExpression);
+    procedure AddField(Field: TASTNode);
+    property SelectorValues: TExpressionList read FSelectorValues;
+    property Fields: TASTNodeList read FFields;
+  public  //Inicialización y depuración
+    constructor Create(const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+  TVariantBranchList = specialize TFPGObjectList<TVariantBranch>;
 type  //Nodos de declaraciones de tipos
   // Declaración de tipos pedefinidos (integer, byte, boolean, etc.)
   {Este nodo representa a una supuesta definición de los tipos básicos, que se supone ya
@@ -749,6 +770,9 @@ type  //Nodos de declaraciones de tipos
   private
   public
     Fields: TASTNodeList;  //Declaraciones de variables, y, a futuro, métodos y constantes.
+    //Campos para manejar los casos de "Variant Record"
+    VarSelector: TVarDecl;           //El campo selector (Si no es variante, está en NIL)
+    Branches: TVariantBranchList;    //Ramas de las variantes
   public  //Inicialización y depuración
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -1850,7 +1874,7 @@ begin
 end;
 {$endregion}
 {$region "Definiciones previas para declaraciones de tipos"}
-{ TArrayRange }
+// TArrayRange
 constructor TArrayRange.Create(ALowExpr, AHighExpr: TExpression;
   const ASrcPos: TSrcPos);
 begin
@@ -1882,6 +1906,51 @@ begin
     FHighExpr.PrintDebug(Indent + 4)
   else
     WriteLn(StringOfChar(' ', Indent + 4), '(nil)');
+end;
+// TVariantBranch
+constructor TVariantBranch.Create(const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntVariantBranch, ASrcPos);
+  FSelectorValues := TExpressionList.Create(True);
+  FFields := TASTNodeList.Create(True);
+end;
+destructor TVariantBranch.Destroy;
+begin
+  FSelectorValues.Free;
+  FFields.Free;
+  inherited;
+end;
+procedure TVariantBranch.AddSelectorValue(Value: TExpression);
+begin
+  FSelectorValues.Add(Value);
+end;
+procedure TVariantBranch.AddField(Field: TASTNode);
+begin
+  FFields.Add(Field);
+end;
+function TVariantBranch.ToString: string;
+begin
+  Result := Format('VariantBranch: %d selectors, %d fields',
+                   [FSelectorValues.Count, FFields.Count]);
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TVariantBranch.PrintDebug(Indent: Integer = 0);
+var
+  i: Integer;
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+  if FSelectorValues.Count > 0 then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Selectors:');
+    for i := 0 to FSelectorValues.Count - 1 do
+      FSelectorValues[i].PrintDebug(Indent + 4);
+  end;
+  if FFields.Count > 0 then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Fields:');
+    for i := 0 to FFields.Count - 1 do
+      FFields[i].PrintDebug(Indent + 4);
+  end;
 end;
 // TTypeDef
 constructor TTypeDef.Create(ANodeType: TASTNodeType; const ATypeName: string;
@@ -2028,10 +2097,14 @@ constructor TRecordTypeDef.Create(const ASrcPos: TSrcPos);
 begin
   inherited Create(ntRecordType, '', ASrcPos);
   Fields := TASTNodeList.Create(True);
+  VarSelector := Nil;   //No se usa por defecto
+  Branches := Nil;      //No se usa por defecto
 end;
 destructor TRecordTypeDef.Destroy;
 begin
-  Fields.Free;
+  Branches.Free;     //Destruye si se ha usado.
+  VarSelector.Free;  //Destruye si se ha usado.
+  Fields.Destroy;
   inherited;
 end;
 function TRecordTypeDef.ToString: string;

@@ -1,11 +1,15 @@
 program muestra; 
-uses Commodore64;
 type 
-   tarray3 = array[0..2] of byte;
-   objeto = record
-    x,y: byte;
-    a,b,c: string;
-   end;
+//   objeto = record
+//    x,y: byte;
+//    a,b,c: string;
+//   end;
+  Figura = record
+    X, Y: Integer; { Campos fijos comunes para todas las figuras }
+    case Tipo: FormaGeometria of
+      Circulo: (Radio: Real);
+      Rectangulo: (Ancho, Alto: Real);
+  end;   
 const 
     ccc: array[0..2] of byte = [1,2];
   PUNTO_ORIGEN: record

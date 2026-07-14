@@ -93,6 +93,7 @@ private   // Instrucciones
   procedure ParseWhileLoop(var Block: TBlock);
   procedure ParseForLoop(var Block: TBlock);
   procedure ParseRepeatUntil(var Block: TBlock);
+  procedure ParseCaseSelector(constants: TExpressionList);
   function ParseCaseBranch: TCaseBranch;
   procedure ParseCaseStatement(var Block: TBlock);
   procedure ParseWithStatement(var Block: TBlock);
@@ -289,7 +290,7 @@ begin
     Next;   //pasa al siguiente
     exit(true);
   end else begin   //es un error
-    GenError('Se esperaba delimitador ";".');
+    GenError('Se esperaba ";".');
     exit(false);  //sale con error
   end;
 end;
@@ -951,6 +952,66 @@ function TParserPas.ParseRecordTypeDef: TRecordTypeDef;
 {Analiza la definición de un tipo RECORD y devuelve un objeto "TRecordTypeDef" con la
 estructura del tipo analizado.
 Si se encuentra algún error, se devuelve NIL.}
+  procedure ParseVariantBlock(RecordType: TRecordTypeDef);
+  {Analiza la parte variante de una declaración RECORD.}
+  var
+    selectorName: string;
+    varDecl: TVarDecl;
+    branch: TVariantBranch;
+    SrcPos: TSrcPos;
+    typeDef: TTypeDef;
+  begin
+    //Es la sección variante del RECORD
+    Next;  //Consume RECORD
+    //Analizamos la sintaxis
+    SrcPos := lex.GetSrcPos;
+    if not ConsumeIdent(selectorName, 'Se esperaba un identificador.') then Exit;
+    if not ConsumeTok(tiCOLON, 'Se esperaba ":".') then Exit;
+    //Leemos el tipo
+    if lex.tokType = tkIdentifier then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
+      //Creamos la variable selector con su tipo.
+      varDecl := TVarDecl.Create(selectorName, SrcPos);
+      varDecl.TypeName := lex.token;  //No pemitiremos tipos complejos aquí
+      Next;
+    end else begin //Debe ser una definición Inline: record ... end
+      typeDef := ParseTypeDefinition;
+      if HayError then begin
+        typeDef.Free; //Por si acaso
+        Exit;
+      end;
+      varDecl := TVarDecl.Create(selectorName, SrcPos);
+      varDecl.TypeDef := typeDef;  //No es tipo estructurado o anónimo.
+      varDecl.TypeOwner := true;   //Es el propietario del tipo
+    end;
+    if not ConsumeTok(tiOf, 'Se esperaba "of".') then Exit;
+    RecordType.VarSelector := varDecl;  //De la detrucción de "varDecl" se encargará RecordType.
+    //Analizamos las ramas
+    RecordType.Branches := TVariantBranchList.Create(True);  //Creamos contenedor
+    while not HayError and (tokIdent <> tiEND) do begin
+      branch := TVariantBranch.Create(lex.GetSrcPos);
+      //Analizamos el selector:
+      ParseCaseSelector(branch.SelectorValues);
+      if HayError then begin
+        branch.Destroy;
+        Exit;
+      end;
+      //Analizamos los campos
+      if not ConsumeTok(tiPAREN_OP, 'Se esperaba "(".') then begin
+        branch.Destroy;
+        Exit;
+      end;
+      ParseVariableBlockDeclar(branch.Fields);   //Por ahora, solo soportamos un bloque de campos
+      if not ConsumeTok(tiPAREN_CL, 'Se esperaba ")".') then begin
+        branch.Destroy;
+        Exit;
+      end;
+      if not ConsumeSemicolon then begin
+        branch.Destroy;
+        Exit;
+      end;
+      RecordType.Branches.Add(branch);  //FInalmente, agregamos la rama
+    end;
+  end;
 var
   RecordType: TRecordTypeDef;
 begin
@@ -959,8 +1020,21 @@ begin
   Next;  //Toma el token "RECORD"
   //Explora los campos y los agrega a "RecordType".
   while not (HayError or (tokIdent = tiEND)) do begin
-    ParseVariableBlockDeclar(RecordType.Fields);
-    if tokIdent = tiSEMIC then Next else Break;
+    if tokIdent = tiCASE then begin   //Es la parte variante (CASE) de un RECORD.
+      ParseVariantBlock(RecordType);
+      if HayError then begin
+        RecordType.Free;
+        Exit(nil);
+      end;
+      Break;  //Ya no debe seguir nada después de la parte variante.
+    end else begin
+      ParseVariableBlockDeclar(RecordType.Fields);
+    end;
+    if tokIdent = tiSEMIC then begin  //Es ";"
+      Next;   //Tomamos ";" y seguimos explorando
+    end else begin      //Sigue otra cosa
+      Break;   //Asumimos que aquí terminan los campos
+    end;
   end;
   if HayError then begin
     RecordType.Free;
@@ -1315,28 +1389,15 @@ var
   StartExpr, EndExpr: TExpression;
   Body: TBlock;
   SrcPos: TSrcPos;
+  ControlVarName: string;
+  forLoop: TForLoop;
 begin
-  SrcPos := lex.GetSrcPos;
   if not ConsumeTok(tiFOR, 'Se esperaba "for"') then Exit;
-
-  if lex.tokType <> tkIdentifier then begin
-    GenError('Se esperaba una variable de control');
-    Exit;
-  end;
-
-  ControlVar := TVariableRef.Create(lex.token, lex.GetSrcPos);
-  Next;
-
-  if tokIdent <> tiASSIGN then begin
-    GenError('Se esperaba ":=" en el bucle FOR');
-    Exit;
-  end;
-  Next;
-
+  SrcPos := lex.GetSrcPos;
+  if not ConsumeIdent(ControlVarName, 'Se esperaba una variable de control') then Exit;
+  if not ConsumeTok(tiASSIGN, 'Se esperaba ":=" en el bucle FOR') then Exit;
   StartExpr := ParseExpression;
-
   if HayError then Exit;
-
   if tokIdent = tiTO  then begin
     Direction := fdUpTo;
     Next;
@@ -1345,20 +1406,28 @@ begin
     Next;
   end else begin
     GenError('Se esperaba "to" o "downto" en el bucle FOR');
+    StartExpr.Free;
     Exit;
   end;
-
   EndExpr := ParseExpression;
-
-  if HayError then Exit;
-
+  if HayError then begin
+    StartExpr.Free;
+    Exit;
+  end;
   if not ConsumeTok(tiDO, 'Se esperaba "do"') then Exit;
-
+  ControlVar := TVariableRef.Create(ControlVarName, SrcPos);
   Body := TBlock.Create(lex.GetSrcPos);
   ParseStatement(Body);
-
-  if not HayError then
-    Block.AddStatement(TForLoop.Create(ControlVar, Direction, StartExpr, EndExpr, Body, SrcPos));
+  if HayError then begin
+    StartExpr.Free;
+    EndExpr.Free;
+    ControlVar.Destroy;
+    Body.Destroy;
+    Exit;
+  end;
+  //No hay error
+  forLoop := TForLoop.Create(ControlVar, Direction, StartExpr, EndExpr, Body, SrcPos);
+  Block.AddStatement(forLoop);
 end;
 procedure TParserPas.ParseRepeatUntil(var Block: TBlock);
 var
@@ -1384,31 +1453,26 @@ begin
   if not HayError then
     Block.AddStatement(TRepeatUntil.Create(Body, Condition, SrcPos));
 end;
-function TParserPas.ParseCaseBranch: TCaseBranch;
+procedure TParserPas.ParseCaseSelector(constants: TExpressionList);
+{Analiza la sección del selector de una sentencia CASE, y actualiza la lista "constants"
+con los valores del selector.
+El selector puede ser:
+- Una constante como 1 o 'A'. En este caso, se devuelve una expresion constante en la
+  lista "constants".
+- Un rango como 5..10 o 'a'..'z'. En este caso, se devuelve una operación binaria ".." en
+  la lista "constants".
+- La unión de los casos anteriores: 1, 3, 5..10, 15. En este caso, se devuelve una
+  expresion, por cada caso encontrado, en la lista "constants".
+}
 var
-  Branch: TCaseBranch;
-  SrcPos: TSrcPos;
-  Expr: TExpression;
   LowExpr, HighExpr: TExpression;
+  Expr: TBinaryOp;
 begin
-  SrcPos := lex.GetSrcPos;
-  Branch := TCaseBranch.Create(SrcPos);
-  //Leer lista de constantes / rangos: 1, 3, 5..10, 15
   while not HayError do begin
-    // CASO 1: Rango: 1..10
-    if tokIdent = tiDOTDOT then begin
-      // Rango sin límite inferior explícito? (error)
-      GenError('Se esperaba un valor antes de ".."');
-      Branch.Free;
-      Result := nil;
-      Exit;
-    end;
     // Parsear el límite inferior
     LowExpr := ParseExpression;
     if HayError then begin
       LowExpr.Free;
-      Branch.Free;
-      Result := nil;
       Exit;
     end;
     // Verificar si es un rango: 1..10
@@ -1419,18 +1483,14 @@ begin
       if HayError then begin
         LowExpr.Free;
         HighExpr.Free;
-        Branch.Free;
-        Result := nil;
         Exit;
       end;
-      // Crear un rango como una expresión binaria especial
-      // O podemos crear un nodo específico para rangos
-      // Por ahora, usamos TBinaryOp con operador '..'
-      Expr := TBinaryOp.Create('..', LowExpr, HighExpr, SrcPos);
-      Branch.AddConstant(Expr);
+      //Por ahora, al rango lo representamos como una expresión TBinaryOp con operador '..'
+      Expr := TBinaryOp.Create('..', LowExpr, HighExpr, lex.GetSrcPos);
+      constants.Add(Expr);
     end else begin
       // Es una constante individual
-      Branch.AddConstant(LowExpr);
+      constants.Add(LowExpr);
     end;
     // Verificar si hay más elementos en la lista
     if tokIdent = tiCOMMA then
@@ -1438,27 +1498,28 @@ begin
     else
       Break;  // No hay más elementos
   end;
+  //Si llegó aquí es porque no hubo errores.
+  // Verificar ':'
+  if not ConsumeTok(tiCOLON, 'Se esperaba ":".') then begin
+    Exit;
+  end;
+end;
+function TParserPas.ParseCaseBranch: TCaseBranch;
+var
+  Branch: TCaseBranch;
+begin
+  Branch := TCaseBranch.Create(lex.GetSrcPos);
+  ParseCaseSelector(Branch.Constants);
   if HayError then begin
     Branch.Free;
-    Result := nil;
-    Exit;
+    Exit(Nil);
   end;
-  // Verificar ':'
-  if tokIdent <> tiCOLON then begin
-    GenError('Se esperaba ":"');
-    Branch.Free;
-    Result := nil;
-    Exit;
-  end;
-  Next;  // Consumir ':'
-
   // Parsear la instrucción
   Branch.Statement := TBlock.Create(lex.GetSrcPos);
   ParseStatement(Branch.Statement);
   if HayError then begin
     Branch.Free;
-    Result := nil;
-    Exit;
+    Exit(Nil);
   end;
   Result := Branch;
 end;
@@ -1484,7 +1545,7 @@ begin
   CaseStmt := TCaseStatement.Create(Selector, SrcPos);
   // Parsear ramas normales
   while not (HayError or (tokIdent = tiEND) or (tokIdent = tiELSE)) do begin
-    Branch := ParseCaseBranch;
+    Branch := ParseCaseBranch;  //**** Se puede poner INLINE.
     if not HayError then
       CaseStmt.AddBranch(Branch)
     else
