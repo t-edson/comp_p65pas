@@ -67,6 +67,7 @@ private   // Expresiones
   function ParseIdentifier: TExpression;
   function ParseStringLiteral: TStringLiteral;
   function ParseArrayLiteral: TArrayLiteral;
+  function ParseRecordLiteral(firstIdent: string): TRecordLiteral;
   function ParseFactor: TExpression;
   function ParseTerm: TExpression;
   function ParseSimpleExpression: TExpression;
@@ -481,26 +482,12 @@ begin
   end;
   // Parsear valores
   while not HayError do begin
-    // Verificar si es un array anidado: [1, 2], [3, 4]
-    if tokIdent = tiBRACK_OP then begin
-      // Es un array anidado (multidimensional)
-      Value := ParseArrayLiteral;
-      if HayError then begin
-        ArrayLit.Free;
-        Result := nil;
-        Exit;
-      end;
-      ArrayLit.AddValue(Value);
-    end else begin
-      // Es un valor simple
-      Value := ParseExpression;
-      if HayError then begin
-        ArrayLit.Free;
-        Result := nil;
-        Exit;
-      end;
-      ArrayLit.AddValue(Value);
+    Value := ParseExpression;
+    if HayError then begin
+      ArrayLit.Free;
+      Exit(Nil);
     end;
+    ArrayLit.AddValue(Value);
     // Verificar si hay más elementos
     if tokIdent = tiCOMMA then
       Next  // Consumir ',' y continuar
@@ -511,18 +498,64 @@ begin
   if tokIdent <> tiBRACK_CL then begin
     GenError('Se esperaba "]" para cerrar el literal.');
     ArrayLit.Free;
-    Result := nil;
-    Exit;
+    Exit(Nil);
   end;
   Next;  // Consumir ']'
   Result := ArrayLit;
+end;
+function TParserPas.ParseRecordLiteral(firstIdent: string): TRecordLiteral;
+{Analiza un literal de registro (RECORD), de la forma: "(a: valor; b: valor)" y devuelve
+un objeto TRecordLiteral.
+Si encuentra algún errror, devuelve NIL.}
+var
+  RecordLit: TRecordLiteral;
+  FieldName: string;
+  Value: TExpression;
+begin
+  FieldName := firstIdent;   //Ya se leyó el primer identificador
+  RecordLit := TRecordLiteral.Create(lex.GetSrcPos);
+  // Parsear inicializadores de campos
+  while not HayError do begin
+    // Verificar ':'
+    if not ConsumeTok(tiCOLON, 'Se esperaba ":" después del nombre del campo') then begin
+      RecordLit.Destroy;
+      Exit(Nil);
+    end;
+    // Parsear el valor
+    Value := ParseExpression;
+    if HayError then begin
+      RecordLit.Destroy;
+      Exit(Nil);
+    end;
+    // Crear inicializador
+    RecordLit.AddInitializer(TFieldInitializer.Create(FieldName, Value, lex.GetSrcPos));
+    if tokIdent = tiPAREN_CL then Break;   //No hay más campos
+    if tokIdent = tiSEMIC then begin
+      Next;       //Hay más campos
+      // Leer nombre del campo
+      if not ConsumeIdent(FieldName, 'Se esperaba un nombre de campo') then begin;
+        RecordLit.Destroy;
+        Exit(Nil);
+      end;
+    end else begin
+      Break; //Sigue otra cosa. Debe ser un error.
+    end;
+  end;
+  // Verificar cierre ')'
+  if tokIdent <> tiPAREN_CL then begin
+    GenError('Se esperaba ")" para cerrar el literal de registro');
+    RecordLit.Free;
+    Exit(Nil);
+  end;
+  Next;  // Consumir ')'
+  Result := RecordLit;
 end;
 function TParserPas.ParseFactor: TExpression;
 {Analiza un operando, o factor, que puede ser de diversos tipos.
 Si no reconoce al operando, devuelve NIL }
 var
   SrcPos: TSrcPos;
-  UnaryOp: string;
+  UnaryOp, firstIdent: string;
   Expr, Value: TExpression;
   ArrayLit: TArrayLiteral;
 begin
@@ -552,8 +585,11 @@ begin
     Next;
     Result := TBooleanLiteral.Create(False, SrcPos);
   end else if tokIdent = tiPAREN_OP then begin  //'('
+    {Puede ser una expresión entre paréntesis, un literal de arreglo (válido para
+    inicializar constantes arreglo) o un literal de registro (válido para inicializar
+    constantes registro).}
     Next;
-    Result := ParseExpression;
+    Result := ParseExpression;  //Asumimos una expresión simple:
     if HayError then Exit;
     if tokIdent = tiCOMMA then begin
       //Se debe tratar de un literal de arreglo.
@@ -577,6 +613,11 @@ begin
       end;
       Next;  // Consumir ')'
       Exit(ArrayLit);   //Devuelve el arreglo
+    end else if (Result.NodeType = ntVariableRef) and  //Es una forma de detectar que la expresión es solo un identificador
+                (tokIdent = tiCOLON) then begin  // Sigue ":". Debe ser literal RECORD.
+      firstIdent := TVariableRef(Result).Name;  //Debe ser un identificador.
+      Result.Destroy;  //Ya no nos sirve esta expresión.
+      Exit(ParseRecordLiteral(firstIdent));  //Puede devolver NIL, si hay error.
     end;
     if tokIdent <> tiPAREN_CL then begin
       GenError('Se esperaba ")"');

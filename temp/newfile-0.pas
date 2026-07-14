@@ -7,7 +7,12 @@ type
     a,b,c: string;
    end;
 const 
-    ccc: array[0..2] of byte = (1,2);
+    ccc: array[0..2] of byte = [1,2];
+  PUNTO_ORIGEN: record
+    x: integer;
+    y: integer;
+    z: integer;
+  end = (x: 0; y: 0; z: 0);
 var a: byte;
     b,c: array[0..2] of byte;
 //procedure MostrarMensaje; forward;

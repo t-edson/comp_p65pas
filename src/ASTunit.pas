@@ -11,6 +11,8 @@ type  //Tipos de nodos
     ntBooleanLiteral,//Literal booleano: true, false.
     ntStringLiteral, //Literal de cadena: 'Hola'.
     ntArrayLiteral,  //Literal de arreglo: (10, 20, 30)
+    ntFieldInitializer,//Inicializador de campo: nombre: 'Juan'
+    ntRecordLiteral, //Literal de registro: (nombre: 'Juan'; edad: 30)
     ntBinaryOp,      //Operación binaria. Ej. En "a+b", la operación binaria es el "+".
     ntUnaryOp,       //Operación unaria (un operando). Ej. -x, not a.
     ntFunctionCall,  //Llamada a función: max(a, b).
@@ -139,20 +141,6 @@ type  //Declaraciones y clases base para el AST
   end;
 
 type  //Nodos de expresiones
-  // Referencia a variable
-  TVariableRef = class(TExpression)
-  private
-    FName: string;
-    FDeclaration: TVarDecl;
-  public
-    constructor Create(const AName: string; const ASrcPos: TSrcPos);
-
-    property Name: string read FName;
-    property Declaration: TVarDecl read FDeclaration write FDeclaration;
-
-    function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
-  end;
   // Literal numérico
   TNumberKind = (
     nkInteger,   // Número entero
@@ -215,6 +203,51 @@ type  //Nodos de expresiones
   public  //Inicialización y depuración
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+  // Inicializador de campo: nombre: 'Juan'
+  TFieldInitializer = class(TASTNode)
+  private
+    FFieldName: string;
+    FValue: TExpression;
+  public
+    constructor Create(const AFieldName: string; AValue: TExpression;
+                       const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+
+    property FieldName: string read FFieldName;
+    property Value: TExpression read FValue;
+
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+  TFieldInitializerList = specialize TFPGObjectList<TFieldInitializer>;
+  // Literal de RECORD: (nombre: 'Juan'; edad: 30)
+  TRecordLiteral = class(TExpression)
+  private
+    FFieldInitializers: TFieldInitializerList;  // Lista de TFieldInitializer
+  public
+    constructor Create(const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+
+    procedure AddInitializer(Init: TFieldInitializer);
+    property FieldInitializers: TFieldInitializerList read FFieldInitializers;
+
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+  // Referencia a variable
+  TVariableRef = class(TExpression)
+  private
+    FName: string;
+    FDeclaration: TVarDecl;
+  public
+    constructor Create(const AName: string; const ASrcPos: TSrcPos);
+
+    property Name: string read FName;
+    property Declaration: TVarDecl read FDeclaration write FDeclaration;
+
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
@@ -1086,6 +1119,59 @@ begin
     for i := 0 to FValues.Count - 1 do
       FValues[i].PrintDebug(Indent + 4);
   end;
+end;
+// TFieldInitializer
+constructor TFieldInitializer.Create(const AFieldName: string; AValue: TExpression;
+                                     const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntFieldInitializer, ASrcPos);
+  FFieldName := AFieldName;
+  FValue := AValue;
+end;
+destructor TFieldInitializer.Destroy;
+begin
+  FValue.Free;
+  inherited;
+end;
+function TFieldInitializer.ToString: string;
+begin
+  Result := Format('FieldInitializer: %s = %s',
+                   [FFieldName, FValue.ToString]);
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TFieldInitializer.PrintDebug(Indent: Integer = 0);
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+  WriteLn(StringOfChar(' ', Indent + 2), 'Value:');
+  FValue.PrintDebug(Indent + 4);
+end;
+// TRecordLiteral
+constructor TRecordLiteral.Create(const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntRecordLiteral, ASrcPos);
+  FFieldInitializers := TFieldInitializerList.Create(True);
+end;
+destructor TRecordLiteral.Destroy;
+begin
+  FFieldInitializers.Free;
+  inherited;
+end;
+procedure TRecordLiteral.AddInitializer(Init: TFieldInitializer);
+begin
+  FFieldInitializers.Add(Init);
+end;
+function TRecordLiteral.ToString: string;
+begin
+  Result := Format('RecordLiteral: %d fields', [FFieldInitializers.Count]);
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TRecordLiteral.PrintDebug(Indent: Integer = 0);
+var
+  i: Integer;
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+  for i := 0 to FFieldInitializers.Count - 1 do
+    TFieldInitializer(FFieldInitializers[i]).PrintDebug(Indent + 2);
 end;
 // TBinaryOp
 constructor TBinaryOp.Create(const AOp: string; ALeft, ARight: TExpression;
