@@ -51,6 +51,7 @@ type  //Tipos de nodos
     ntRecordType,    //Tipo RECORD
     ntPointerType,   //Puntero
     ntAliasType,     //Alias
+    ntProceduralType,//Tipos procedurales: proprocedure(a: integer; b: integer);
     //Nodos estructurales
     ntUnitRef,       //Referencia a unidades: USES unit1, unit2, ...
     ntProgram,       //Nodo raíz del programa completo: program MiPrograma;
@@ -786,12 +787,27 @@ type  //Nodos de declaraciones de tipos
     FTargetTypeName: string;
     FTargetTypeDef: TTypeDef;  // Para tipos definidos inline
   public
-    constructor Create(const ATargetTypeName: string; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
     property TargetTypeName: string read FTargetTypeName;
     property TargetTypeDef: TTypeDef read FTargetTypeDef write FTargetTypeDef;
-
+  public  //Inicialización y depuración
+    constructor Create(const ATargetTypeName: string; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+  // Tipo procedural: procedure(a: integer; b: integer);
+  TProceduralType = class(TTypeDef)
+  private
+    FIsFunction: Boolean;        // True = función, False = procedimiento
+  public
+    ReturnTypeName: string;     // Tipo de retorno (solo para funciones)
+    ReturnTypeDef: TTypeDef;    // Definición del tipo de retorno
+    Parameters: TVarDeclList;   // Lista de parámetros
+    procedure AddParameter(Param: TVarDecl);
+    property IsFunction: Boolean read FIsFunction write FIsFunction;
+  public  //Inicialización y depuración
+    constructor Create(AIsFunction: Boolean; const ASrcPos: TSrcPos); overload;
+    destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
@@ -913,6 +929,8 @@ begin
     exit(TStringLiteral(self).Value);
   end else if self.NodeType = ntArrayLiteral then begin
     exit('lit_array[]');
+  end else if self.NodeType = ntRecordLiteral then begin
+    exit('lit_record');
   end else begin
     exit('<expres>');
   end;
@@ -2143,6 +2161,57 @@ begin
   WriteLn(StringOfChar(' ', Indent + 2), 'Target type: ', FTargetTypeName);
   if FTargetTypeDef <> nil then
     FTargetTypeDef.PrintDebug(Indent + 4);
+end;
+// TProceduralType
+constructor TProceduralType.Create(AIsFunction: Boolean; const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntProceduralType, '', ASrcPos);
+  FIsFunction := AIsFunction;
+  //Parameters := TVarDeclList.Create(True);
+  Parameters := Nil;   //Se crea a demanda
+  ReturnTypeName := '';
+  ReturnTypeDef := nil;
+end;
+destructor TProceduralType.Destroy;
+begin
+  Parameters.Free;
+  ReturnTypeDef.Free;   //Destruye si existe
+  inherited;
+end;
+procedure TProceduralType.AddParameter(Param: TVarDecl);
+begin
+  Param.IsParameter := True;
+  Parameters.Add(Param);
+end;
+function TProceduralType.ToString: string;
+begin
+  if FIsFunction then
+    Result := Format('FunctionType: (%d params) returns %s',
+                     [Parameters.Count, ReturnTypeName])
+  else
+    Result := Format('ProcedureType: (%d params)', [Parameters.Count]);
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TProceduralType.PrintDebug(Indent: Integer = 0);
+var
+  i: Integer;
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
+
+  if Parameters.Count > 0 then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Parameters:');
+    for i := 0 to Parameters.Count - 1 do
+      Parameters[i].PrintDebug(Indent + 4);
+  end;
+
+  if FIsFunction and (ReturnTypeName <> '') then
+  begin
+    WriteLn(StringOfChar(' ', Indent + 2), 'Return type:');
+    WriteLn(StringOfChar(' ', Indent + 4), ReturnTypeName);
+    if ReturnTypeDef <> nil then
+      ReturnTypeDef.PrintDebug(Indent + 4);
+  end;
 end;
 {$endregion}
 {$region "Nodos estructurales"}

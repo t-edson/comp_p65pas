@@ -79,6 +79,7 @@ private   // Métodos auxiliares para las declaraciones
   function ParseArrayTypeDef: TArrayTypeDef;
   function ParseRecordTypeDef: TRecordTypeDef;
   function ParsePointerType: TPointerTypeDef;
+  function ParseProceduralType: TProceduralType;
   function ParseTypeDefinition: TTypeDef;
 private   // Declaraciones
   procedure ParseUsesClause(const unitContainer: TUnitRefList);
@@ -1060,6 +1061,39 @@ begin
   Next;
   Result := TPointerTypeDef.Create(TargetTypeName, lex.GetSrcPos);
 end;
+function TParserPas.ParseProceduralType: TProceduralType;
+var
+  ProcType: TProceduralType;
+  IsFunction: Boolean;
+begin
+  // Verificar si es function
+  if tokIdent = tiFUNCT then begin
+    IsFunction := True;
+  end else begin
+    IsFunction := False;
+  end;
+  ProcType := TProceduralType.Create(IsFunction, lex.GetSrcPos);
+  Next;  //Consumir 'procedure' o 'function'.
+  // Parsear parámetros (si hay paréntesis)
+  ParseParameters(ProcType.Parameters);
+  if HayError then begin
+    ProcType.Free;
+    Exit(Nil);
+  end;
+  // Si es función, parsear el tipo de retorno
+  if IsFunction then begin
+    if not ConsumeTok(tiCOLON, 'Se esperaba ":" para el tipo de retorno') then begin
+      ProcType.Free;
+      Exit(Nil);
+    end;
+    if not ConsumeIdent(ProcType.ReturnTypeName, 'Se esperaba el tipo de retorno') then begin
+      GenError('Se esperaba el tipo de retorno');
+      ProcType.Free;
+      Exit(Nil);
+    end;
+  end;
+  Result := ProcType;
+end;
 function TParserPas.ParseTypeDefinition: TTypeDef;
 {Analiza la definición de un tipo, simple o estructurado. Devuelve un nodo "TTypeDef" con
 la estructura del tipo analizado.}
@@ -1098,6 +1132,10 @@ begin
   // 6. Puntero: = ^integer
   if tokIdent = tiPOINTER then begin
     Result := ParsePointerType;
+    Exit;
+  end;
+  if tokIdent in [tiPROCED, tiFUNCT] then begin
+    Result := ParseProceduralType;
     Exit;
   end;
   GenError('Definición de tipo no reconocida', SrcPos);

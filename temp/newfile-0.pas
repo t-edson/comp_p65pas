@@ -4,12 +4,8 @@ type
 //    x,y: byte;
 //    a,b,c: string;
 //   end;
-  Figura = record
-    X, Y: Integer; { Campos fijos comunes para todas las figuras }
-    case Tipo: FormaGeometria of
-      Circulo: (Radio: Real);
-      Rectangulo: (Ancho, Alto: Real);
-  end;   
+  TProcConParam = procedure(a: integer; b: integer);
+
 const 
     ccc: array[0..2] of byte = [1,2];
   PUNTO_ORIGEN: record
