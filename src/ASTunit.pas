@@ -13,6 +13,7 @@ type  //Tipos de nodos
     ntArrayLiteral,  //Literal de arreglo: (10, 20, 30)
     ntFieldInitializer,//Inicializador de campo: nombre: 'Juan'
     ntRecordLiteral, //Literal de registro: (nombre: 'Juan'; edad: 30)
+    ntPointerLiteral,//Literal de puntero: Nil o $100
     ntBinaryOp,      //Operación binaria. Ej. En "a+b", la operación binaria es el "+".
     ntUnaryOp,       //Operación unaria (un operando). Ej. -x, not a.
     ntFunctionCall,  //Llamada a función: max(a, b).
@@ -110,12 +111,19 @@ type  //Declaraciones y clases base para el AST
   end;
 
   // Expresión (clase abstracta)
-
-  { TExpression }
-
   TExpression = class(TASTNode)
+  private
+    //Campos de formato, como ":2:3" o ":10" que se usan en las instrucciones write() y
+    //writeln() para espaciar .
+    FFormatWidth: Integer;     // -1 = sin formato
+    FFormatDecimals: Integer;  // -1 = sin decimales
   public
+    property FormatWidth: Integer read FFormatWidth write FFormatWidth;
+    property FormatDecimals: Integer read FFormatDecimals write FFormatDecimals;
+    function HasFormat: Boolean;
+    function HasDecimals: Boolean;
     function ValueStr: String;
+
     constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
   end;
 
@@ -207,7 +215,7 @@ type  //Nodos de expresiones
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
-  // Inicializador de campo: nombre: 'Juan'
+  // Inicializador de campo para literales RECORD: nombre: 'Juan'
   TFieldInitializer = class(TASTNode)
   private
     FFieldName: string;
@@ -229,12 +237,31 @@ type  //Nodos de expresiones
   private
     FFieldInitializers: TFieldInitializerList;  // Lista de TFieldInitializer
   public
-    constructor Create(const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
     procedure AddInitializer(Init: TFieldInitializer);
     property FieldInitializers: TFieldInitializerList read FFieldInitializers;
-
+  public  //Inicialización y depuración
+    constructor Create(const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    function ToString: string; override;
+    procedure PrintDebug(Indent: Integer = 0); override;
+  end;
+  // Literales de puntero: nil o $100.
+  {De momento solo se soportará NIL porque, formalmente, un literal de puntero implica un
+  literal para refererirse a direcciones de memoria, y aunque puede usarse un simple
+  número como $100, no es semánticamente lo mismo. Además, este formato es dependiente
+  del hardware. En algunas CPU puede ser un valor de 8 bits, en otros casos será de 10, 16
+  o 32 bits, o peor aún, puede requerir de un <segmento:desplazamiento> o
+  <página:Desplazamiento>}
+  TPointerLiteral = class(TExpression)
+  private
+    FAddress: Integer;  // -1 = nil, >= 0 = dirección literal
+  public
+    property Address: Integer read FAddress;
+    function IsNil: Boolean;
+    function IsAddress: Boolean;
+  public  //Inicialización y depuración
+    constructor Create(const ASrcPos: TSrcPos); overload;  // nil
+    constructor Create(AAddress: Integer; const ASrcPos: TSrcPos); overload;  // dirección literal
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
@@ -935,9 +962,19 @@ begin
     exit('<expres>');
   end;
 end;
+function TExpression.HasFormat: Boolean;
+begin
+  Result := FFormatWidth >= 0;
+end;
+function TExpression.HasDecimals: Boolean;
+begin
+  Result := FFormatDecimals >= 0;
+end;
 constructor TExpression.Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
 begin
   inherited Create(ANodeType, ASrcPos);
+  FFormatWidth := -1;
+  FFormatDecimals := -1;
 end;
 // TCodeContainer
 procedure TCodeContainer.AddParameter(Param: TVarDecl);
@@ -1214,6 +1251,39 @@ begin
   WriteLn(StringOfChar(' ', Indent), ToString);
   for i := 0 to FFieldInitializers.Count - 1 do
     TFieldInitializer(FFieldInitializers[i]).PrintDebug(Indent + 2);
+end;
+// TPointerLiteral
+constructor TPointerLiteral.Create(const ASrcPos: TSrcPos);
+// Constructor para nil
+begin
+  inherited Create(ntPointerLiteral, ASrcPos);
+  FAddress := -1;
+end;
+constructor TPointerLiteral.Create(AAddress: Integer; const ASrcPos: TSrcPos);
+// Constructor para dirección literal
+begin
+  inherited Create(ntPointerLiteral, ASrcPos);
+  FAddress := AAddress;
+end;
+function TPointerLiteral.IsNil: Boolean;
+begin
+  Result := FAddress = -1;
+end;
+function TPointerLiteral.IsAddress: Boolean;
+begin
+  Result := FAddress >= 0;
+end;
+function TPointerLiteral.ToString: string;
+begin
+  if IsNil then
+    Result := 'PointerLiteral: nil'
+  else
+    Result := Format('PointerLiteral: $%4.4x', [FAddress]);
+  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
+end;
+procedure TPointerLiteral.PrintDebug(Indent: Integer = 0);
+begin
+  WriteLn(StringOfChar(' ', Indent), ToString);
 end;
 // TBinaryOp
 constructor TBinaryOp.Create(const AOp: string; ALeft, ARight: TExpression;

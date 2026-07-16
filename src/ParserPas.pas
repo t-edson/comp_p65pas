@@ -71,7 +71,7 @@ private   // Expresiones
   function ParseFactor: TExpression;
   function ParseTerm: TExpression;
   function ParseSimpleExpression: TExpression;
-  function ParseExpression: TExpression;
+  function ParseExpression(AllowFormat: Boolean = False): TExpression;
 private   // Métodos auxiliares para las declaraciones
   procedure ParseParameters(var Params: TVarDeclList);
   function ParseSubrangeType: TSubrangeTypeDef;
@@ -431,7 +431,7 @@ begin
     end else begin  //Hay al menos un parámetro
       while true do begin
         //Debe seguir una expresión
-        functCall.AddArgument(ParseExpression);
+        functCall.AddArgument(ParseExpression(True));  //Permitimos formato
         if HayError then break;
         //Debe seguir "," o ")"
         if tokIdent = tiCOMMA then Next else Break;
@@ -576,9 +576,9 @@ begin
   //Caso de operando sin signo.
   if lex.tokType = tkLitNumber then begin
     Result := ParseNumberLiteral
-  end else if lex.tokType = tkIdentifier then begin
+  end else if tokIdent = tiIdentif then begin
     Result := ParseIdentifier;
-  end else if lex.tokType = tkString then begin
+  end else if tokIdent = tiLitString then begin
     Result := ParseStringLiteral
   end else if tokIdent = tiTRUE then begin
     Next;
@@ -627,6 +627,9 @@ begin
     Next;
   end else if tokIdent = tiBRACK_OP then begin
     Result := ParseArrayLiteral;
+  end else if tokIdent = tiNIL then begin
+    Next;
+    Result := TPointerLiteral.Create(SrcPos);   //Crea NIL
   end else begin
     GenError('Operando no reconocido', SrcPos);
     Result := nil;
@@ -665,24 +668,10 @@ var
   Op: string;
   SrcPos: TSrcPos;
 begin
-  // Operador unario opcional
-  //if tokIdent in [tiPLUS, tiMINUS] then begin
-  //  UnaryOp := lex.token;
-  //  SrcPos := lex.GetSrcPos;
-  //  lex.Next;
-  //  Left := ParseTerm;
-  //  if not HayError then
-  //    Result := TUnaryOp.Create(UnaryOp, Left, SrcPos)
-  //  else
-  //    Result := Left;
-  //end else begin
-    Left := ParseTerm;  //Toma expresiones que sean productos de factores
-  //end;
-
+  Left := ParseTerm;  //Toma expresiones que sean productos de factores
   if HayError then begin
     Exit(Left);
   end;
-
   // Operadores +, -, or
   while tokIdent in [tiPLUS, tiMINUS, tiOR] do begin
     Op := lex.token;
@@ -693,10 +682,9 @@ begin
       Left := TBinaryOp.Create(Op, Left, Right, SrcPos);
     end;
   end;
-
   Result := Left;
 end;
-function TParserPas.ParseExpression: TExpression;
+function TParserPas.ParseExpression(AllowFormat: Boolean = False): TExpression;
 {Analiza una expresión y devuelve un objeto "TExpression" (un árbol sintáctico) que
 representa a la expresión analizada.}
 var
@@ -705,7 +693,7 @@ var
   SrcPos: TSrcPos;
 begin
   Left := ParseSimpleExpression;  //Toma expresiones que sean suma de términos.
-  if HayError then Exit(Left);
+  if HayError then Exit(Left);  //En este caso deberái devolver NIL.
   // Operadores relacionales
   if tokIdent in [tiEQUAL, tiLESS, tiGREAT, tiNOT_EQ, tiLESS_E, tiGREAT_E] then begin
     Op := lex.token;
@@ -718,6 +706,29 @@ begin
       Result := Left;
   end else begin
     Result := Left;
+  end;
+  //Valida si hay parámetros de formato
+  if AllowFormat and (tokIdent = tiCOLON) then begin
+    Next;  // Consumir ':'
+    // Parsear el ancho (debe ser un número)
+    if tokIdent <> tiLitNumbI then begin
+      GenError('Se esperaba un número entero para el ancho del formato');
+      Result.Free;
+      Exit(Nil);
+    end;
+    Result.FormatWidth := StrToInt(lex.token);
+    Next;  // Consumir el número
+    // Verificar si hay decimales: :decimales
+    if tokIdent = tiCOLON then begin
+      Next;  // Consumir ':'
+      if tokIdent <> tiLitNumbI then begin
+        GenError('Se esperaba un número entero para los decimales del formato');
+        Result.Free;
+        Exit(Nil);
+      end;
+      Result.FormatDecimals := StrToInt(lex.token);
+      Next;  // Consumir el número
+    end;
   end;
 end;
 {$endregion}

@@ -1,13 +1,14 @@
 program muestra; 
-type 
-//   objeto = record
-//    x,y: byte;
-//    a,b,c: string;
-//   end;
-  TProcConParam = procedure(a: integer; b: integer);
+
+procedure CrearNodo(var nodo: ^TNodo; valor: integer);
+begin
+  new(nodo);
+  nodo^.valor := valor;
+  nodo^.siguiente := nil;
+  nodo^.anterior := nil;
+end;
 
 const 
-    ccc: array[0..2] of byte = [1,2];
   PUNTO_ORIGEN: record
     x: integer;
     y: integer;
@@ -17,7 +18,7 @@ var a: byte;
     b,c: array[0..2] of byte;
 //procedure MostrarMensaje; forward;
 begin
-  a := 'aaa';
+//  a := 'aaa';
 //  case a of 
 //  'a': hola;
 //  1: aaa;
@@ -33,6 +34,7 @@ begin
 //  x := fun(1);
 //  a[i] := b[j];
 //  a := 'abc';
+   aaa('aaa');
 end. 
 
 
