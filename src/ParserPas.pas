@@ -28,6 +28,7 @@ private
   lex    : TAleLexer;       //Analizador léxico
   msg    : TMessageManager; //Referencia al gestor de mensajes
   procedure ParseVariableBlockDeclar(varContainer: TASTNodeList);
+  procedure ParseVariableBlockDeclar(varContainer: TVarDeclList);
 public    //Componentes principales del compilador
   astProg: TProgram;        //Árbol de sintaxis abstracto de un programa
   astUnit: TUnit;           //Árbol de sintaxis abstracto de una unidad
@@ -791,6 +792,60 @@ begin
     end;
   end;
 end;
+procedure TParserPas.ParseVariableBlockDeclar(varContainer: TVarDeclList);
+{Esta es la versión de ParseVariableBlockDeclar que trabaja con TVarDeclList. Todo lo
+demás es igual.}
+var
+  i, idxVarIni: Integer;
+  typeDef: TTypeDef;
+  varDecl: TVarDecl;
+begin
+  idxVarIni := varContainer.Count;  //Guardamos la posición de la primera variable
+  repeat
+    if lex.tokType <> tkIdentifier then begin
+      GenError('Se esperaba un identificador.');
+      Exit;
+    end;
+    //Hay un identificador. Vamos creando la variable.
+    varDecl := TVarDecl.Create(lex.token, lex.GetSrcPos);
+    varContainer.Add(varDecl);   //La agregamos
+    Next;
+    if tokIdent <> tiCOMMA then Break; //Se asume que termina la lista de identificadores.
+    Next;  //Toma la coma
+  until false;
+  if not ConsumeTok(tiCOLON, 'Se esperaba ":" después de la variable(s).') then
+    Exit;   //No es necesario limpiar nada adicional
+  //Lee el tipo y completa esa información en las variables creadas.
+  if lex.tokType = tkIdentifier then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
+    //Actualiza el tipo en todas las variables creadas.
+    for i := idxVarIni to varContainer.Count-1 do begin
+      //Todos estos ítems deben ser los que hemos agregados
+      varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
+      varDecl.TypeName := lex.token;  //Es tipo simple
+      //varDecl.TypeDef := Nil;  //No es necesario actualizar
+    end;
+    Next;   //Consume el identificador de tipo
+  end else begin //Debe ser una definición Inline: record ... end
+    typeDef := ParseTypeDefinition;
+    if HayError then begin
+      typeDef.Free; //Por si acaso
+      Exit;
+    end;
+    //Actualiza el tipo en todas las variables creadas, haciendo que todas las variables
+    //creadas en un solo bloque, apunten al mismo tipo definido "typeDef".
+    for i := idxVarIni to varContainer.Count-1 do begin
+      //Todos estos ítems deben ser los que hemos agregados
+      varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
+      //varDecl.TypeName := '';   //No es necesario actualizar
+      varDecl.TypeDef := typeDef;  //No es tipo estructurado o anónimo.
+      if i = idxVarIni then begin
+        //Ponemos, como propietario del tipo, solo a la primera declaración, para evitar
+        //que varios objetos intenten destruirlo.
+        varDecl.TypeOwner := true
+      end;
+    end;
+  end;
+end;
 procedure TParserPas.ParseParameters(var Params: TVarDeclList);
 {Lee parámetros de un procedimiento o función en la lista "Params", que debe ser solo una
 referencia a TVarDeclList, pero sin instanciar.
@@ -819,26 +874,8 @@ begin
       Next;
     end;
     // Leer identificadores y tipo
-    if not readListOfIdent then Exit;   //Lee identificadores en "itemList".
-    if not ConsumeTok(tiCOLON, 'Se esperaba ":" después del parámetro(s).') then begin
-      Params.Free;
-      Params := Nil;
-      Exit;
-    end;
-    if not ConsumeIdent(typName, 'Se esperaba un tipo de dato') then begin
-      Params.Free;
-      Params := Nil;
-      Exit;
-    end;
-    // Crear parámetros
-    for i := 0 to nitems - 1 do begin
-      Param := TVarDecl.Create(itemList[i], srcList[i]);
-      Param.TypeName := typName;
-      Param.IsParameter := True;
-      Param.IsByReference := IsVarParam;
-      if Params = nil then Params:= TVarDeclList.Create(true);
-      Params.Add(Param);
-    end;
+    if Params = nil then Params:= TVarDeclList.Create(true);
+    ParseVariableBlockDeclar(Params);
     // Verificar si hay más parámetros
     if tokIdent = tiSEMIC then begin
       Next;

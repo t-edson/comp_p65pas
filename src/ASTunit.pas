@@ -84,6 +84,7 @@ type  //Declaraciones y clases base para el AST
   TFunctDecl = class;
   TDeclarations = class;
   TTypeDef = class;
+  TAsmBlock = class;
 
   // Listas genéricas especializadas
   TASTNodeList = specialize TFPGObjectList<TASTNode>;
@@ -135,6 +136,7 @@ type  //Declaraciones y clases base para el AST
     FDeclarations: TDeclarations;
     FBody: TBlock;
     FIsForward: Boolean;  //True si es declaración FORWARD
+    FAsmBlock: TAsmBlock; //Bloque ASM, cuando es procedimiento o función ASSEMBLER.
   public
     Parameters: TVarDeclList;   //Lista de parámetros. Si no hay parámetros contiene NIL.
     property Name: string read FName write FName;
@@ -142,7 +144,9 @@ type  //Declaraciones y clases base para el AST
     property Body: TBlock read FBody write FBody;
     procedure AddParameter(Param: TVarDecl);
     property IsForward: Boolean read FIsForward;
-  public
+    property AsmBlock: TAsmBlock read FAsmBlock write FAsmBlock;
+    function IsAssembler: Boolean; inline;
+  public  //Inicialización y depuración
     procedure Clear;
     procedure PrintDebug(Indent: Integer = 0); override;
     constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos; AIsForward: Boolean);
@@ -982,6 +986,12 @@ begin
   Param.IsParameter := True;
   Parameters.Add(Param);
 end;
+function TCodeContainer.IsAssembler: Boolean;
+{Indica si elprocedimiento o función está declarado como ASSEMBLER y solo tiene un bloque
+ensamblador como cuerpo.}
+begin
+  Exit(FAsmBlock<>Nil);
+end;
 procedure TCodeContainer.Clear;
 {Limpia al árbol de sintaxis del programa o subprograma, y lo deja listo para iniciar el
 llenado}
@@ -1016,6 +1026,7 @@ constructor TCodeContainer.Create(ANodeType: TASTNodeType;
   const ASrcPos: TSrcPos; AIsForward: Boolean);
 begin
   inherited Create(ANodeType, ASrcPos);
+  FAsmBlock := Nil;   //Por defecto no es ASSEMBLER.
   //Crea los elementos fijos del programa.
   if FIsForward then begin
     //En declaraciones FORWARD no es necesario crear las declaraciones y el cuerpo.
@@ -1039,6 +1050,7 @@ begin
   Parameters.Free;     //Destruye si se ha creado.
   FBody.Free;          //Destruye si se ha creado.
   FDeclarations.Free;  //Destruye si se ha creado.
+  FAsmBlock.Free;      //Destruye si se ha creado.
   inherited;
 end;
 {$endregion}

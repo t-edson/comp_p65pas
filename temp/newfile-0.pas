@@ -1,11 +1,11 @@
 program muestra; 
 
-procedure CrearNodo(var nodo: ^TNodo; valor: integer);
-begin
-  new(nodo);
-  nodo^.valor := valor;
-  nodo^.siguiente := nil;
-  nodo^.anterior := nil;
+procedure IncrementarConASM(var valor: integer); assembler;
+asm
+  lda valor      ; Cargar valor en acumulador
+  clc            ; Limpiar carry
+  adc #1         ; Sumar 1
+  sta valor      ; Guardar resultado
 end;
 
 const 
