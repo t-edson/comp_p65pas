@@ -392,7 +392,7 @@ procedure TParserAsm6502.EndASM;  //Termina el procesamiento de código ASM
 var
   jmpInst: TAsmInstruction;
 begin
-  //Complete operand for instructions with udefined label references.
+{  //Complete operand for instructions with udefined label references.
   {Al final de esta iteración todas las instruciones que incluyan operandos con
   saltos a etiquetas indefinidas, estarán referenciando a la etiqueta correspondiente
   en lugar de solo guardar el nombre de la etiqueta.}
@@ -410,7 +410,7 @@ begin
       end;
     end;
   end;
-end;
+}end;
 procedure TParserAsm6502.ProcInstrASM(idInst: TP6502Inst; var blkEnd: boolean);
 {Proccess an 6502 ASM instruction. Instruction must be previously validated and
  identified in "idInst".
@@ -766,7 +766,7 @@ begin
   StartASM;
   curInst := nil;
   repeat
-    debugln('fil=' + IntTostr(lex.curCtx.row0) + ', col=' + IntToStr(lex.curCtx.col0));
+//    debugln('fil=' + IntTostr(lex.curCtx.row0) + ', col=' + IntToStr(lex.curCtx.col0));
     ProcASMline(blkEnd);
   until lex.atEof or blkEnd;
   if lex.atEof then begin
