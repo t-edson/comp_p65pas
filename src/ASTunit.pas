@@ -36,8 +36,7 @@ type  //Tipos de nodos
     //Nodos de declaraciones
     ntVarDecl,       //Declaración de variable: var x: byte;
     ntConstDecl,     //Declaración de constantes: const PI=3;
-    ntProcDecl,      //Declaración de procedimiento: procedure algo; begin ... end;
-    ntFunctDecl,     //Declaración de función.
+    ntProcDecl,      //Declaración de procedimiento o función.
     ntParamDecl,     //Parámetro de procedimiento/función: var x: byte
     ntForwardDecl,   //Declaración FORWARD
     //Nodos auxiliares para declaraciones de tipos
@@ -81,16 +80,13 @@ type  //Declaraciones y clases base para el AST
   TFunctionCall = class;
   TCaseBranch = class;
   TProcDecl = class;
-  TFunctDecl = class;
   TDeclarations = class;
   TTypeDef = class;
-  TAsmBlock = class;
 
   // Listas genéricas especializadas
   TASTNodeList = specialize TFPGObjectList<TASTNode>;
   TVarDeclList = specialize TFPGObjectList<TVarDecl>;
   TProcDeclList = specialize TFPGObjectList<TProcDecl>;
-  TFunctionDeclList = specialize TFPGObjectList<TFunctDecl>;
   TExpressionList = specialize TFPGObjectList<TExpression>;
 
   // Nodo base (clase abstracta)
@@ -136,7 +132,7 @@ type  //Declaraciones y clases base para el AST
     FDeclarations: TDeclarations;
     FBody: TBlock;
     FIsForward: Boolean;  //True si es declaración FORWARD
-    FAsmBlock: TAsmBlock; //Bloque ASM, cuando es procedimiento o función ASSEMBLER.
+    FIsAssembler: Boolean; //Indica si el procedimiento o función es ASSEMBLER.
   public
     Parameters: TVarDeclList;   //Lista de parámetros. Si no hay parámetros contiene NIL.
     property Name: string read FName write FName;
@@ -144,8 +140,7 @@ type  //Declaraciones y clases base para el AST
     property Body: TBlock read FBody write FBody;
     procedure AddParameter(Param: TVarDecl);
     property IsForward: Boolean read FIsForward;
-    property AsmBlock: TAsmBlock read FAsmBlock write FAsmBlock;
-    function IsAssembler: Boolean; inline;
+    property IsAssembler: Boolean read FIsAssembler write FIsAssembler;
   public  //Inicialización y depuración
     procedure Clear;
     procedure PrintDebug(Indent: Integer = 0); override;
@@ -654,20 +649,16 @@ type  //Nodos de declaraciones
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Declaración de procedimiento
+
+  { TProcDecl }
+
   TProcDecl = class(TCodeContainer)
-  public  //Inicialización y depuración
-    function ToString: string; override;
-    constructor Create(const AName: string; const ASrcPos: TSrcPos;
-      AIsForward: Boolean);
-  end;
-  { TFunctDecl }
-  // Declaración de función
-  TFunctDecl = class(TCodeContainer)
   private
     FReturnTypeName: string;
     FReturnTypeDef: TTypeDef;    // Resuelto en análisis semántico
   public
     property ReturnTypeName: string read FReturnTypeName write FReturnTypeName;
+    function IsFunction: Boolean; inline;
   public  //Inicialización y depuración
     function ToString: string; override;
     constructor Create(const AName: string; const ASrcPos: TSrcPos;
@@ -986,12 +977,6 @@ begin
   Param.IsParameter := True;
   Parameters.Add(Param);
 end;
-function TCodeContainer.IsAssembler: Boolean;
-{Indica si elprocedimiento o función está declarado como ASSEMBLER y solo tiene un bloque
-ensamblador como cuerpo.}
-begin
-  Exit(FAsmBlock<>Nil);
-end;
 procedure TCodeContainer.Clear;
 {Limpia al árbol de sintaxis del programa o subprograma, y lo deja listo para iniciar el
 llenado}
@@ -1026,7 +1011,7 @@ constructor TCodeContainer.Create(ANodeType: TASTNodeType;
   const ASrcPos: TSrcPos; AIsForward: Boolean);
 begin
   inherited Create(ANodeType, ASrcPos);
-  FAsmBlock := Nil;   //Por defecto no es ASSEMBLER.
+  FIsAssembler := False;  //Por defecto no es ASSEMBLER.
   //Crea los elementos fijos del programa.
   if FIsForward then begin
     //En declaraciones FORWARD no es necesario crear las declaraciones y el cuerpo.
@@ -1050,7 +1035,6 @@ begin
   Parameters.Free;     //Destruye si se ha creado.
   FBody.Free;          //Destruye si se ha creado.
   FDeclarations.Free;  //Destruye si se ha creado.
-  FAsmBlock.Free;      //Destruye si se ha creado.
   inherited;
 end;
 {$endregion}
@@ -1817,7 +1801,7 @@ begin
   inherited Create(ntAsmBlock, ASrcPos);
   FInstructions := TAsmInstructionList.Create(True);
   FRegisters := TStringList.Create;
-  undefInstrucs := TAsmInstructionList.Create(True);
+  undefInstrucs := TAsmInstructionList.Create(False);  //Solo guardará referencias
 end;
 destructor TAsmBlock.Destroy;
 begin
@@ -1945,6 +1929,11 @@ begin
   FValue.PrintDebug(Indent + 4);
 end;
 // TProcDecl
+function TProcDecl.IsFunction: Boolean;
+begin
+  if (FReturnTypeName<>'') or (FReturnTypeDef<>Nil) then Exit(True)
+  else Exit(False);
+end;
 function TProcDecl.ToString: string;
 begin
   Result := Format('Procedure: %s (%d params, %d locals)',
@@ -1955,18 +1944,8 @@ constructor TProcDecl.Create(const AName: string; const ASrcPos: TSrcPos; AIsFor
 begin
   inherited Create(ntProcDecl, ASrcPos, AIsForward);
   FName := AName;
-end;
-// TFunctDecl
-function TFunctDecl.ToString: string;
-begin
-  Result := Format('Function: %s: %s (%d params, %d locals)',
-           [FName, FReturnTypeName, Parameters.Count, FDeclarations.Items.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-constructor TFunctDecl.Create(const AName: string; const ASrcPos: TSrcPos; AIsForward: Boolean);
-begin
-  inherited Create(ntFunctDecl, ASrcPos, AIsForward);
-  FName := AName;
+  FReturnTypeName := '';
+  FReturnTypeDef := Nil;
   {Para simplificar el análisis sintáctico, conviene que el tipo de retorno se actualice
   después de leer los parámetros por eso no se incluye en el constructor.
       FReturnTypeName := AReturnTypeName;

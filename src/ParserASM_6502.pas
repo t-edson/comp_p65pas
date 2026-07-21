@@ -8,7 +8,8 @@ unit ParserASM_6502;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fgl, alexiaLex, CompGlobals, P65C02utils, ASTunit;
+  Classes, SysUtils, fgl, alexiaLex, CompGlobals, P65C02utils, ASTunit,
+  LazLogger;
 type
   { TParserAsm6502 }
   TParserAsm6502 = class
@@ -46,20 +47,26 @@ type
     destructor Destroy; override;
   end;
 
-procedure SetLanguage;
 
 implementation
 
-var  //Mensajes
-  ER_EXPEC_COMMA, ER_EXPEC_PAREN, ER_EXP_ADR_VAR, ER_EXP_CON_VAL, ER_NOGETADD_VAR,
-  ER_NOGETVAL_CON,  ER_INV_ASMCODE: String;
-  ER_EXPECT_W_F, ER_SYNTAX_ERR_, ER_DUPLIC_LBL_, ER_EXPE_NUMBIT: String;
-  ER_EXPECT_ADDR, ER_EXPECT_BYTE, WA_ADDR_TRUNC, ER_UNDEF_LABEL_: String;
+resourcestring
+  ER_EXPEC_COMMA = 'Expected ",".';
+  ER_EXPEC_PAREN = 'Expected ")"';
+  ER_EXP_ADR_VAR = 'Expected address or variable name.';
+  ER_EXP_CON_VAL = 'Expected constant or value.';
+  ER_NOGETADD_VAR= 'Cannot get address of this Variable';
+  ER_NOGETVAL_CON= 'Cannot get value of this constant';
+  ER_INV_ASMCODE = 'Invalid ASM Opcode: %s';
+  ER_EXPECT_W_F  = 'Expected "w" or "f".';
+  ER_SYNTAX_ERR_ = 'Syntax error: "%s"';
+  ER_DUPLIC_LBL_ = 'Duplicated label: "%s"';
+  ER_EXPE_NUMBIT = 'Expected number of bit: 0..7.';
+  ER_EXPECT_ADDR = 'Expected address.';
+  ER_EXPECT_BYTE = 'Expected byte.';
+  ER_UNDEF_LABEL_= 'Undefined ASM Label: %s';
+  WA_ADDR_TRUNC  = 'Address truncated to fit instruction.';
 
-procedure SetLanguage;
-begin
-  {$I _language\tra_ParserAsm.pas}
-end;
 // Mensajes
 function TParserAsm6502.HayError: boolean;
 begin
@@ -436,7 +443,7 @@ begin
       AddInstruction(idInst, aAcumulat, 0, srcInst);
     end else begin
       //An operand must follow.
-      GenError(format(ER_SYNTAX_ERR_, [lex.token]));
+      GenError(ER_EXP_CON_VAL);
       exit;
     end;
   end else if (lex.tokType=tkIdentifier) and (Upcase(lex.token)='END') then begin
@@ -686,13 +693,11 @@ begin
     //Something is wrong
     GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
     lex.GotoEOL;   //Move to end of line.
-  end;
-  //Process the line delimiter
-  if lex.tokType = tkEol then begin
     lex.Next;      //Pass to the start of the next line.
-  end else begin
-    GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
-    lex.GotoEOL;   //Move to end of line.
+    Exit;
+  end;
+  //Test if we're at the line end.
+  if lex.tokType = tkEol then begin
     lex.Next;      //Pass to the start of the next line.
   end;
 end;
@@ -761,6 +766,7 @@ begin
   StartASM;
   curInst := nil;
   repeat
+    debugln('fil=' + IntTostr(lex.curCtx.row0) + ', col=' + IntToStr(lex.curCtx.col0));
     ProcASMline(blkEnd);
   until lex.atEof or blkEnd;
   if lex.atEof then begin

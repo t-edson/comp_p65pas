@@ -87,7 +87,6 @@ private   // Declaraciones
   procedure ParseVarDeclaration(declars: TDeclarations);
   procedure ParseConstDeclaration(declars: TDeclarations);
   procedure ParseProcedureDeclaration(declars: TDeclarations);
-  procedure ParseFunctionDeclaration(declars: TDeclarations);
   procedure ParseTypeDeclaration(declars: TDeclarations);
 private   // Instrucciones
   procedure ParseAssigOrProcedureCall(var Block: TBlock);
@@ -1278,84 +1277,80 @@ begin
   end;
 end;
 procedure TParserPas.ParseProcedureDeclaration(declars: TDeclarations);
-{Analiza la declaración de un procedimiento.}
+{Realiza el análisis de un procedimiento o función.}
 var
   Proc: TProcDecl;
   SrcPos: TSrcPos;
-  procName: string;
-  Params: TVarDeclList;     //Lista de parámetros;
-begin
-  SrcPos := lex.GetSrcPos;
-  Next;  // Consume PROCEDURE
-  if not ConsumeIdent(procName, 'Se esperaba un identificador para el procedimiento') then Exit;
-  //Parsear parámetros
-  ParseParameters(Params);
-  if HayError then Exit;
-  if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then Exit;
-  if tokIdent = tiFORWARD then begin      //Es declaración FORWARD
-    Next;     //Consume FORWARD
-    if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then Exit;
-    Proc := TProcDecl.Create(procName, SrcPos, True);
-    Proc.Parameters := Params;  //Puede ser NIL.
-    declars.Add(Proc);
-  end else begin   //Es declaración de procedimiento
-    Proc := TProcDecl.Create(procName, SrcPos, False);
-    Proc.Parameters := Params;  //Puede ser NIL.
-    //Procesar declaraciones
-    ParseDeclarations(Proc.Declarations);
-    if HayError then begin
-      Proc.Destroy;
-      Exit;
-    end;
-    //Parsear cuerpo
-    ParseBody(Proc.Body);
-    if HayError then begin
-      Proc.Destroy;
-    end else begin
-      declars.Add(Proc);
-    end;
-  end;
-end;
-procedure TParserPas.ParseFunctionDeclaration(declars: TDeclarations);
-var
-  Proc: TFunctDecl;
-  SrcPos: TSrcPos;
   procName, returnType: string;
   Params: TVarDeclList;
+  isFunction, IsAssembler: Boolean;
 begin
-  SrcPos := lex.GetSrcPos;
-  Next;  // Consume FUNCTION
-  if not ConsumeIdent(procName, 'Se esperaba un identificador para la función') then Exit;
+  SrcPos := lex.GetSrcPos;  //Posición donde empieza el proc/función.
+  isFunction := (tokIdent = tiFUNCT);   //Identifica
+  Next;  // Consume PROCEDURE o FUNCTION
+  if not ConsumeIdent(procName, 'Se esperaba un identificador.') then Exit;
   // Parsear parámetros
   ParseParameters(Params);
   if HayError then Exit;
-  //Lee tipo devuelto
-  if not ConsumeTok(tiCOLON, 'Se esperaba ":" después del nombre') then Exit;
-  if not ConsumeIdent(returnType, 'Se esperaba el tipo de retorno.') then Exit;
+  //Lee tipo devuelto si es una función
+  if isFunction then begin
+      if not ConsumeTok(tiCOLON, 'Se esperaba ":" después del nombre') then Exit;
+      if not ConsumeIdent(returnType, 'Se esperaba el tipo de retorno.') then Exit;
+  end;
   if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then Exit;
+  //Verifica ASSEMBLER
+  IsAssembler := False;
+  if tokIdent = tiASSEMBLER then begin
+    Next;     //Consume
+    if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then Exit;
+    IsAssembler := True;
+  end;
   if tokIdent = tiFORWARD then begin      //Es declaración FORWARD
     Next;
     if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then Exit;
-    Proc := TFunctDecl.Create(procName, SrcPos, True);
+    Proc := TProcDecl.Create(procName, SrcPos, True);
     Proc.Parameters := Params;  //Puede ser NIL.
-    Proc.ReturnTypeName := lex.token;
+    Proc.ReturnTypeName := returnType;
+    Proc.IsAssembler := IsAssembler;
     declars.Add(Proc);
   end else begin
-    Proc := TFunctDecl.Create(procName, SrcPos, False);
-    Proc.Parameters := Params;
-    Proc.ReturnTypeName := lex.token;
-    //Procesar declaraciones
-    ParseDeclarations(Proc.Declarations);
-    if HayError then begin
-      Proc.Destroy;
-      Exit;
-    end;
-    //Parsear cuerpo
-    ParseBody(Proc.Body);
-    if HayError then begin
-      Proc.Destroy;
-    end else begin
+    //Es declaración con cuerpo.
+    Proc := TProcDecl.Create(procName, SrcPos, False);
+    Proc.Parameters := Params;  //Puede ser NIL.
+    Proc.ReturnTypeName := returnType;
+    if IsAssembler or (tokIdent=tiASM) then begin
+       //Es proc/función ASSEMBLER.
+      if tokIdent <> tiASM then begin
+        GenError('Se esperaba "ASM".');
+        Proc.Destroy;
+        Exit;
+      end;
+      Proc.IsAssembler := true;
+      //Procesa el bloque ASM
+      callParseASMblock(Proc.Body);  //Procesa el único bloque ASM permitido.
+      if HayError then begin
+        Proc.Destroy;
+        Exit;
+      end;
+      if Not ConsumeSemicolon then begin
+        Proc.Destroy;
+        Exit;
+      end;
       declars.Add(Proc);
+    end else begin
+      //Es proc/función normal.
+      ParseDeclarations(Proc.Declarations);
+      if HayError then begin
+        Proc.Destroy;
+        Exit;
+      end;
+      //Parsear cuerpo
+      ParseBody(Proc.Body);
+      if HayError then begin
+        Proc.Destroy;
+      end else begin
+        declars.Add(Proc);
+      end;
     end;
   end;
 end;
@@ -1759,7 +1754,6 @@ begin
     GenError('Instrucción no reconocida', lex.GetSrcPos);
   end;
   if HayError then Exit;
-
   // Opcional: ; después de la instrucción
   if tokIdent = tiSEMIC then begin
     Next;
@@ -1772,10 +1766,8 @@ begin
       ParseVarDeclaration(Declars)
     else if tokIdent = tiCONST then
       ParseConstDeclaration(Declars)
-    else if tokIdent = tiPROCED then
+    else if (tokIdent = tiPROCED) or (tokIdent = tiFUNCT) then
       ParseProcedureDeclaration(Declars)
-    else if tokIdent = tiFUNCT  then
-      ParseFunctionDeclaration(Declars)
     else if tokIdent = tiTYPE then
       ParseTypeDeclaration(Declars)
     else

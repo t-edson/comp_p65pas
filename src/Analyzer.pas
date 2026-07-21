@@ -136,7 +136,6 @@ var
   SrcPos: TSrcPos;
   VarDeclX, VarDeclY: TVarDecl;
   Proc: TProcDecl;
-  Func: TFunctDecl;
   Assign1, Assign2: TAssignment;
   VarRef1, VarRef2: TExpression;
   Literal1, Literal2: TNumberLiteral;
@@ -194,16 +193,16 @@ var
     // ============================================================
     SrcPos.row := 8;
     SrcPos.col := 1;
-    Func := TFunctDecl.Create('Calcular', SrcPos, False);
-    Func.ReturnTypeName := 'integer';
+    Proc:= TProcDecl.Create('Calcular', SrcPos, False);
+    Proc.ReturnTypeName := 'integer';
 
     // Cuerpo de la función (vacío)
     SrcPos.row := 9;
     SrcPos.col := 3;
     FuncBody := TBlock.Create(SrcPos);
-    Func.Body := FuncBody;
+    Proc.Body := FuncBody;
 
-    astProg.Declarations.Add(Func);
+    astProg.Declarations.Add(Proc);
 
     // ============================================================
     // 4. Cuerpo principal: x := 1; y := 2;
