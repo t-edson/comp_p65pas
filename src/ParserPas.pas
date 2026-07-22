@@ -8,9 +8,6 @@ unit ParserPas;
 interface
 uses
   Classes, SysUtils, LazLogger, alexiaLex, ASTunit;
-const
-  //Cantidad máxima de ítems que se puede leer con readListOfIdent().
-  MAX_ITM_LIST = 31;
 type  //Tipos generales
 //Primary location for elements
 {Current location for scan. This tells the compiler where it's scanning. It useful because
@@ -46,11 +43,6 @@ private   //Messages
   procedure GenError(txt: String; const Args: array of const; const srcPos: TSrcPos);
   procedure GenError(txt: string);
   procedure GenError(txt: String; const Args: array of const);
-private   //Elementos auxiliares
-  itemList: array[0..MAX_ITM_LIST] of String[127]; //Lista de ítems.
-  srcList : array[0..MAX_ITM_LIST] of TSrcPos;     //Lista posiciones en el código fuente.
-  nitems  : Integer;                //Cantidad de ítems caragdos en "itemList".
-  function readListOfIdent: boolean;        //Lee una lista de identificadores
 public    //Eventos
   //Calls to Directive Module
   callProcDIRline  : procedure(const AsmLin: string; out ctxChanged: boolean) of object;
@@ -113,47 +105,6 @@ public    // Inicialización
 end;
 
 implementation
-{$region "Elementos auxiliares"}
-function TParserPas.readListOfIdent: boolean;
-{Lee, desde la posición actual del lexer, una lista de identificadores separados por comas
-y sus posiciones correspondientes dentro del código fuente.
-La lista de identificadores se devuelve en "itemList" y la lista de posiciones se devuelve
-en "srcList". La cantidad de ítems leídos, se devuelve en "nitems".
-Si hay error, devuelve FALSE.
-El objetivo de esta rutina es que permita hacer lecturas muy rápidas. Por eso, se evita
-manejar estructuras dinámicas en memoria, y no se manejan parámetros de entrada o salida.
-IMPORTANTE: Considerar que ese método de lectura es rápido pero no es reentrante. Si se
-produde otra lectura con readListOfIdent(), se perderán los datos anteriores si no se han
-usado.}
-var
-  n: Integer;
-begin
-  //Se empieza con un tamaño inicial para evitar muchas llamadas a setlength()
-  n := 0;
-  repeat
-    //Debe haber un identificador
-    if lex.tokType <> tkIdentifier then begin
-      GenError('Se esperaba un identificador.');
-      exit(false);
-    end;
-    //Hay un identificador
-    itemList[n] := lex.token;    //Agrega nombre
-    srcList[n] := lex.GetSrcPos; //Agrega ubicación de declaración
-    Next;
-    if tokIdent <> tiCOMMA then break; //sale
-    Next;  //Toma la coma
-    //Hay otro ítem, verifica límite de arreglo
-    inc(n);
-    if n >= MAX_ITM_LIST then begin
-      GenError('Cantidad máxima de identificadores superada.');
-      exit(false);
-    end;
-  until false;
-  //Actualiza cantidad de ítems leídos.
-  nitems := n+1;
-  exit(true);
-end;
-{$endregion}
 {$region "Messages"}
 procedure TParserPas.ClearError;
 {Limpia la bandera de errores. Tomar en cuenta que solo se debe usar para iniciar el
@@ -366,13 +317,10 @@ Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve
   begin
     if tokIdent = tiDOT then begin               //"." -> Campo
       Next;  // Consumir '.'
-      if lex.tokType <> tkIdentifier then begin
-        GenError('Se esperaba un nombre de campo');
+      if not ConsumeIdent(FieldName, 'Se esperaba un nombre de campo') then begin
         BaseExpr.Destroy;
         Exit(nil);
       end;
-      FieldName := lex.token;
-      Next;  // Consumir el nombre del campo
       //Aquí faltaría procesara los parámetros por si el método los incluye.
       // if tokIdent = tiPAREN_OP ... como se hace más abajo
       //
@@ -462,7 +410,6 @@ begin
     GenError('Se esperaba una cadena');
     Exit(nil);
   end;
-
   SrcPos := lex.GetSrcPos;
   Result := TStringLiteral.Create(lex.token, SrcPos);
   Next;
@@ -574,7 +521,7 @@ begin
     Exit;
   end;
   //Caso de operando sin signo.
-  if lex.tokType = tkLitNumber then begin
+  if tokIdent in [tiLitNumbI, tiLitNumbF] then begin
     Result := ParseNumberLiteral
   end else if tokIdent = tiIdentif then begin
     Result := ParseIdentifier;
@@ -913,18 +860,16 @@ end;
 function TParserPas.ParseEnumType: TEnumTypeDef;
 var
   EnumType: TEnumTypeDef;
+  enumName: string;
 begin
   Next;     //Consume "("
   EnumType := TEnumTypeDef.Create(lex.GetSrcPos);
   while not HayError do begin
-    if lex.tokType <> tkIdentifier then begin
-      GenError('Se esperaba un identificador en el enumerado');
+    if not ConsumeIdent(enumName, 'Se esperaba un identificador en el enumerado') then begin
       EnumType.Free;
-      Result := nil;
-      Exit;
+      Exit(Nil);
     end;
-    EnumType.AddValue(lex.token);
-    Next;
+    EnumType.AddValue(enumName);
     if tokIdent = tiCOMMA then
       Next
     else
@@ -1099,13 +1044,9 @@ var
   TargetTypeName: string;
 begin
   Next;   //Consume "^"
-  if lex.tokType <> tkIdentifier then begin
-    GenError('Se esperaba el tipo al que apunta el puntero');
-    Result := nil;
-    Exit;
+  if not ConsumeIdent(TargetTypeName, 'Se esperaba el tipo al que apunta el puntero') then begin
+    Exit(Nil);
   end;
-  TargetTypeName := lex.token;
-  Next;
   Result := TPointerTypeDef.Create(TargetTypeName, lex.GetSrcPos);
 end;
 function TParserPas.ParseProceduralType: TProceduralType;
@@ -1149,39 +1090,33 @@ var
   TypeName: string;
 begin
   SrcPos := lex.GetSrcPos;
-  // 1. Alias: = integer, byte, TPersona, etc.
-  if lex.tokType = tkIdentifier then begin
+  if tokIdent = tiIdentif then begin        //Alias: = integer, byte, TPersona, etc.
     TypeName := lex.token;
     Next;
     Result := TAliasTypeDef.Create(TypeName, SrcPos);
     Exit;
   end;
-  // 2. Subrango:  = 1..10, 'a'..'z'
-  if lex.tokType in [tkLitNumber, tkString] then begin
+  if lex.tokType in [tkLitNumber, tkString] then begin  //Subrango:  = 1..10, 'a'..'z'
     Result := ParseSubrangeType;
     Exit;
   end;
-  // 3. Enumerado: = (Rojo, Verde, Azul)
-  if tokIdent = tiPAREN_OP then begin
+  if tokIdent = tiPAREN_OP then begin       //Enumerado: = (Rojo, Verde, Azul)
     Result := ParseEnumType;
     Exit;
   end;
-  // 4. Arreglo: = array[1..10] of integer
-  if tokIdent = tiARRAY then begin
+  if tokIdent = tiARRAY then begin          //Arreglo: = array[1..10] of integer
     Result := ParseArrayTypeDef;
     Exit;
   end;
-  // 5. Registro: = record ... end
-  if tokIdent = tiRECORD then begin
+  if tokIdent = tiRECORD then begin         //Registro: = record ... end
     Result := ParseRecordTypeDef;
     Exit;
   end;
-  // 6. Puntero: = ^integer
-  if tokIdent = tiPOINTER then begin
+  if tokIdent = tiPOINTER then begin        //Puntero: = ^integer
     Result := ParsePointerType;
     Exit;
   end;
-  if tokIdent in [tiPROCED, tiFUNCT] then begin
+  if tokIdent in [tiPROCED, tiFUNCT] then begin  //TipProc := PROCEDURE();
     Result := ParseProceduralType;
     Exit;
   end;
@@ -1726,7 +1661,7 @@ begin
   if tokIdent = tiEXIT then begin
     //Se valida primero porque "exit" es también un identificador.
     ParseExitStatement(Body)
-  end else if lex.tokType = tkIdentifier then begin
+  end else if tokIdent = tiIdentif then begin
     //Puede ser una asignación o una llamada a procedimiento.
     ParseAssigOrProcedureCall(Body);
   end else if tokIdent = tiIF then begin

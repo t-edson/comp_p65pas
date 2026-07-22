@@ -10,6 +10,7 @@ interface
 uses
   Classes, SysUtils, fgl, alexiaLex, CompGlobals, P65C02utils, ASTunit,
   LazLogger;
+
 type
   { TParserAsm6502 }
   TParserAsm6502 = class
@@ -46,7 +47,6 @@ type
     constructor Create(msg0: TMessageManager; lex0: TAleLexer);
     destructor Destroy; override;
   end;
-
 
 implementation
 
