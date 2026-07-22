@@ -10,12 +10,25 @@ interface
 uses
   Classes, SysUtils, fgl, alexiaLex, CompGlobals, P65C02utils, ASTunit,
   LazLogger;
+type //Identifcador de tokens
+  TASMTokenIdent = (
+    txOTHER    ,  //Not identified.
+    //Keywords
+    txEND      ,  //Keyword "END"
+    //Symbols
+    //Operators
+    txATSYMBOL ,  //Operator "@"
+    //Literals
+    txLITNUMBER,  //Literal numérico como: 0123
+    txIDENTIF     //Identificadores
+  );
 
 type
   { TParserAsm6502 }
   TParserAsm6502 = class
   private
     lex     : TAleLexer;       //Reference to the lexer
+    tokIdent: TASMTokenIdent;     //Identificador de token
     msg     : TMessageManager; //Referencia al gestor de mensajes
     labels  : TAsmInstructionList;   //Lista de etiquetas
     curBlock: TAsmBlock;       //Bloque ASM actual.
@@ -28,13 +41,13 @@ type
   private
     procedure AddDirectiveDB;
     procedure AddDirectiveDW;
-    procedure AddInstructionLabel(lblName: string);
-    function CaptureOperand(var operand: TAsmOperand; out undefLabel: boolean
-      ): boolean;
+    procedure AddInstructionLabel(lblName: string; local: Boolean);
+    function CaptureOperand(var operand: TAsmOperand): boolean;
     function CaptureParenthes: boolean;
     procedure EndASM;
     function GetFaddressByte(addr: integer): byte;
     function IsLabelDeclared(txt: string; out lblEle: TAsmInstruction): boolean;
+    procedure ParseInstructionLabel(local: Boolean; out blkEnd: boolean);
     procedure ProcASMline(out blkEnd: boolean);
     procedure ProcInstrASM(idInst: TP6502Inst; var blkEnd: boolean);
     procedure StartASM;
@@ -51,7 +64,7 @@ type
 implementation
 
 resourcestring
-  ER_EXPEC_COMMA = 'Expected ",".';
+  ER_EXP_COL_LAB_= 'Expected ":" for label: ';
   ER_EXPEC_PAREN = 'Expected ")"';
   ER_EXP_ADR_VAR = 'Expected address or variable name.';
   ER_EXP_CON_VAL = 'Expected constant or value.';
@@ -60,11 +73,9 @@ resourcestring
   ER_INV_ASMCODE = 'Invalid ASM Opcode: %s';
   ER_EXPECT_W_F  = 'Expected "w" or "f".';
   ER_SYNTAX_ERR_ = 'Syntax error: "%s"';
-  ER_DUPLIC_LBL_ = 'Duplicated label: "%s"';
   ER_EXPE_NUMBIT = 'Expected number of bit: 0..7.';
   ER_EXPECT_ADDR = 'Expected address.';
   ER_EXPECT_BYTE = 'Expected byte.';
-  ER_UNDEF_LABEL_= 'Undefined ASM Label: %s';
   WA_ADDR_TRUNC  = 'Address truncated to fit instruction.';
 
 // Mensajes
@@ -128,8 +139,7 @@ begin
     exit(false);
   end;
 end;
-function TParserAsm6502.CaptureOperand(var operand: TAsmOperand;
-                                        out undefLabel: boolean): boolean;
+function TParserAsm6502.CaptureOperand(var operand: TAsmOperand): boolean;
 {Capture the operand (value, label or address) of an ASM instruction, including
 operations if exist.
  Operands can have one of the following formats:
@@ -268,7 +278,6 @@ var
 begin
   Result := false;
   operand.used := false;
-  undefLabel := false;
   lex.SkipWhitesNoEOL;
   positOper := TestForPositionOperand();  //Check for ">" or "<"
   if lex.token = '$' then begin
@@ -289,80 +298,16 @@ begin
     operand.used := true;
     exit(true);
   end else if lex.tokType = tkIdentifier  then begin
-    if IsLabelDeclared(lex.token, lblEle) then begin
-      //Es un identificador de etiqueta
-      operand.Val := -1;      //Indicates to use "operRef"
-      operand.Ref := lblEle;  //Referencia a la etiqueta.
-      //lex.AddCallerToFromCurr(lblEle);  //Agrega referencia
-      lex.Next;
-      //Check for operations
-      ScanOperations(positOper);
-      if HayError then exit(false);
-      operand.used := true;
-      exit(true);
-    end;
-//    ele := parser.astProg.FindFirst(lex.token);  //**** La Identificación se hará en el análisis semántico
-//    if ele=nil then begin
-      //Es un identificador no definido (como una etiqueta). Puede definirse luego.
-      operand.Val := -1;        //Indicates to use "operRef"
-      operand.Ref := nil;        //Will be later linked.
-      operand.Nam := UpCase(lex.token);  //Keep name to find reference.
-      //Hay salto indefinido.
-      undefLabel := true;
-      lex.Next;
-      //Check for operations
-      ScanOperations(positOper);
-      if HayError then exit(false);
-      operand.used := true;
-      exit(true);
-//    end else begin
-//      //Se identifica un elemento del lenguaje
-//      if ele.NodeType = ntFunctDecl then begin
-//        //Es un identificador de función del árbol de sintaxis
-//        xfun := TFunctDecl(ele);
-//        lex.Next;  //Take variable name
-//        operand.Val := -1;        //Indicates to use "operRef"
-//        operand.Ref := xfun;
-//        //Check for operations
-//        ScanOperations(positOper);
-//        if parser.HayError then exit(false);
-//        operand.used := true;
-//        exit(true);
-//      end else if ele.NodeType = ntVarDecl then begin
-//        //It's variable identifier
-//        xvar := TVarDecl(ele);
-//        lex.Next;  //Take variable name
-//        operand.Val := -1;        //Indicates to use "operRef"
-//        operand.Ref := xvar;
-//        //Check for operations
-//        ScanOperations(positOper);
-//        if parser.HayError then exit(false);
-//        operand.used := true;
-//        exit(true);
-//      end else if ele.NodeType = ntConstDecl then begin
-//        //Es identificador de constante
-//        xcon := TConstDecl(ele);
-//        //Constants can be resolved as numbers
-//        if (xcon.typ = parser.typByte) or (xcon.typ = parser.typWord) then begin
-//          lex.Next;
-//          operand.Val := -1;        //Indicates to use "operRef"
-//          operand.Ref := xcon;
-//          //Check for operations
-//          ScanOperations(positOper);
-//          if parser.HayError then exit(false);
-//        end else begin
-//          //Otro tipo de constante
-//          parser.GenError(ER_NOGETVAL_CON);
-//          exit(false);
-//        end;
-//        operand.used := true;
-//        exit(true);
-//      end else begin
-//        //No se puede leer dirección
-//        parser.GenError(ER_EXP_CON_VAL);
-//        exit(false);
-//      end;
-//    end;
+    //Es un identificador o una etiqueta. Puede definirse luego.
+    operand.Val := -1;        //Indicates to use "operRef"
+    operand.Ref := nil;        //Will be later linked.
+    operand.Nam := UpCase(lex.token);  //Keep name to find reference.
+    lex.Next;
+    //Check for operations
+    ScanOperations(positOper);
+    if HayError then exit(false);
+    operand.used := true;
+    exit(true);
   end else begin
     GenError(ER_EXP_CON_VAL);
     exit(false);
@@ -424,11 +369,10 @@ var
   tok: String;
   addressModes: TP6502AddModes;
   srcInst: TSrcPos;
-  undefLabel: boolean;
 begin
   blkEnd := false;
   addressModes := PIC16InstName[idInst].addressModes;
-   srcInst := lex.GetSrcPos;
+  srcInst := lex.GetSrcPos;
   //Capture operand
   lex.Next;
   lex.SkipWhitesNoEOL;
@@ -446,7 +390,7 @@ begin
       GenError(ER_EXP_CON_VAL);
       exit;
     end;
-  end else if (lex.tokType=tkIdentifier) and (Upcase(lex.token)='END') then begin
+  end else if tokIdent = txEND then begin
     //Sin parámetros. Puede ser Implícito o Acumulador
     if aImplicit in addressModes then begin
       //Tiene modo implícito
@@ -465,22 +409,20 @@ begin
     lex.Next;      //Toma "#"
     AddInstruction(idInst, aImmediat, 0, srcInst);
     //Complete the "param" of "curInst".
-    if not CaptureOperand(curInst.operand, undefLabel) then begin
+    if not CaptureOperand(curInst.operand) then begin
       GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
       exit;
     end;
-    if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
     lex.SkipWhitesNoEOL;
   end else if tok = '(' then begin
     //Direccionamiento Indirecto: (indirect), (indirect,X), (indirect),Y o (aAbsInIdX, X)
     AddInstruction(idInst, aIndirect, 0, srcInst);  //Add the instruction with "aImplicit" temporally. Later will be updated.
     lex.Next;
     if lex.tokType in [tkLitNumber, tkIdentifier] then begin
-      if not CaptureOperand(curInst.operand, undefLabel) then begin
+      if not CaptureOperand(curInst.operand) then begin
         GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
         exit;
       end;
-      if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
       lex.SkipWhitesNoEOL;
       if lex.token = ',' then begin
         //Can only be (indirect,X)
@@ -537,11 +479,10 @@ begin
     //Puede ser absoluto o página cero, o sus versiones indexadas con X o Y.
     AddInstruction(idInst, aImplicit, 0, srcInst);  //Add the instruction with "aImplicit" temporally. Later will be updated.
     //Complete the "param" of "curInst".
-    if not CaptureOperand(curInst.operand, undefLabel) then begin
+    if not CaptureOperand(curInst.operand) then begin
       GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
       exit;
     end;
-    if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
     {Get the addressing mode, considering operand is 16bits. If it's 8 bits, the
      addressing mode should be changed when code is generated.}
     lex.SkipWhitesNoEOL;
@@ -559,11 +500,10 @@ begin
         curInst.addMode := ord(aAbsolutY);
       end else begin
         //Could be the 65c02 instruction BBR0 $12, <label>
-        if not CaptureOperand(curInst.operand2, undefLabel) then begin
+        if not CaptureOperand(curInst.operand2) then begin
           GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
           exit;
         end;
-        if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
         //We have an operand.
         curInst.addMode := ord(aZeroPRel);
       end;
@@ -578,9 +518,34 @@ begin
         curInst.addMode := ord(aAbsolute);
       end;
     end;
-    if (lex.tokType=tkIdentifier) and (Upcase(lex.token)='END') then begin
+    if tokIdent = txEND then begin
       blkEnd := true;
     end;
+  end;
+end;
+procedure TParserAsm6502.ParseInstructionLabel(local: Boolean; out blkEnd: boolean);
+{Parse an instruction that defines a label. It can be:
+"<identifier>:" or "@<identifier>:"
+If not errors are founds, a new instruction is added to the current ASM block element.
+Set "curInst" pointing to the instruction added.}
+var
+  lblName: String;
+begin
+  lblName := lex.token;   //guarda nombre de la etiqueta
+  lex.Next;
+  if lex.token = ':' then begin
+    //Definitivamente es una etiqueta
+    lex.Next;      //Toma ":"
+    //Crea la instrucción de etiqueta
+    AddInstructionLabel(lblName, False);
+    //Verifica si sigue una instrucción
+    lex.SkipWhitesNoEOL;
+    ProcASMline(blkEnd);
+    exit;
+  end else begin
+    //Not a label
+    GenError(Format(ER_EXP_COL_LAB_, [lblName]));
+    exit;
   end;
 end;
 procedure TParserAsm6502.ProcASMline(out blkEnd: boolean);
@@ -625,16 +590,14 @@ begin
       //It's the ORG directive
       lex.Next;
       AddDirectiveORG(0);  //Operand of ORG will be updated with CaptureOperand().
-      if not CaptureOperand(curInst.operand, undefLabel) then exit;
-      if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
+      if not CaptureOperand(curInst.operand) then exit;
       exit;
     end else if tok = 'DB' then begin
       //Define a byte. Could be multiples bytes.
       repeat
         lex.Next;    //Take DB
         AddDirectiveDB;  //Operand of DB will be updated with CaptureOperand().
-        if not CaptureOperand(curInst.operand, undefLabel) then exit;
-        if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
+        if not CaptureOperand(curInst.operand) then exit;
         lex.SkipWhitesNoEOL;
       until lex.token<>',';
       if lex.tokType = tkEol then begin
@@ -651,8 +614,7 @@ begin
       repeat
         lex.Next;    //Take DB
         AddDirectiveDW;  //Operand of DB will be updated with CaptureOperand().
-        if not CaptureOperand(curInst.operand, undefLabel) then exit;
-        if undefLabel then curBlock.undefInstrucs.Add(curInst);  //Instruction with unsolved label
+        if not CaptureOperand(curInst.operand) then exit;
         lex.SkipWhitesNoEOL;
       until lex.token<>',';
       if lex.tokType = tkEol then begin
@@ -664,28 +626,24 @@ begin
         lex.Next;      //Pass to the start of the next line.
       end;
       exit;
+    end else if tokIdent = txIDENTIF then begin
+      //Debe ser una etqueta
+      ParseInstructionLabel(false, blkEnd);  //Puede generar error
     end else begin
       //Must be a label
-      lbl := lex.token;   //guarda posible etiqueta
-      lex.Next;
-      if lex.token = ':' then begin
-        //Definitivamente es una etiqueta
-        if IsLabelDeclared(lbl, lblEle) then begin  //¿Ya existe?
-          GenError(Format(ER_DUPLIC_LBL_, [lbl]));
-          exit;
-        end;
-        //Crea la instrucción de etiqueta
-        lex.Next;      //Toma ":"
-        AddInstructionLabel(lbl);
-        //Verifica si sigue una instrucción
-        lex.SkipWhitesNoEOL;
-        ProcASMline(blkEnd);
-        exit;
-      end else begin
-        //Not a label
-        GenError(Format(ER_SYNTAX_ERR_, [lbl]));
-        exit;
-      end;
+      GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
+      exit;
+    end;
+  end else if tokIdent = txATSYMBOL then begin  //Símbolo "@"
+    //Debe ser una etiqueta como: @label1:
+    lex.Next;
+    if tokIdent = txIDENTIF then begin
+      //Debe ser una etqueta
+      ParseInstructionLabel(True, blkEnd);  //Puede generar error
+    end else begin
+      //Must be a label
+      GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
+      exit;
     end;
   end else if lex.tokType = tkComment then begin
     lex.SkipWhitesNoEOL;
@@ -716,15 +674,19 @@ begin
   curInst.addMode := ord(addMode);
   curInst.operand.Val := param;
 end;
-procedure TParserAsm6502.AddInstructionLabel(lblName: string);
+procedure TParserAsm6502.AddInstructionLabel(lblName: string; local: Boolean);
 {Add a new instruction to the current ASM block element. Set "curInst" pointing
 to the instruction added.
-If operand of the instruction is expression, it mus be added in the child nodes.}
+If operand of the instruction is expression, it must be added in the child nodes.}
 begin
   curInst := TAsmInstruction.Create(lex.GetSrcPos);
   curInst.name := lblName;
   curInst.addr := -1;   //Indica que la dirección física aún no ha sido fijada.
-  curInst.iType := itLabel;   //Marca como instrucción de salto.
+  if local then begin
+    curInst.iType := itLocLabel; //Marca como instrucción de salto.
+  end else begin
+    curInst.iType := itLabel;    //Marca como instrucción de salto.
+  end;
   curBlock.AddInstruction(curInst);
   labels.add(curInst);  //Agrega a la lista de etiquetas
 end;
@@ -768,7 +730,7 @@ begin
   repeat
 //    debugln('fil=' + IntTostr(lex.curCtx.row0) + ', col=' + IntToStr(lex.curCtx.col0));
     ProcASMline(blkEnd);
-  until lex.atEof or blkEnd;
+  until lex.atEof or (tokIdent = txEND);
   if lex.atEof then begin
     GenError('Unclosed ASM block.');  //Don't stop scanning
   end;
@@ -785,13 +747,16 @@ function TParserAsm6502.DecodeNext: boolean;
 }
 var
   ctx: TContext;
+  iden: String;
 begin
   ctx := lex.curCtx;
   if ctx._Eof then begin
     ctx.tokType := tkNull;
+    tokIdent := txOTHER;
     exit(false);
   end else if ctx._Eol then begin
     ctx.tokType := tkEol;
+    tokIdent := txOTHER;
     if ctx._LastLine then begin
       //Cannot advance to a NextChar line. Keep position (EOF)
     end else begin
@@ -806,45 +771,70 @@ begin
     repeat
       inc(ctx.fcol);
     until ctx._Eol or not(ctx.curline[ctx.fcol] in [#32, #9]);
-    ctx.tokType := tkSpace;
     //Leaves (ctx.frow, ctx.fcol) in the begin of the next token.
+    ctx.tokType := tkSpace;
+    tokIdent := txOTHER;
   end;
   '0'..'9': begin
     repeat
       inc(ctx.fcol);
     until ctx._Eol or not(ctx.curline[ctx.fcol] in ['0'..'9','.']);
     ctx.tokType := tkLitNumber;
+    tokIdent := txLITNUMBER;
   end;
   '$': begin
     repeat
       inc(ctx.fcol);
     until ctx._Eol or not(ctx.curline[ctx.fcol] in ['0'..'9','A'..'F','a'..'f']);
     ctx.tokType := tkLitNumber;
+    tokIdent := txLITNUMBER;
   end;
   '%': begin
     repeat
       inc(ctx.fcol);
     until ctx._Eol or not(ctx.curline[ctx.fcol] in ['0','1']);
     ctx.tokType := tkLitNumber;
+    tokIdent := txLITNUMBER;
   end;
-  'A'..'Z','_',
-  'a'..'z': begin
+  'E','e': begin
+    repeat inc(ctx.fcol); until ctx._Eol or not(ctx.curline[ctx.fcol] in ['_','a'..'z','A'..'Z','0'..'9']);
+    //Can be optimized using a first verification by size of the string and not comparing the first letter.
+    iden := Upcase(copy(ctx.curLine, ctx.col0, (ctx.fcol-ctx.col0)));
+    if iden = 'END' then begin
+      ctx.tokType := tkKeyword;
+      tokIdent := txEND;
+    end else begin
+      ctx.tokType := tkIdentifier;
+      tokIdent := txIDENTIF;
+    end;
+  end;
+  'A'..'D','F'..'Z','_',
+  'a'..'d','f'..'z': begin
     repeat inc(ctx.fcol); until ctx._Eol or not(ctx.curline[ctx.fcol] in ['_','a'..'z','A'..'Z','0'..'9']);
     ctx.tokType := tkIdentifier;
+    tokIdent := txIDENTIF;
   end;
-  '+','-','*','/','\','=','^','@','.','#','>','<',':': begin
+  '@': begin
     ctx._NextChar;
     ctx.tokType := tkOperator;
+    tokIdent := txATSYMBOL;
+  end;
+  '+','-','*','/','\','=','^','.','#','>','<',':': begin
+    ctx._NextChar;
+    ctx.tokType := tkOperator;
+    tokIdent := txOTHER;
   end;
   ';': begin
     ctx._NextChar;
     while not ctx._Eol do ctx._NextChar;
     //repeat ctx._NextChar until ctx._Eol;
     ctx.tokType := tkComment;
+    tokIdent := txOTHER;
   end;
   '(',')',',','[',']': begin
     ctx._NextChar;
     ctx.tokType := tkOthers;
+    tokIdent := txOTHER;
   end;
   '''': begin
     repeat inc(ctx.fcol); until ctx._Eol or (ctx.curline[ctx.fcol] = '''');
@@ -854,10 +844,12 @@ begin
       ctx._NextChar;  //Go to next character
     end;
     ctx.tokType := tkString;
+    tokIdent := txOTHER;
   end;
   else
     //Unkmown token.
     ctx.tokType := tkNull;  //WARNING: This make the current token will read as empty.
+    tokIdent := txOTHER;
     ctx._NextChar;
   end;
   exit(false);

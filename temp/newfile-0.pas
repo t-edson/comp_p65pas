@@ -1,10 +1,7 @@
 program muestra; 
 procedure IncrementarConASM(var valor: integer);
 asm
-  lda valor      ; Cargar valor en acumulador
-  clc            ; Limpiar carry
-  adc #1         ; Sumar 1
-  sta valor      ; Guardar resultado
+  clc
 end;
 
 var a: byte;

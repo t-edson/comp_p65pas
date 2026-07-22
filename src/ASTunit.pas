@@ -530,6 +530,7 @@ type  //Nodos de sentencias
   TAsmInsType = (
     itOpcode,     //Common instruction with an Opcode and Operand.
     itLabel,      //An ASM label.
+    itLocLabel,   //An ASM local label.
     itOrgDir,     //Instruction ORG
     itDefByte,    //Instruction DB
     itDefWord     //Instruction DW
