@@ -1,17 +1,18 @@
 program muestra; 
-procedure IncrementarConASM(var valor: integer);
-asm
-  clc
-end;
+//procedure IncrementarConASM(var valor: integer);
+//asm
+//  clc
+//  bne @bucle
+//end;
 
 var a: byte;
     b,c: array[0..2] of byte;
 //procedure MostrarMensaje; forward;
 begin
-  a := 'aaa';
-//  asm
-//    LDA #123
-//  end;
+  a := #32'a''aa';
+  a := 'aaa'#32;
+  a := 'aaa'#32'aaa';  
+  asm clc end;
 //  y := aaa.bbb[5];
 //  y := bbb.aaa(1);  *** Falta implementar
 //  y := aaa[i];
@@ -24,7 +25,7 @@ begin
 //  x := fun(1);
 //  a[i] := b[j];
 //  a := 'abc';
-   aaa('aaa');
+//   aaa('aaa');
 end. 
 
 

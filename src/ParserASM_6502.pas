@@ -47,9 +47,9 @@ type
     procedure EndASM;
     function GetFaddressByte(addr: integer): byte;
     function IsLabelDeclared(txt: string; out lblEle: TAsmInstruction): boolean;
-    procedure ParseInstructionLabel(local: Boolean; out blkEnd: boolean);
-    procedure ProcASMline(out blkEnd: boolean);
-    procedure ProcInstrASM(idInst: TP6502Inst; var blkEnd: boolean);
+    procedure ParseInstructionLabel(local: Boolean);
+    procedure ProcASMline;
+    procedure ProcInstrASM(idInst: TP6502Inst);
     procedure StartASM;
     procedure AddInstruction(const inst: TP6502Inst; addMode: TP6502AddMode;
       param: integer; const srcDec: TSrcPos);
@@ -75,7 +75,7 @@ resourcestring
   ER_SYNTAX_ERR_ = 'Syntax error: "%s"';
   ER_EXPE_NUMBIT = 'Expected number of bit: 0..7.';
   ER_EXPECT_ADDR = 'Expected address.';
-  ER_EXPECT_BYTE = 'Expected byte.';
+  ER_IDENT_EXPEC = 'Identifier expected.';
   WA_ADDR_TRUNC  = 'Address truncated to fit instruction.';
 
 // Mensajes
@@ -297,10 +297,26 @@ begin
     lex.Next;
     operand.used := true;
     exit(true);
-  end else if lex.tokType = tkIdentifier  then begin
+  end else if lex.tokType = tkIdentifier then begin
     //Es un identificador o una etiqueta. Puede definirse luego.
     operand.Val := -1;        //Indicates to use "operRef"
-    operand.Ref := nil;        //Will be later linked.
+    operand.Ref := nil;       //Will be later linked.
+    operand.Nam := UpCase(lex.token);  //Keep name to find reference.
+    lex.Next;
+    //Check for operations
+    ScanOperations(positOper);
+    if HayError then exit(false);
+    operand.used := true;
+    exit(true);
+  end else if tokIdent = txATSYMBOL then begin     //"@"
+    //Debe ser la referencia a una etiqueta local: @salto1
+    lex.Next;
+    if tokIdent <> txIDENTIF then begin
+       GenError(ER_IDENT_EXPEC);
+       Exit(False);
+    end;
+    operand.Val := -1;        //Indicates to use "operRef"
+    operand.Ref := nil;       //Will be later linked.
     operand.Nam := UpCase(lex.token);  //Keep name to find reference.
     lex.Next;
     //Check for operations
@@ -356,28 +372,26 @@ begin
     end;
   end;
 }end;
-procedure TParserAsm6502.ProcInstrASM(idInst: TP6502Inst; var blkEnd: boolean);
+procedure TParserAsm6502.ProcInstrASM(idInst: TP6502Inst);
 {Proccess an 6502 ASM instruction. Instruction must be previously validated and
  identified in "idInst".
  Basically this procedure, add a new TAsmInstruction (including instruction, addresing
  mode and operamd) to the current TAstAsmBlock, that represents a 6502 instruction.
  An instruction ends with the EOL token or the ASM delimiter "END".
  This procedure must not process the EOL token or the "END" delimiter.
- If the the "END" delimiter is found, the flag "blkEnd" is activated.
 }
 var
   tok: String;
   addressModes: TP6502AddModes;
   srcInst: TSrcPos;
 begin
-  blkEnd := false;
   addressModes := PIC16InstName[idInst].addressModes;
   srcInst := lex.GetSrcPos;
   //Capture operand
   lex.Next;
   lex.SkipWhitesNoEOL;
   tok := lex.token;
-  if (lex.tokType = tkEol) then begin
+  if (lex.tokType = tkEol) or (tokIdent = txEND) then begin
     //Sin parámetros. Puede ser Implícito o Acumulador
     if aImplicit in addressModes then begin
       //Tiene modo implícito
@@ -390,20 +404,6 @@ begin
       GenError(ER_EXP_CON_VAL);
       exit;
     end;
-  end else if tokIdent = txEND then begin
-    //Sin parámetros. Puede ser Implícito o Acumulador
-    if aImplicit in addressModes then begin
-      //Tiene modo implícito
-      AddInstruction(idInst, aImplicit, 0, srcInst);
-    end else if aAcumulat in addressModes then begin
-      //Tiene modo implícito
-      AddInstruction(idInst, aAcumulat, 0, srcInst);
-    end else begin
-      //An operand must follow.
-      GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
-      exit;
-    end;
-    blkEnd := true;
   end else if tok = '#' then begin
     //Direccionamiento Inmediato
     lex.Next;      //Toma "#"
@@ -518,12 +518,9 @@ begin
         curInst.addMode := ord(aAbsolute);
       end;
     end;
-    if tokIdent = txEND then begin
-      blkEnd := true;
-    end;
   end;
 end;
-procedure TParserAsm6502.ParseInstructionLabel(local: Boolean; out blkEnd: boolean);
+procedure TParserAsm6502.ParseInstructionLabel(local: Boolean);
 {Parse an instruction that defines a label. It can be:
 "<identifier>:" or "@<identifier>:"
 If not errors are founds, a new instruction is added to the current ASM block element.
@@ -540,7 +537,7 @@ begin
     AddInstructionLabel(lblName, False);
     //Verifica si sigue una instrucción
     lex.SkipWhitesNoEOL;
-    ProcASMline(blkEnd);
+    ProcASMline;
     exit;
   end else begin
     //Not a label
@@ -548,7 +545,7 @@ begin
     exit;
   end;
 end;
-procedure TParserAsm6502.ProcASMline(out blkEnd: boolean);
+procedure TParserAsm6502.ProcASMline;
 {Process a line of ASM code. That line can be a mnemonic, a label, a comment, ...
  A line of ASM ends with the EOL or with the END reserved word.
  If found END, returns TRUE in "blkEnd".
@@ -561,9 +558,7 @@ var
   undefLabel: boolean;
   n: Integer;
 begin
-  blkEnd := false;
-  lex.SkipWhitesNoEOL;
-  if lex.tokType = tkEol then begin
+  if lex.tokType = tkEol then begin  //Empty instruction
     lex.Next;   //Go to next line
     exit; //Empty line
   end;
@@ -574,18 +569,13 @@ begin
     if FindOpcode(tok, idInst) then begin
       //It's a mnemonic
       n := msg.nErrors;
-      ProcInstrASM(idInst, blkEnd);
+      ProcInstrASM(idInst);
       if msg.nErrors>n then begin
         //There were an error in the last instruction
         lex.GotoEOL;   //Move to end of line.
         lex.Next;      //Pass to the start of the next line.
         exit;
       end;
-      if blkEnd then exit;  //The END delimiter has found.
-    end else if tok = 'END' then begin
-      //It's the end of ASM block
-      blkEnd := true;
-      exit;
     end else if tok = 'ORG' then begin
       //It's the ORG directive
       lex.Next;
@@ -628,7 +618,7 @@ begin
       exit;
     end else if tokIdent = txIDENTIF then begin
       //Debe ser una etqueta
-      ParseInstructionLabel(false, blkEnd);  //Puede generar error
+      ParseInstructionLabel(false);  //Puede generar error
     end else begin
       //Must be a label
       GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
@@ -639,7 +629,7 @@ begin
     lex.Next;
     if tokIdent = txIDENTIF then begin
       //Debe ser una etqueta
-      ParseInstructionLabel(True, blkEnd);  //Puede generar error
+      ParseInstructionLabel(True);  //Puede generar error
     end else begin
       //Must be a label
       GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
@@ -722,15 +712,18 @@ var
 begin
   lex.Next;     //Get ASM
   lex.curCtx.OnDecodeNext := @DecodeNext;   //Set a new syntax
+  lex.Next;   //Initialize lexer state
   //Create an ASM node
   curBlock := TAsmBlock.Create(lex.GetSrcPos);
   Body.AddStatement(curBlock);
   StartASM;
   curInst := nil;
-  repeat
+  lex.SkipWhitesNoEOL;  //Omite espacios iniciales de la línea
+  while not lex.atEof and (tokIdent <> txEND) do begin
 //    debugln('fil=' + IntTostr(lex.curCtx.row0) + ', col=' + IntToStr(lex.curCtx.col0));
-    ProcASMline(blkEnd);
-  until lex.atEof or (tokIdent = txEND);
+    ProcASMline;
+    lex.SkipWhitesNoEOL;  //Omite espacios iniciales de la línea
+  end;
   if lex.atEof then begin
     GenError('Unclosed ASM block.');  //Don't stop scanning
   end;
