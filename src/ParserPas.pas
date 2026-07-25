@@ -177,7 +177,7 @@ var
   ctxChanged: Boolean;  //Manejamos variables locales para permitir recursividad
 begin
   lex.SkipWhites;
-  while (lex.tokType = tkDirective) do begin
+  while (lex.curCtx.tokType = tkDirective) do begin
     //Es una directiva
     callProcDIRline(lex.token, ctxChanged);  //procesa línea
     if HayError then begin
@@ -201,7 +201,7 @@ procedure TParserPas.SkipWhitesNoDirect;
 {Similar a SkipWhites(), pero no ejecuta directivas.}
 begin
   lex.SkipWhites;
-  while (lex.tokType = tkDirective) do begin
+  while (lex.curCtx.tokType = tkDirective) do begin
     //Pasa a siguiente
     Next;
   end;
@@ -215,7 +215,7 @@ var
 begin
   lex.Next;
   lex.SkipWhites;
-  while (lex.tokType = tkDirective) do begin
+  while (lex.curCtx.tokType = tkDirective) do begin
     //Es una directiva
     callProcDIRline(lex.token, ctxChanged);  //procesa línea
     if HayError then begin
@@ -267,7 +267,7 @@ token saltando blancos, comentarios o directivas.
 Si no encuentra un identificador, genera el mensaje de error "msgErr", en la posición
 actual y devuelve el valor FALS.}
 begin
-  if lex.tokType = tkIdentifier then begin
+  if lex.curCtx.tokIdent = tiIDENTIF then begin
     //Se encontró un identificador
     token := lex.token;
     Next;
@@ -519,7 +519,7 @@ begin
   //Caso de operando sin signo.
   if tokIdent in [tiLitNumbI, tiLitNumbF] then begin
     Result := ParseNumberLiteral
-  end else if tokIdent = tiIdentif then begin
+  end else if tokIdent = tiIDENTIF then begin
     Result := ParseIdentifier;
   end else if tokIdent = tiLitString then begin
     Result := ParseStringLiteral
@@ -690,7 +690,7 @@ var
 begin
   idxVarIni := varContainer.Count;  //Guardamos la posición de la primera variable
   repeat
-    if lex.tokType <> tkIdentifier then begin
+    if tokIdent <> tiIDENTIF then begin
       GenError('Se esperaba un identificador.');
       Exit;
     end;
@@ -704,7 +704,7 @@ begin
   if not ConsumeTok(tiCOLON, 'Se esperaba ":" después de la variable(s).') then
     Exit;   //No es necesario limpiar nada adicional
   //Lee el tipo y completa esa información en las variables creadas.
-  if lex.tokType = tkIdentifier then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
+  if tokIdent  = tiIDENTIF then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
     //Actualiza el tipo en todas las variables creadas.
     for i := idxVarIni to varContainer.Count-1 do begin
       //Todos estos ítems deben ser los que hemos agregados
@@ -744,7 +744,7 @@ var
 begin
   idxVarIni := varContainer.Count;  //Guardamos la posición de la primera variable
   repeat
-    if lex.tokType <> tkIdentifier then begin
+    if tokIdent <> tiIDENTIF then begin
       GenError('Se esperaba un identificador.');
       Exit;
     end;
@@ -758,7 +758,7 @@ begin
   if not ConsumeTok(tiCOLON, 'Se esperaba ":" después de la variable(s).') then
     Exit;   //No es necesario limpiar nada adicional
   //Lee el tipo y completa esa información en las variables creadas.
-  if lex.tokType = tkIdentifier then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
+  if tokIdent = tiIDENTIF then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
     //Actualiza el tipo en todas las variables creadas.
     for i := idxVarIni to varContainer.Count-1 do begin
       //Todos estos ítems deben ser los que hemos agregados
@@ -796,9 +796,6 @@ parámetros.
 Si no se encuentran parámetros, se devuelve NIL en "Params".
 Si se encuentra algún error, se libera "Params" (si se creó) y se pone a NIL.}
 var
-  Param: TVarDecl;
-  typName: string;
-  i: Integer;
   IsVarParam: Boolean;
 begin
   Params := nil;
@@ -924,7 +921,7 @@ begin
     Exit(nil);
   end;
   //Lee tipo de los elementos (puede ser cualquier tipo)
-  if lex.tokType = tkIdentifier then begin
+  if tokIdent = tiIDENTIF then begin
     ArrayType.ElementTypeName := lex.token;
     Next;
   end else begin
@@ -957,7 +954,7 @@ Si se encuentra algún error, se devuelve NIL.}
     if not ConsumeIdent(selectorName, 'Se esperaba un identificador.') then Exit;
     if not ConsumeTok(tiCOLON, 'Se esperaba ":".') then Exit;
     //Leemos el tipo
-    if lex.tokType = tkIdentifier then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
+    if tokIdent = tiIDENTIF then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
       //Creamos la variable selector con su tipo.
       varDecl := TVarDecl.Create(selectorName, SrcPos);
       varDecl.TypeName := lex.token;  //No pemitiremos tipos complejos aquí
@@ -1086,38 +1083,37 @@ var
   TypeName: string;
 begin
   SrcPos := lex.GetSrcPos;
-  if tokIdent = tiIdentif then begin        //Alias: = integer, byte, TPersona, etc.
-    TypeName := lex.token;
-    Next;
-    Result := TAliasTypeDef.Create(TypeName, SrcPos);
-    Exit;
+  case tokIdent of
+    tiIDENTIF: begin         //Alias: = integer, byte, TPersona, etc.
+      TypeName := lex.token;
+      Next;
+      Result := TAliasTypeDef.Create(TypeName, SrcPos);
+    end;
+    tiLitNumbI: begin        //Subrango:  = 1..10
+      Result := ParseSubrangeType;
+    end;
+    tiLitString: begin       //Subrango:  = 'a'..'z'
+      Result := ParseSubrangeType;
+    end;
+    tiPAREN_OP: begin        //Enumerado: = (Rojo, Verde, Azul)
+      Result := ParseEnumType;
+    end;
+    tiARRAY: begin           //Arreglo: = array[1..10] of integer
+      Result := ParseArrayTypeDef;
+    end;
+    tiRECORD: begin          //Registro: = record ... end
+      Result := ParseRecordTypeDef;
+    end;
+    tiPOINTER: begin         //Puntero: = ^integer
+      Result := ParsePointerType;
+    end;
+    tiPROCED, tiFUNCT: begin //TipProc := PROCEDURE();
+      Result := ParseProceduralType;
+    end;
+  else
+    GenError('Definición de tipo no reconocida', SrcPos);
+    Result := nil;
   end;
-  if lex.tokType in [tkLitNumber, tkString] then begin  //Subrango:  = 1..10, 'a'..'z'
-    Result := ParseSubrangeType;
-    Exit;
-  end;
-  if tokIdent = tiPAREN_OP then begin       //Enumerado: = (Rojo, Verde, Azul)
-    Result := ParseEnumType;
-    Exit;
-  end;
-  if tokIdent = tiARRAY then begin          //Arreglo: = array[1..10] of integer
-    Result := ParseArrayTypeDef;
-    Exit;
-  end;
-  if tokIdent = tiRECORD then begin         //Registro: = record ... end
-    Result := ParseRecordTypeDef;
-    Exit;
-  end;
-  if tokIdent = tiPOINTER then begin        //Puntero: = ^integer
-    Result := ParsePointerType;
-    Exit;
-  end;
-  if tokIdent in [tiPROCED, tiFUNCT] then begin  //TipProc := PROCEDURE();
-    Result := ParseProceduralType;
-    Exit;
-  end;
-  GenError('Definición de tipo no reconocida', SrcPos);
-  Result := nil;
 end;
 {$endregion}
 {$region "Declaraciones"}
@@ -1151,7 +1147,7 @@ begin
     ParseVariableBlockDeclar(declars.Items);
     if HayError then Exit;
     if not ConsumeSemicolon then Exit;   //Debe terminar con ";".
-  until lex.tokType = tkKeyword;  //Sige otra declaración o BEGIN
+  until tokIdent<>tiIDENTIF; //lex.tokType = tkKeyword;  //Sige otra declaración o BEGIN
 end;
 procedure TParserPas.ParseConstDeclaration(declars: TDeclarations);
 var
@@ -1165,7 +1161,7 @@ begin
   // Parsear constantes hasta que se acaben
   while not HayError do begin
     // Leer nombre de la constante
-    if lex.tokType <> tkIdentifier then begin
+    if tokIdent <> tiIDENTIF then begin
       // Si no hay más identificadores, es porque terminaron las constantes
       Break;
     end;
@@ -1292,7 +1288,7 @@ var
 begin
   Next;  //Consume TYPE
   while not HayError do begin
-    if lex.tokType <> tkIdentifier then
+    if tokIdent <> tiIDENTIF then
       Break;  // No hay más declaraciones de tipo
     TypeName := lex.token;
     Next;
@@ -1657,7 +1653,7 @@ begin
   if tokIdent = tiEXIT then begin
     //Se valida primero porque "exit" es también un identificador.
     ParseExitStatement(Body)
-  end else if tokIdent = tiIdentif then begin
+  end else if tokIdent = tiIDENTIF then begin
     //Puede ser una asignación o una llamada a procedimiento.
     ParseAssigOrProcedureCall(Body);
   end else if tokIdent = tiIF then begin
