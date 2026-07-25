@@ -9,8 +9,8 @@ var a: byte;
     b,c: array[0..2] of byte;
 //procedure MostrarMensaje; forward;
 begin
-  a := #32'a''aa';
-  a := 'aaa'#32;
+  a := #$41'''def';
+  a := 'aaa'#65;
   a := 'aaa'#32'aaa';  
   asm clc end;
 //  y := aaa.bbb[5];

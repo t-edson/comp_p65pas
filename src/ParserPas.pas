@@ -406,10 +406,6 @@ function TParserPas.ParseStringLiteral: TStringLiteral;
 var
   SrcPos: TSrcPos;
 begin
-  if lex.tokType<> tkString then begin
-    GenError('Se esperaba una cadena');
-    Exit(nil);
-  end;
   SrcPos := lex.GetSrcPos;
   Result := TStringLiteral.Create(lex.token, SrcPos);
   Next;
