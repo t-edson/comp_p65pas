@@ -1738,7 +1738,7 @@ debe haber sido limpiado}
         exit;
       end;
       astProg.Name := lex.token;
-      astProg.srcDec := lex.GetSrcPos;
+      astProg.SrcPos := lex.GetSrcPos;
       Next;  //Toma el nombre y pasa al siguiente
       if not ConsumeSemicolon then exit;
     end;
@@ -1842,7 +1842,7 @@ begin
   //Salta blancos sin ejecutar directivas
   SkipWhitesNoDirect;
   //Busca UNIT
-  if lowercase(lex.token) = 'unit' then begin
+  if tokIdent = tiUNIT then begin
     lex.curCtx.StartScan;   //retorna al inicio
     exit(true);
   end;
@@ -1851,7 +1851,6 @@ begin
 end;
 procedure TParserPas.Clear;
 begin
-  ClearError;
   astProg.Clear;
   astUnit.Clear;
 end;

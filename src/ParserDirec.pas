@@ -159,8 +159,8 @@ type
                                                     WriteStr: TDirEveWriteStr);
     procedure ProcDIRline(const directiveLine: string; out ctxChanged: boolean);
     function DecodeNext: boolean;
-    procedure ClearMacros;
   public   //Initialization
+    procedure ClearMacros;
     constructor Create(msg0: TMessageManager; lex0: TAleLexer;
       options0: TCompOptions);
     destructor Destroy; override;
@@ -1794,6 +1794,7 @@ begin
   end;
   exit(false);
 end;
+//Initialization
 procedure TParserDirective.ClearMacros;
 begin
   macroList.Clear;
@@ -1809,7 +1810,6 @@ begin
   AddSysVariableString('SYN_MODE'    , @read_SYN_MODE   , @write_SYN_MODE);
 //  AddSysVariableString('CURRBLOCK'   , @read_CURRBLOCK  , nil);
 end;
-//Initialization
 constructor TParserDirective.Create(msg0: TMessageManager; lex0: TAleLexer;
                                     options0: TCompOptions);
 begin

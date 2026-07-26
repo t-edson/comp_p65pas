@@ -95,14 +95,13 @@ type  //Declaraciones y clases base para el AST
     FNodeType: TASTNodeType;
     FSrcPos: TSrcPos;
   public
-    constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
-
     property NodeType: TASTNodeType read FNodeType;
-    property SrcPos: TSrcPos read FSrcPos;
+    property SrcPos: TSrcPos read FSrcPos write FSrcPos;
     property LineNumber: Integer read FSrcPos.row;
     property ColumnNumber: Integer read FSrcPos.col;
     property ContextId: Integer read FSrcPos.idCtx;
 
+    constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); virtual;
   end;
@@ -882,7 +881,6 @@ type  //Nodos estructurales
   public
     procedure AddUnit(const AUnitName: string; const ASrcPos: TSrcPos);
     property UsedUnits: TUnitRefList read FUsedUnits;
-    property srcDec: TSrcPos write FSrcPos;  //Acceso para actualizar "SrcPos".
   public  //Inicialización y depuración
     constructor Create(const AName: string; const ASrcPos: TSrcPos);
     destructor Destroy; override;

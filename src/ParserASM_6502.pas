@@ -18,8 +18,14 @@ type //Identifcador de tokens
     //Symbols
     //Operators
     txATSYMBOL ,  //Operator "@"
+    txPAREN_OP ,  //Symbol "("
+    txPAREN_CL ,  //Symbol ")"
+    //Operators
+    txDOT      ,  //Operator "."
     //Literals
     txLITNUMBER,  //Literal numérico como: 0123
+    //Others
+    txCOMMENT,    //Comentarios
     txIDENTIF     //Identificadores
   );
 
@@ -131,7 +137,7 @@ function TParserAsm6502.CaptureParenthes: boolean;
 {Captura el paréntesis ')'. Si no encuentra devuelve error}
 begin
   lex.SkipWhitesNoEOL;
-  if lex.token = ')' then begin
+  if tokIdent = txPAREN_CL then begin
     lex.Next;   //toma la coma
     exit(true);
   end else begin
@@ -165,11 +171,11 @@ If not operand has found, error is generated and returns FALSE.}
     valueInt: Longint;
   begin
     lex.SkipWhitesNoEOL;
-    if (lex.tokType = tkEol) or (lex.token = ';') then begin
+    if (lex.tokType = tkEol) or (tokIdent = txCOMMENT) then begin
       //End of line
       exit(false);
     end;
-    if lex.token = '.' then begin
+    if tokIdent = txDOT then begin        //"."
       //Hay precisión de campo
       lex.Next;
       if UpCase(lex.token) = 'LOW' then begin
@@ -186,7 +192,7 @@ If not operand has found, error is generated and returns FALSE.}
         GenError('Field expected after "."');
         exit(false);
       end;
-    end else if lex.token = '@' then begin
+    end else if tokIdent = txATSYMBOL then begin  //"@"
       lex.Next;
       if lex.token = '0' then begin
         operation := aopSelByte;
@@ -812,19 +818,34 @@ begin
     ctx.tokType := tkOperator;
     tokIdent := txATSYMBOL;
   end;
-  '+','-','*','/','\','=','^','.','#','>','<',':': begin
+  '+','-','*','/','\','=','^','#','>','<',':': begin
     ctx._NextChar;
     ctx.tokType := tkOperator;
     tokIdent := txOTHER;
+  end;
+  '.': begin
+    ctx._NextChar;
+    ctx.tokType := tkOperator;
+    tokIdent := txDOT;
   end;
   ';': begin
     ctx._NextChar;
     while not ctx._Eol do ctx._NextChar;
     //repeat ctx._NextChar until ctx._Eol;
     ctx.tokType := tkComment;
-    tokIdent := txOTHER;
+    tokIdent := txCOMMENT;
   end;
-  '(',')',',','[',']': begin
+  '(': begin
+    ctx._NextChar;
+    ctx.tokType := tkSymbol;
+    tokIdent := txPAREN_OP;
+  end;
+  ')': begin
+    ctx._NextChar;
+    ctx.tokType := tkSymbol;
+    tokIdent := txPAREN_CL;
+  end;
+  ',','[',']': begin
     ctx._NextChar;
     ctx.tokType := tkOthers;
     tokIdent := txOTHER;
