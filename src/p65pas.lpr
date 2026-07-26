@@ -1,7 +1,7 @@
 program p65pas;
 {$mode objfpc}{$H+}
 uses
-  Classes, Compiler_PIC16, CompGlobals, CompBase, MirList,
+  Classes, Compiler_PIC16, CompGlobals, MirList,
   ParserDirec, AstElemP65, alexiaLex;
 type
   { TProg }
@@ -100,7 +100,7 @@ begin
     exit;
   end;
   //Inicio de compilación
-  Compiler.Exec(srcFile, '', pars);
+  Compiler.Exec(srcFile, pars);
 end;
 procedure TProg.PrintHelp;
 {Muestra las opciones de línea de comando que soporta este compilador}
