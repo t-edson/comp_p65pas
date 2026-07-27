@@ -1069,7 +1069,6 @@ This must be the main entry point to the compiler.}
 begin
   //Options for SIF
   opt := options;   //Pasa referencia de las opciones del compilador al SIF.
-  SIF_P65pas.cpuMode := opt.cpuMode;   //Actualiza copia
   //Compile
   if ejecProg then begin   //¿Ya se está ejecutando el compilador?
     GenError(ER_COMPIL_PROC);

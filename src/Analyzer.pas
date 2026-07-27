@@ -109,7 +109,7 @@ begin
   end;
   IsUnit := parser.GetUnitDeclaration();   //Detecta si es unidad
   if IsUnit then begin
-    //DoAnalyzeUnit(astProg);
+    parser.ParseUnit;
   end else begin
     //Es un programa
     CreateSystemUnitInAST;  //Crea los elementos del sistema. 3ms aprox.

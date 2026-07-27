@@ -44,9 +44,12 @@ private   //Messages
   procedure GenError(txt: string);
   procedure GenError(txt: String; const Args: array of const);
 public    //Eventos
-  //Calls to Directive Module
+  //LLamada para procesar directivas
   callProcDIRline  : procedure(const AsmLin: string; out ctxChanged: boolean) of object;
+  //Llamada para procesar bloques ASM
   callParseASMblock: procedure(Body: TBlock) of object;
+  //Llamada para procesar parámetros adicionales declaración de variables
+  callParseAdicVarDec: procedure(varDecl: TVarDecl);
 protected // Métodos auxiliares para el parser
   function tokIdent: TTokenIdent; inline;
   function ConsumeSemicolon: boolean;
@@ -95,6 +98,7 @@ public    // Sentencia, bloque y programa
   procedure ParseStatement(Body: TBlock);
   procedure ParseDeclarations(Declars: TDeclarations);
   procedure ParseBody(Body: TBlock);
+  procedure ParseProgramHeader;
   procedure ParseProgram;
   procedure ParseUnit;
 public    // Inicialización
@@ -1104,6 +1108,9 @@ begin
     tiRECORD: begin          //Registro: = record ... end
       Result := ParseRecordTypeDef;
     end;
+    tiOBJECT: begin          //Objeto : = object ... end
+      Result := ParseRecordTypeDef;   //Por ahora es similar a los registros
+    end;
     tiPOINTER: begin         //Puntero: = ^integer
       Result := ParsePointerType;
     end;
@@ -1724,29 +1731,29 @@ begin
     end;
   end;
 end;
+procedure TParserPas.ParseProgramHeader;
+begin
+  //Captura el encabezado, solo si existe.
+  if tokIdent = tiPROGRAM then begin
+    Next;  //pasa al nombre
+    if tokIdent<>tiIDENTIF then begin
+      GenError('Program name expected.');
+      exit;
+    end;
+    astProg.Name := lex.token;
+    astProg.SrcPos := lex.GetSrcPos;
+    Next;  //Toma el nombre y pasa al siguiente
+    if not ConsumeSemicolon then exit;
+  end;
+  if lex.atEof then begin
+    GenError('Expected "program", "begin", "var", "type" or "const".');
+    exit;
+  end;
+end;
 procedure TParserPas.ParseProgram;
 {Realiza en análisis sintáctico de un programa y construye el AST.
 El lexer debe haber sido cargado previamente con el código fuente del programa, y el AST
 debe haber sido limpiado}
-  procedure ParseProgramHeader;
-  begin
-    //Captura el encabezado, solo si existe.
-    if tokIdent = tiPROGRAM then begin
-      Next;  //pasa al nombre
-      if lex.atEof then begin
-        GenError('Program name expected.');
-        exit;
-      end;
-      astProg.Name := lex.token;
-      astProg.SrcPos := lex.GetSrcPos;
-      Next;  //Toma el nombre y pasa al siguiente
-      if not ConsumeSemicolon then exit;
-    end;
-    if lex.atEof then begin
-      GenError('Expected "program", "begin", "var", "type" or "const".');
-      exit;
-    end;
-  end;
 begin
   // program <nombre> ;
   SkipWhites;
