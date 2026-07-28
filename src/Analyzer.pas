@@ -2,8 +2,8 @@ unit Analyzer;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, alexiaLex, ParserPas,
-  ParserASM_6502, ParserDirec, CompGlobals, ASTunit, MirList, CompOptions;
+  Classes, SysUtils, Types, alexiaLex, ParserPas, ParserASM_6502, ParserDirec,
+  CompGlobals, ASTunit, MirList, CompOptions, ParseAdicVarDec;
 type
 
   { TAnalyzer }
@@ -356,8 +356,9 @@ begin
   parserDir := TParserDirective.Create(msg, lexer, options);
   mirRep   := TMirList.Create;
   //Comenta los Parser de Ensamblador y de directivas
-  parser.callParseASMblock := @parserASM.ProcessASMblock;
-  parser.callProcDIRline := @parserDir.ProcDIRline;
+  parser.callParseASMblock   := @parserASM.ParseASMblock;
+  parser.callProcDIRline     := @parserDir.ProcDIRline;
+  parser.callParseAdicVarDec := @parserASM.ParseAdicVarDec;
   //Inicializa variables
   ejecProg := false;
 end;

@@ -1,10 +1,4 @@
 program muestra; 
-//procedure IncrementarConASM(var valor: integer);
-//asm
-//  clc
-//  bne @bucle
-//end;
-
 var a: byte;
     b,c: array[0..2] of byte;
 //procedure MostrarMensaje; forward;

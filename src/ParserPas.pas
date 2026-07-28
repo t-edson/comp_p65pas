@@ -24,8 +24,8 @@ TParserPas = class
 private
   lex    : TAleLexer;       //Analizador léxico
   msg    : TMessageManager; //Referencia al gestor de mensajes
-  procedure ParseVariableBlockDeclar(varContainer: TASTNodeList);
-  procedure ParseVariableBlockDeclar(varContainer: TVarDeclList);
+  procedure ParseVariableBlockDeclar(varContainer: TASTNodeList;
+    paramType: TParamType);
 public    //Componentes principales del compilador
   astProg: TProgram;        //Árbol de sintaxis abstracto de un programa
   astUnit: TUnit;           //Árbol de sintaxis abstracto de una unidad
@@ -44,12 +44,14 @@ private   //Messages
   procedure GenError(txt: string);
   procedure GenError(txt: String; const Args: array of const);
 public    //Eventos
+  {Se separa en eventos las llamadas a módulos separados del Parser que son muy
+  dependientes del hardware.}
   //LLamada para procesar directivas
   callProcDIRline  : procedure(const AsmLin: string; out ctxChanged: boolean) of object;
   //Llamada para procesar bloques ASM
   callParseASMblock: procedure(Body: TBlock) of object;
   //Llamada para procesar parámetros adicionales declaración de variables
-  callParseAdicVarDec: procedure(varDecl: TVarDecl);
+  callParseAdicVarDec: procedure(Items: TASTNodeList; idxVarIni: Integer) of object;
 protected // Métodos auxiliares para el parser
   function tokIdent: TTokenIdent; inline;
   function ConsumeSemicolon: boolean;
@@ -69,7 +71,7 @@ private   // Expresiones
   function ParseSimpleExpression: TExpression;
   function ParseExpression(AllowFormat: Boolean = False): TExpression;
 private   // Métodos auxiliares para las declaraciones
-  procedure ParseParameters(var Params: TVarDeclList);
+  procedure ParseParameters(var Params: TASTNodeList);
   function ParseSubrangeType: TSubrangeTypeDef;
   function ParseEnumType: TEnumTypeDef;
   function ParseArrayTypeDef: TArrayTypeDef;
@@ -680,7 +682,7 @@ begin
 end;
 {$endregion}
 {$region "Métodos auxiliares para las declaraciones"}
-procedure TParserPas.ParseVariableBlockDeclar(varContainer: TASTNodeList);
+procedure TParserPas.ParseVariableBlockDeclar(varContainer: TASTNodeList; paramType: TParamType);
 {Analiza una declaracíon de tipo:
   a, b, c: tipo_simple;
 o también:
@@ -692,7 +694,8 @@ var
   typeDef: TTypeDef;
   varDecl: TVarDecl;
 begin
-  idxVarIni := varContainer.Count;  //Guardamos la posición de la primera variable
+  //Explora la lista de identificadores y crea las variables.
+  idxVarIni := varContainer.Count;  //Guardamos el índice de la primera variable.
   repeat
     if tokIdent <> tiIDENTIF then begin
       GenError('Se esperaba un identificador.');
@@ -700,6 +703,7 @@ begin
     end;
     //Hay un identificador. Vamos creando la variable.
     varDecl := TVarDecl.Create(lex.token, lex.GetSrcPos);
+    varDecl.ParamType := paramType;   //Define el tipo de parámetro
     varContainer.Add(varDecl);   //La agregamos
     Next;
     if tokIdent <> tiCOMMA then Break; //Se asume que termina la lista de identificadores.
@@ -738,61 +742,7 @@ begin
     end;
   end;
 end;
-procedure TParserPas.ParseVariableBlockDeclar(varContainer: TVarDeclList);
-{Esta es la versión de ParseVariableBlockDeclar que trabaja con TVarDeclList. Todo lo
-demás es igual.}
-var
-  i, idxVarIni: Integer;
-  typeDef: TTypeDef;
-  varDecl: TVarDecl;
-begin
-  idxVarIni := varContainer.Count;  //Guardamos la posición de la primera variable
-  repeat
-    if tokIdent <> tiIDENTIF then begin
-      GenError('Se esperaba un identificador.');
-      Exit;
-    end;
-    //Hay un identificador. Vamos creando la variable.
-    varDecl := TVarDecl.Create(lex.token, lex.GetSrcPos);
-    varContainer.Add(varDecl);   //La agregamos
-    Next;
-    if tokIdent <> tiCOMMA then Break; //Se asume que termina la lista de identificadores.
-    Next;  //Toma la coma
-  until false;
-  if not ConsumeTok(tiCOLON, 'Se esperaba ":" después de la variable(s).') then
-    Exit;   //No es necesario limpiar nada adicional
-  //Lee el tipo y completa esa información en las variables creadas.
-  if tokIdent = tiIDENTIF then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
-    //Actualiza el tipo en todas las variables creadas.
-    for i := idxVarIni to varContainer.Count-1 do begin
-      //Todos estos ítems deben ser los que hemos agregados
-      varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
-      varDecl.TypeName := lex.token;  //Es tipo simple
-      //varDecl.TypeDef := Nil;  //No es necesario actualizar
-    end;
-    Next;   //Consume el identificador de tipo
-  end else begin //Debe ser una definición Inline: record ... end
-    typeDef := ParseTypeDefinition;
-    if HayError then begin
-      typeDef.Free; //Por si acaso
-      Exit;
-    end;
-    //Actualiza el tipo en todas las variables creadas, haciendo que todas las variables
-    //creadas en un solo bloque, apunten al mismo tipo definido "typeDef".
-    for i := idxVarIni to varContainer.Count-1 do begin
-      //Todos estos ítems deben ser los que hemos agregados
-      varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
-      //varDecl.TypeName := '';   //No es necesario actualizar
-      varDecl.TypeDef := typeDef;  //No es tipo estructurado o anónimo.
-      if i = idxVarIni then begin
-        //Ponemos, como propietario del tipo, solo a la primera declaración, para evitar
-        //que varios objetos intenten destruirlo.
-        varDecl.TypeOwner := true
-      end;
-    end;
-  end;
-end;
-procedure TParserPas.ParseParameters(var Params: TVarDeclList);
+procedure TParserPas.ParseParameters(var Params: TASTNodeList);
 {Lee parámetros de un procedimiento o función en la lista "Params", que debe ser solo una
 referencia a TVarDeclList, pero sin instanciar.
 Si se encuentra al menos un parámetro, se crea la lista "Params" y se le agregan los
@@ -800,7 +750,7 @@ parámetros.
 Si no se encuentran parámetros, se devuelve NIL en "Params".
 Si se encuentra algún error, se libera "Params" (si se creó) y se pone a NIL.}
 var
-  IsVarParam: Boolean;
+  paramType: TParamType;
 begin
   Params := nil;
   if tokIdent <> tiPAREN_OP then Exit;   //"("
@@ -811,14 +761,20 @@ begin
   end;
   while not HayError do begin
     // Verificar si es parámetro var
-    IsVarParam := False;
-    if tokIdent = tiVAR then begin
-      IsVarParam := True;
+    if tokIdent = tiVAR then begin       //VAR
+      paramType := ptyVar;
+      Next;
+    end else if tokIdent = tiCONST then begin //CONST
+      paramType := ptyConst;
+      Next;
+    end else if tokIdent = tiOUT then begin   //OUT
+      paramType := ptyOut;
       Next;
     end;
     // Leer identificadores y tipo
-    if Params = nil then Params:= TVarDeclList.Create(true);
-    ParseVariableBlockDeclar(Params);
+    if Params = nil then Params:= TASTNodeList.Create(true);
+    ParseVariableBlockDeclar(Params, paramType);
+    if HayError then Break;
     // Verificar si hay más parámetros
     if tokIdent = tiSEMIC then begin
       Next;
@@ -827,8 +783,14 @@ begin
       Break;
     end;
   end;
-  //Ya no se encuentran más parámetros.
-  ConsumeTok(tiPAREN_CL, 'Se esperaba ")" después de los parámetros');
+  //Ya no se encuentran más parámetros o hay error.
+  if HayError then begin
+    FreeAndNil(Params);
+  end else begin
+    if not ConsumeTok(tiPAREN_CL, 'Se esperaba ")" después de los parámetros') then begin
+      FreeAndNil(Params);
+    end;
+  end;
 end;
 function TParserPas.ParseSubrangeType: TSubrangeTypeDef;
 var
@@ -990,7 +952,7 @@ Si se encuentra algún error, se devuelve NIL.}
         branch.Destroy;
         Exit;
       end;
-      ParseVariableBlockDeclar(branch.Fields);   //Por ahora, solo soportamos un bloque de campos
+      ParseVariableBlockDeclar(branch.Fields, ptyNone);   //Por ahora, solo soportamos un bloque de campos
       if not ConsumeTok(tiPAREN_CL, 'Se esperaba ")".') then begin
         branch.Destroy;
         Exit;
@@ -1018,7 +980,7 @@ begin
       end;
       Break;  //Ya no debe seguir nada después de la parte variante.
     end else begin
-      ParseVariableBlockDeclar(RecordType.Fields);
+      ParseVariableBlockDeclar(RecordType.Fields, ptyNone);
     end;
     if tokIdent = tiSEMIC then begin  //Es ";"
       Next;   //Tomamos ";" y seguimos explorando
@@ -1148,13 +1110,20 @@ begin
   Next;  //Consumir ';'
 end;
 procedure TParserPas.ParseVarDeclaration(declars: TDeclarations);
+var
+  idxVarIni: Integer;
 begin
   Next;  //Consume VAR
   repeat
-    ParseVariableBlockDeclar(declars.Items);
+    idxVarIni := declars.Items.Count;  //Guardamos el índice de la primera variable.
+    ParseVariableBlockDeclar(declars.Items, ptyNone);
     if HayError then Exit;
+    if tokIdent<>tiSEMIC then begin
+      //Debe ser un parámetro adicional de declaración.
+      callParseAdicVarDec(declars.Items, idxVarIni);  //Procesa ABSOLUTE, REGISTER, ...
+    end;
     if not ConsumeSemicolon then Exit;   //Debe terminar con ";".
-  until tokIdent<>tiIDENTIF; //lex.tokType = tkKeyword;  //Sige otra declaración o BEGIN
+  until tokIdent<>tiIDENTIF;     //Sige otra declaración o BEGIN
 end;
 procedure TParserPas.ParseConstDeclaration(declars: TDeclarations);
 var
@@ -1216,7 +1185,7 @@ var
   Proc: TProcDecl;
   SrcPos: TSrcPos;
   procName, returnType: string;
-  Params: TVarDeclList;
+  Params: TASTNodeList;
   isFunction, IsAssembler: Boolean;
 begin
   SrcPos := lex.GetSrcPos;  //Posición donde empieza el proc/función.

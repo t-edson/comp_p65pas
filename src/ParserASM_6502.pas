@@ -10,18 +10,32 @@ interface
 uses
   Classes, SysUtils, fgl, alexiaLex, CompGlobals, P65C02utils, ASTunit,
   LazLogger;
-type //Identifcador de tokens
+type //Identifcador de tokens para el lexer
   TASMTokenIdent = (
     txOTHER    ,  //Not identified.
+    txEOF      ,  //End of file
     //Keywords
     txEND      ,  //Keyword "END"
+    txLOW      ,  //Keyword "LOW"
+    txHIGH     ,  //Keyword "HIGH"
     //Symbols
     //Operators
     txATSYMBOL ,  //Operator "@"
+    txCOLON    ,  //Symbol ":"
+    tXCOMMA    ,  //Symbol ","
     txPAREN_OP ,  //Symbol "("
     txPAREN_CL ,  //Symbol ")"
+    txHASH     ,  //Symbol "#"
     //Operators
     txDOT      ,  //Operator "."
+    txGREAT    ,  //Operator ">"
+    txGREAT_E  ,  //Operator ">="
+    txLESS     ,  //Operator "<"
+    txLESS_E   ,  //Operator "<="
+    txMINUS    ,  //Operator "-"
+    txMULT     ,  //Operator "*"
+    txNOT_EQ   ,  //Operator "<>"
+    txPLUS     ,  //Operator "+"
     //Literals
     txLITNUMBER,  //Literal numérico como: 0123
     //Others
@@ -44,6 +58,8 @@ type
     procedure GenWarn(txt: string);
     procedure GenError(txt: string);
     procedure GenError(txt: string; const srcPos: TSrcPos);
+  private  //Métodos auxiliares para el parser
+    procedure Next;
   private
     procedure AddDirectiveDB;
     procedure AddDirectiveDW;
@@ -61,12 +77,47 @@ type
       param: integer; const srcDec: TSrcPos);
     procedure AddDirectiveORG(param: word);
   public //Inicialización
-    procedure ProcessASMblock(Body: TBlock);
+    procedure ParseASMblock(Body: TBlock);
+    procedure ParseAdicVarDec(Items: TASTNodeList; idxVarIni: Integer);
     function DecodeNext: boolean;
     constructor Create(msg0: TMessageManager; lex0: TAleLexer);
     destructor Destroy; override;
   end;
 
+type  //Tipos para declaraciones adicionales de variables
+  { TAdicDeclar }
+  {Define aditional declaration settings for variable. Depends on target CPU architecture.
+  Each compiler will support only what fit to its architecture.}
+  TAdicDeclar = (
+    decNone,   //Normal declaration. Will be mapped in RAM according compiler decision.
+    decAbsol,  //Mapped in ABSOLUTE address
+    decZeroP,  //Mapped in Zero page
+    decDatSec, //Mapped at the Data section (Normal)
+    decRegis,  //Mapped at Work Register (WR)
+    decRegisA, //Mapped at A register
+    decRegisX, //Mapped at X register
+    decRegisY  //Mapped at Y register
+  );
+
+  {Description for aditional information in variables declaration: ABSOLUTE ,
+  REGISTER,  or initialization. }
+  TAdicVarDec = record
+    //Absolute or register information.
+    hasAdic  : TAdicDeclar;   //Flag. Indicates when variable is register or absolute.
+//    absVar   : TAstVarDec;    //Reference to variable, when is ABSOLUTE <variable>
+    absAddr  : TExpression;   {Reference to the AST expression that returns the absolute
+                              address where the variable should be located. Only valid
+                              when: hasAdic = decAbsol.}
+    //Initialization information.
+    hasInit  : TExpression;   {Reference and Flag. When is not NIL, refers to the
+                              expression in the AST where is the initial value.
+                              Initial expression must be a child node.}
+    //*** También puede dejarse "hasInit" como boolean y crear otro campo "initVal".
+    {Although the "absolute address" and the "initial value" can be obtained from the
+    children nodes of the variable declaration, the quantity of nodes (1 or 2) and the
+    value of the first node (first can be "absolute address" or "initial value"), are not
+    fixed. That's why we have references to these nodes (absAddr and hasInit).}
+  end;
 implementation
 
 resourcestring
@@ -83,6 +134,7 @@ resourcestring
   ER_EXPECT_ADDR = 'Expected address.';
   ER_IDENT_EXPEC = 'Identifier expected.';
   WA_ADDR_TRUNC  = 'Address truncated to fit instruction.';
+  ER_INV_MEMADDR  = 'Invalid memory address.';
 
 // Mensajes
 function TParserAsm6502.HayError: boolean;
@@ -103,6 +155,188 @@ procedure TParserAsm6502.GenError(txt: string; const srcPos: TSrcPos);
 {Genera un mensaje de error en la posición indicada.}
 begin
   msg.error(lex.GetMsgInfoE(txt, srcPos));
+end;
+//Métodos auxiliares para el parser
+procedure TParserAsm6502.Next;
+{Versión resumida de lex.Next con saltos por espacios}
+begin
+  lex.Next;
+  lex.SkipWhites;
+end;
+function TParserAsm6502.DecodeNext: boolean;
+{Decode the token in the current position, indicated by (frow, fcol), and returns:
+ - Token type in "toktyp".
+ - Start of next token in (frow, fcol).
+ - Value TRUE if the current line has changed.
+}
+var
+  ctx: TContext;
+  iden: String;
+begin
+  ctx := lex.curCtx;
+  if ctx._Eof then begin
+    ctx.tokType := tkNull;
+    tokIdent := txEOF;
+    exit(false);
+  end else if ctx._Eol then begin
+    ctx.tokType := tkEol;
+    tokIdent := txOTHER;
+    if ctx._LastLine then begin
+      //Cannot advance to a NextChar line. Keep position (EOF)
+    end else begin
+      //In a common line
+      ctx._setRow(ctx.frow+1);
+      ctx._setCol(1);
+    end;
+    exit(true);
+  end;
+  case ctx.curLine[ctx.fcol] of
+  #32, #9: begin
+    repeat
+      inc(ctx.fcol);
+    until ctx._Eol or not(ctx.curline[ctx.fcol] in [#32, #9]);
+    //Leaves (ctx.frow, ctx.fcol) in the begin of the next token.
+    ctx.tokType := tkSpace;
+    tokIdent := txOTHER;
+  end;
+  '0'..'9': begin
+    repeat
+      inc(ctx.fcol);
+    until ctx._Eol or not(ctx.curline[ctx.fcol] in ['0'..'9','.']);
+    ctx.tokType := tkLitNumber;
+    tokIdent := txLITNUMBER;
+  end;
+  '$': begin
+    repeat
+      inc(ctx.fcol);
+    until ctx._Eol or not(ctx.curline[ctx.fcol] in ['0'..'9','A'..'F','a'..'f']);
+    ctx.tokType := tkLitNumber;
+    tokIdent := txLITNUMBER;
+  end;
+  '%': begin
+    repeat
+      inc(ctx.fcol);
+    until ctx._Eol or not(ctx.curline[ctx.fcol] in ['0','1']);
+    ctx.tokType := tkLitNumber;
+    tokIdent := txLITNUMBER;
+  end;
+  'E','e': begin
+    ctx.ScanIdentifier;
+    if ctx.MatchToken('END') then begin
+      ctx.tokType := tkKeyword;
+      tokIdent := txEND;
+    end else begin
+      ctx.tokType := tkIdentifier;
+      tokIdent := txIDENTIF;
+    end;
+  end;
+  'H','h': begin
+    ctx.ScanIdentifier;
+    if ctx.MatchToken('HIGH') then begin
+      ctx.tokType := tkKeyword;
+      tokIdent := txHIGH;
+    end else begin
+      ctx.tokType := tkIdentifier;
+      tokIdent := txIDENTIF;
+    end;
+  end;
+  'L','l': begin
+    ctx.ScanIdentifier;
+    if ctx.MatchToken('LOW') then begin
+      ctx.tokType := tkKeyword;
+      tokIdent := txLOW;
+    end else begin
+      ctx.tokType := tkIdentifier;
+      tokIdent := txIDENTIF;
+    end;
+  end;
+  'A'..'D','F'..'G','I'..'K','M'..'Z','_',
+  'a'..'d','f'..'g','i'..'k','m'..'z': begin
+    ctx.ScanIdentifier;
+    ctx.tokType := tkIdentifier;
+    tokIdent := txIDENTIF;
+  end;
+  //Operadores
+  '+','-','*','/','\','=','^': begin
+    ctx._NextChar;
+    ctx.tokType := tkOperator;
+    tokIdent := txOTHER;
+  end;
+  '@': begin
+    ctx._NextChar;
+    ctx.tokType := tkOperator;
+    tokIdent := txATSYMBOL;
+  end;
+  '.': begin
+    ctx._NextChar;
+    ctx.tokType := tkOperator;
+    tokIdent := txDOT;
+  end;
+  '<': begin
+    ctx._NextChar;
+    ctx.tokType := tkOperator;
+    tokIdent := txLESS;
+  end;
+  '>': begin
+    ctx._NextChar;
+    ctx.tokType := tkOperator;
+    tokIdent := txGREAT;
+  end;
+  //Símbolos
+  '[',']': begin
+    ctx._NextChar;
+    ctx.tokType := tkSymbol;
+    tokIdent := txOTHER;
+  end;
+  ':': begin
+    ctx._NextChar;
+    ctx.tokType := tkSymbol;
+    tokIdent := txCOLON;
+  end;
+  ',': begin
+    ctx._NextChar;
+    ctx.tokType := tkSymbol;
+    tokIdent := tXCOMMA;
+  end;
+  '(': begin
+    ctx._NextChar;
+    ctx.tokType := tkSymbol;
+    tokIdent := txPAREN_OP;
+  end;
+  ')': begin
+    ctx._NextChar;
+    ctx.tokType := tkSymbol;
+    tokIdent := txPAREN_CL;
+  end;
+  '#': begin
+    ctx._NextChar;
+    ctx.tokType := tkSymbol;
+    tokIdent := txHASH;
+  end;
+  ';': begin
+    ctx._NextChar;
+    while not ctx._Eol do ctx._NextChar;
+    //repeat ctx._NextChar until ctx._Eol;
+    ctx.tokType := tkComment;
+    tokIdent := txCOMMENT;
+  end;
+  '''': begin
+    repeat inc(ctx.fcol); until ctx._Eol or (ctx.curline[ctx.fcol] = '''');
+    if ctx._Eol then begin
+      GenError('Unclosed string.');  //Don't stop scanning
+    end else begin
+      ctx._NextChar;  //Go to next character
+    end;
+    ctx.tokType := tkString;
+    tokIdent := txOTHER;
+  end;
+  else
+    //Unkmown token.
+    ctx.tokType := tkNull;  //WARNING: This make the current token will read as empty.
+    tokIdent := txOTHER;
+    ctx._NextChar;
+  end;
+  exit(false);
 end;
 
 function TParserAsm6502.GetFaddressByte(addr: integer): byte;
@@ -178,12 +412,12 @@ If not operand has found, error is generated and returns FALSE.}
     if tokIdent = txDOT then begin        //"."
       //Hay precisión de campo
       lex.Next;
-      if UpCase(lex.token) = 'LOW' then begin
+      if tokIdent = txLOW then begin   //'LOW'
         operation := aopSelByte;
         value := 0;
         lex.Next;
         exit(true);
-      end else if UpCase(lex.token) = 'HIGH' then begin
+      end else if tokIdent = txHIGH then begin  //'HIGH'
         operation := aopSelByte;
         value := 1;
         lex.Next;
@@ -218,12 +452,12 @@ If not operand has found, error is generated and returns FALSE.}
         GenError('Field expected after "@"');
         exit(false);
       end;
-    end else if (lex.token = '+') or (lex.token = '-') then begin
-      if lex.token='+' then operation := aopAddValue else operation := aopSubValue;
+    end else if tokIdent in [txPLUS, txMINUS] then begin  //"+", "-"
+      if tokIdent = txPLUS then operation := aopAddValue else operation := aopSubValue;
       //Get operand
       lex.Next;
       lex.SkipWhitesNoEOL;
-      if (lex.tokType = tkEol) or (lex.token = ';') then begin
+      if (lex.tokType = tkEol) or (tokIdent = txCOMMENT) then begin
         //End of line
         GenError('Operand expected');
         exit(false);
@@ -267,10 +501,10 @@ If not operand has found, error is generated and returns FALSE.}
   {Test if a position operand ('>' or '<') exist. If so return the operator,
   otherwise returns ' '.}
   begin
-    if lex.token = '>' then begin
+    if tokIdent = txGREAT then begin  //">"
       lex.Next;
       exit('>');
-    end else if lex.token = '<' then begin
+    end else if tokIdent = txLESS then begin  //"<"
       lex.Next;
       exit('<');
     end else begin
@@ -387,7 +621,6 @@ procedure TParserAsm6502.ProcInstrASM(idInst: TP6502Inst);
  This procedure must not process the EOL token or the "END" delimiter.
 }
 var
-  tok: String;
   addressModes: TP6502AddModes;
   srcInst: TSrcPos;
 begin
@@ -396,7 +629,6 @@ begin
   //Capture operand
   lex.Next;
   lex.SkipWhitesNoEOL;
-  tok := lex.token;
   if (lex.tokType = tkEol) or (tokIdent = txEND) then begin
     //Sin parámetros. Puede ser Implícito o Acumulador
     if aImplicit in addressModes then begin
@@ -410,7 +642,7 @@ begin
       GenError(ER_EXP_CON_VAL);
       exit;
     end;
-  end else if tok = '#' then begin
+  end else if tokIdent = txHASH then begin    //"#"
     //Direccionamiento Inmediato
     lex.Next;      //Toma "#"
     AddInstruction(idInst, aImmediat, 0, srcInst);
@@ -420,7 +652,7 @@ begin
       exit;
     end;
     lex.SkipWhitesNoEOL;
-  end else if tok = '(' then begin
+  end else if tokIdent = txPAREN_OP then begin  //"("
     //Direccionamiento Indirecto: (indirect), (indirect,X), (indirect),Y o (aAbsInIdX, X)
     AddInstruction(idInst, aIndirect, 0, srcInst);  //Add the instruction with "aImplicit" temporally. Later will be updated.
     lex.Next;
@@ -430,7 +662,7 @@ begin
         exit;
       end;
       lex.SkipWhitesNoEOL;
-      if lex.token = ',' then begin
+      if tokIdent = tXCOMMA then begin    //","
         //Can only be (indirect,X)
         lex.Next;  //Take number
         lex.SkipWhitesNoEOL;
@@ -451,11 +683,11 @@ begin
           GenError(ER_EXPEC_PAREN);
           exit;
         end;
-      end else if lex.token = ')' then begin
+      end else if tokIdent = txPAREN_CL then begin  //")"
         //(indirect) or (indirect),Y
         lex.Next;
         lex.SkipWhitesNoEOL;
-        if lex.token = ',' then begin
+        if tokIdent = tXCOMMA then begin  //","
           //Can only be (indirect),Y
           curInst.addMode := ord(aIndirecY);
           lex.Next;  //Toma número
@@ -493,7 +725,7 @@ begin
      addressing mode should be changed when code is generated.}
     lex.SkipWhitesNoEOL;
     //Verify is follows ,X o ,Y
-    if lex.token = ',' then begin
+    if tokIdent =  tXCOMMA then begin  //","
       lex.Next;
       lex.SkipWhitesNoEOL;
       if Upcase(lex.token) = 'X' then begin
@@ -536,7 +768,7 @@ var
 begin
   lblName := lex.token;   //guarda nombre de la etiqueta
   lex.Next;
-  if lex.token = ':' then begin
+  if tokIdent = txCOLON then begin  //":"
     //Definitivamente es una etiqueta
     lex.Next;      //Toma ":"
     //Crea la instrucción de etiqueta
@@ -595,7 +827,7 @@ begin
         AddDirectiveDB;  //Operand of DB will be updated with CaptureOperand().
         if not CaptureOperand(curInst.operand) then exit;
         lex.SkipWhitesNoEOL;
-      until lex.token<>',';
+      until tokIdent<>tXCOMMA; //","
       if lex.tokType = tkEol then begin
         //Must follow Eol
         lex.Next;
@@ -612,7 +844,7 @@ begin
         AddDirectiveDW;  //Operand of DB will be updated with CaptureOperand().
         if not CaptureOperand(curInst.operand) then exit;
         lex.SkipWhitesNoEOL;
-      until lex.token<>',';
+      until tokIdent<>tXCOMMA; //","
       if lex.tokType = tkEol then begin
         //Must follow Eol
         lex.Next;
@@ -641,7 +873,7 @@ begin
       GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
       exit;
     end;
-  end else if lex.tokType = tkComment then begin
+  end else if tokIdent = txCOMMENT then begin
     lex.SkipWhitesNoEOL;
   end else begin
     //Something is wrong
@@ -712,7 +944,8 @@ begin
   curBlock.AddInstruction(curInst);
 end;
 //Inicialización
-procedure TParserAsm6502.ProcessASMblock(Body: TBlock);
+procedure TParserAsm6502.ParseASMblock(Body: TBlock);
+{Punto de entrada para analizar un bloque ASM, de la forma ASM ... END.}
 var
   blkEnd: boolean;
 begin
@@ -729,6 +962,7 @@ begin
 //    debugln('fil=' + IntTostr(lex.curCtx.row0) + ', col=' + IntToStr(lex.curCtx.col0));
     ProcASMline;
     lex.SkipWhitesNoEOL;  //Omite espacios iniciales de la línea
+    if msg.nErrors>=100 then Break;
   end;
   if lex.atEof then begin
     GenError('Unclosed ASM block.');  //Don't stop scanning
@@ -738,136 +972,178 @@ begin
   lex.curCtx.OnDecodeNext := nil;   //Restore lexer here, in order to take the "END" with the new lexer and avoid problems of syntax.
   lex.Next;   //Take END with default lexer.
 end;
-function TParserAsm6502.DecodeNext: boolean;
-{Decode the token in the current position, indicated by (frow, fcol), and returns:
- - Token type in "toktyp".
- - Start of next token in (frow, fcol).
- - Value TRUE if the current line has changed.
-}
-var
-  ctx: TContext;
-  iden: String;
+procedure TParserAsm6502.ParseAdicVarDec(Items: TASTNodeList; idxVarIni: Integer);
+{Procesa la parte adicional de las declaraciones de variables. Esta parte opcional puede
+ser :
+ABSOLUTE <dirección>
+ABSOLUTE <variable>
+REGISTER
+Se separa el procesamiento en esta unidad, porque esta parte adicional es muy dependiente
+del hardware.}
+  function ReadAddres(tok: string): word;
+  {Lee una dirección de RAM a partir de una cadena numérica.
+  Puede generar error.}
+  var
+    n: LongInt;
+  begin
+    //COnvierte cadena (soporta binario y hexadecimal)
+    if not TryStrToInt(tok, n) then begin
+      //Podría fallar si es un número muy grande
+      GenError(ER_INV_MEMADDR);
+      {%H-}exit;
+    end;
+    if HayError then exit(0);
+    Result := n;
+  end;
+{var
+  n: integer;
+  tokL: String;
+  consTyp: TAstTypeDec;
+  nItems : integer;
+  consIni: TAstExpress;
+
+  aditVar: TAdicVarDec;}
 begin
-  ctx := lex.curCtx;
-  if ctx._Eof then begin
-    ctx.tokType := tkNull;
-    tokIdent := txOTHER;
-    exit(false);
-  end else if ctx._Eol then begin
-    ctx.tokType := tkEol;
-    tokIdent := txOTHER;
-    if ctx._LastLine then begin
-      //Cannot advance to a NextChar line. Keep position (EOF)
-    end else begin
-      //In a common line
-      ctx._setRow(ctx.frow+1);
-      ctx._setCol(1);
-    end;
-    exit(true);
+{  aditVar.hasAdic  := decNone;       //Bandera
+  aditVar.hasInit  := nil;
+  tokL := lowercase(lex.token);
+  if (tokL = 'absolute') or (lex.token = '@') then begin
+    // Hay especificación de dirección absoluta ////
+    aditVar.hasAdic := decAbsol;    //marca bandera
+    lex.Next;
+    lex.SkipWhites;
+    aditVar.absAddr := GetConstValue(varTyp, mainTypCreated);  //Leemos como constante
+    if HayError then exit;
+
+  end else if tokL = 'register' then begin    //Register type
+    aditVar.hasAdic := decRegis;    //marca bandera
+    lex.Next;
+    lex.SkipWhites;
+  end else if tokL = 'registera' then begin //Register type
+    aditVar.hasAdic := decRegisA;    //marca bandera
+    lex.Next;
+    lex.SkipWhites;
+  end else if tokL = 'registerx' then begin  //Register type
+    aditVar.hasAdic := decRegisX;    //marca bandera
+    lex.Next;
+    lex.SkipWhites;
+  end else if tokL = 'registery' then begin  //Register type
+    aditVar.hasAdic := decRegisY;    //marca bandera
+    lex.Next;
+    lex.SkipWhites;
+  end else if tokL = 'zeropage' then begin   //Zero page
+    aditVar.hasAdic := decZeroP;    //Set flag
+    lex.Next;
+    lex.SkipWhites;
   end;
-  case ctx.curLine[ctx.fcol] of
-  #32, #9: begin
-    repeat
-      inc(ctx.fcol);
-    until ctx._Eol or not(ctx.curline[ctx.fcol] in [#32, #9]);
-    //Leaves (ctx.frow, ctx.fcol) in the begin of the next token.
-    ctx.tokType := tkSpace;
-    tokIdent := txOTHER;
-  end;
-  '0'..'9': begin
-    repeat
-      inc(ctx.fcol);
-    until ctx._Eol or not(ctx.curline[ctx.fcol] in ['0'..'9','.']);
-    ctx.tokType := tkLitNumber;
-    tokIdent := txLITNUMBER;
-  end;
-  '$': begin
-    repeat
-      inc(ctx.fcol);
-    until ctx._Eol or not(ctx.curline[ctx.fcol] in ['0'..'9','A'..'F','a'..'f']);
-    ctx.tokType := tkLitNumber;
-    tokIdent := txLITNUMBER;
-  end;
-  '%': begin
-    repeat
-      inc(ctx.fcol);
-    until ctx._Eol or not(ctx.curline[ctx.fcol] in ['0','1']);
-    ctx.tokType := tkLitNumber;
-    tokIdent := txLITNUMBER;
-  end;
-  'E','e': begin
-    repeat inc(ctx.fcol); until ctx._Eol or not(ctx.curline[ctx.fcol] in ['_','a'..'z','A'..'Z','0'..'9']);
-    //Can be optimized using a first verification by size of the string and not comparing the first letter.
-    iden := Upcase(copy(ctx.curLine, ctx.col0, (ctx.fcol-ctx.col0)));
-    if iden = 'END' then begin
-      ctx.tokType := tkKeyword;
-      tokIdent := txEND;
-    end else begin
-      ctx.tokType := tkIdentifier;
-      tokIdent := txIDENTIF;
+  //Verifica compatibilidad de tamaños
+  if aditVar.hasAdic in [decRegisA, decRegisX, decRegisY] then begin
+    //Solo pueden ser de tamaño byte
+    if not varTyp.IsByteSize then begin
+      GenError('Only byte-size types can be a specific register.');
+      exit;
     end;
   end;
-  'A'..'D','F'..'Z','_',
-  'a'..'d','f'..'z': begin
-    repeat inc(ctx.fcol); until ctx._Eol or not(ctx.curline[ctx.fcol] in ['_','a'..'z','A'..'Z','0'..'9']);
-    ctx.tokType := tkIdentifier;
-    tokIdent := txIDENTIF;
-  end;
-  '@': begin
-    ctx._NextChar;
-    ctx.tokType := tkOperator;
-    tokIdent := txATSYMBOL;
-  end;
-  '+','-','*','/','\','=','^','#','>','<',':': begin
-    ctx._NextChar;
-    ctx.tokType := tkOperator;
-    tokIdent := txOTHER;
-  end;
-  '.': begin
-    ctx._NextChar;
-    ctx.tokType := tkOperator;
-    tokIdent := txDOT;
-  end;
-  ';': begin
-    ctx._NextChar;
-    while not ctx._Eol do ctx._NextChar;
-    //repeat ctx._NextChar until ctx._Eol;
-    ctx.tokType := tkComment;
-    tokIdent := txCOMMENT;
-  end;
-  '(': begin
-    ctx._NextChar;
-    ctx.tokType := tkSymbol;
-    tokIdent := txPAREN_OP;
-  end;
-  ')': begin
-    ctx._NextChar;
-    ctx.tokType := tkSymbol;
-    tokIdent := txPAREN_CL;
-  end;
-  ',','[',']': begin
-    ctx._NextChar;
-    ctx.tokType := tkOthers;
-    tokIdent := txOTHER;
-  end;
-  '''': begin
-    repeat inc(ctx.fcol); until ctx._Eol or (ctx.curline[ctx.fcol] = '''');
-    if ctx._Eol then begin
-      GenError('Unclosed string.');  //Don't stop scanning
-    end else begin
-      ctx._NextChar;  //Go to next character
+  //Puede seguir una sección de inicialización: var: char = 'A';
+  ProcComments;
+  if lex.token = '=' then begin
+    lex.Next;   //lo toma
+    ProcComments;
+    //Aquí debe seguir el valor inicial constante.
+    consIni := GetConstValue(varTyp, mainTypCreated);  //Leemos como constante
+    if HayError then exit;
+    consTyp := consIni.Typ;
+    aditVar.hasInit := consIni;
+    //Ya se tiene el valor constante para inicializar variable.
+    if aditVar.hasAdic in [decRegis, decRegisA, decRegisX, decRegisY] then begin
+      GenError('Cannot initialize REGISTER variables.');
+      exit;
+    end else if aditVar.hasAdic = decAbsol then begin
+      GenError('Cannot initialize ABSOLUTE variables.');
+      exit;
+    end else if aditVar.hasAdic = decZeroP then begin
+      GenError('Cannot initialize ZEROPAGE variables.');
+      exit;
+    end else if aditVar.hasAdic = decNone then begin
+      //Not specified declaration
+      {We force to be in Data Section. Otherwise compiler could try to allocate it in
+      primary Data section (defined by SET_DATA_ADDR ) and then it won't be able to be
+      initialized.}
+      aditVar.hasAdic := decDatSec;
     end;
-    ctx.tokType := tkString;
-    tokIdent := txOTHER;
+  end else begin
+    //No hay asignación inicial.
+    aditVar.hasInit := nil;
   end;
-  else
-    //Unkmown token.
-    ctx.tokType := tkNull;  //WARNING: This make the current token will read as empty.
-    tokIdent := txOTHER;
-    ctx._NextChar;
+  //Validate initialization for dynamic arrays.
+  if (varTyp.catType = tctArray) then begin
+    if varTyp.isDynam then begin
+      //Dynamic array
+      if aditVar.hasInit = nil then begin
+        //Es un arreglo dinámico. Debió inicializarse.
+        GenError(ER_EQU_EXPECTD);
+        exit;
+      end;
+      //Has initialization. Validates.
+      if consTyp.catType <> tctArray then begin
+        GenError('Expected an array.');
+        exit;
+      end;
+      //Here we assure "varTyp" and "consTyp" are both arrays.
+      //Validation for item types.
+      if varTyp.itmType <> consTyp.itmType then begin
+        //GenError('Item type doesn''t match for initialize array.');
+        GenError('Cannot initialize. Expected array of "%s". Got array of "%s".',
+                 [varTyp.itmType.name, consTyp.itmType.name]);
+        exit;
+      end;
+      //Both are arrays of the same item type.
+//      ast.DeleteTypeNode(varTyp);  //We don't need this type *** Genera error en la síntesis si se elimina.
+      varTyp := consTyp;  //Use the same array type declaration.
+      exit;
+    end;
+    if aditVar.hasInit<>nil then begin
+      nItems := consTyp.consNitm.value^.ValInt;
+      //Validation for category
+      if consTyp.catType <> tctArray then begin
+        GenError('Expected an array.');
+        exit;
+      end;
+      //both are arrays. Validation for item types.
+      if varTyp.itmType <> consTyp.itmType then begin
+        GenError('Item type doesn''t match for initialize array.');
+        exit;
+      end;
+      //Validation for size. Must have the same size to simplify creating and calling new types.
+      if varTyp.nItems < nItems then begin
+        GenError('Too many items to initialize array.');
+      end else if varTyp.nItems > nItems then begin
+        GenError('Too few items to initialize array.');
+      end ;
+      //Validate type compatibility
+      //First validation
+      if consTyp <> varTyp then begin
+        GenError('Expected type "%s". Got "%s".', [varTyp.name, consTyp.name]);
+        exit;
+      end;
+    end;
+  end else begin  //No array
+    if aditVar.hasInit<>nil then begin
+      if consTyp <> varTyp then begin
+        GenError('Cannot initialize. Expected type "%s". Got "%s".', [varTyp.name, consTyp.name]);
+        exit;
+      end;
+    end;
   end;
-  exit(false);
-end;
+  {Ya se validó la pertinencia de la inicialización y ya se tiene el operando de
+  inicialización en "consIni". Ahora toca validar la compatibilidad de los tipos.}
+  //Por ahora solo se permite inicializar arreglos.
+  if aditVar.hasInit<>nil then begin
+    if (varTyp.catType = tctArray) then begin
+    end else begin
+    end;
+  end;
+}end;
 constructor TParserAsm6502.Create(msg0: TMessageManager; lex0: TAleLexer);
 begin
   inherited Create;

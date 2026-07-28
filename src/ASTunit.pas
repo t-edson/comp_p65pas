@@ -133,7 +133,9 @@ type  //Declaraciones y clases base para el AST
     FIsForward: Boolean;  //True si es declaración FORWARD
     FIsAssembler: Boolean; //Indica si el procedimiento o función es ASSEMBLER.
   public
-    Parameters: TVarDeclList;   //Lista de parámetros. Si no hay parámetros contiene NIL.
+    //Lista de parámetros. Si no hay parámetros contiene NIL. Realmente debería ser
+    //"TVarDeclList" pero se usa "TASTNodeList" para reutilizar código.
+    Parameters: TASTNodeList;
     property Name: string read FName write FName;
     property Declarations: TDeclarations read FDeclarations;
     property Body: TBlock read FBody write FBody;
@@ -601,11 +603,18 @@ type  //Nodos de sentencias
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
 type  //Nodos de declaraciones
+  //Tipo de parámetro
+  TParamType = (
+    ptyNone,   //Parámetro por valor
+    ptyVar,    //Parámetro de tipo VAR
+    ptyConst,  //Parámetro de tipo CONST
+    ptyOut     //Parámetro de tipo OUT
+  );
   // Declaraciones de variables
   TVarDecl = class(TASTNode)
   private
     FIsParameter: Boolean;
-    FIsByReference: Boolean;
+    FParamType: TParamType;
   public
     Name: string;
     //Indentificador del tipo, cuando es un tipo identificado.
@@ -618,8 +627,9 @@ type  //Nodos de declaraciones
     // VAR a,b,c: <tipo estructurado>
     //comparten un mismo objeto "TTypeDef".
     TypeOwner: boolean;
+  public  //Manejo de parámetros
     property IsParameter: Boolean read FIsParameter write FIsParameter;
-    property IsByReference: Boolean read FIsByReference write FIsByReference;
+    property ParamType: TParamType read FParamType write FParamType;
   public  //Inicialización y depuración
     constructor Create(const AName: string; const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -824,7 +834,7 @@ type  //Nodos de declaraciones de tipos
   public
     ReturnTypeName: string;     // Tipo de retorno (solo para funciones)
     ReturnTypeDef: TTypeDef;    // Definición del tipo de retorno
-    Parameters: TVarDeclList;   // Lista de parámetros
+    Parameters: TASTNodeList;   // Lista de parámetros. Realmente debería ser "TVarDeclList" pero se usa "TASTNodeList" para reutilizar código.
     procedure AddParameter(Param: TVarDecl);
     property IsFunction: Boolean read FIsFunction write FIsFunction;
   public  //Inicialización y depuración
@@ -1847,7 +1857,7 @@ begin
   inherited Create(ntVarDecl, ASrcPos);
   Name := AName;
   FIsParameter := False;
-  FIsByReference := False;
+  FParamType := ptyNone;
   //La información de tipo debe completarse después
   TypeName := '';
   TypeDef := nil;
@@ -1868,7 +1878,7 @@ begin
   if FIsParameter then
   begin
     Result := Result + ' (parameter';
-    if FIsByReference then
+    if FParamType = ptyVar then
       Result := Result + ', var';
     Result := Result + ')';
   end;
