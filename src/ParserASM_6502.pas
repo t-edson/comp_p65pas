@@ -78,46 +78,24 @@ type
     procedure AddDirectiveORG(param: word);
   public //Inicialización
     procedure ParseASMblock(Body: TBlock);
-    procedure ParseAdicVarDec(Items: TASTNodeList; idxVarIni: Integer);
+    function ParseAdicVarDec(varDecl: TVarDecl): boolean;
     function DecodeNext: boolean;
     constructor Create(msg0: TMessageManager; lex0: TAleLexer);
     destructor Destroy; override;
   end;
 
-type  //Tipos para declaraciones adicionales de variables
-  { TAdicDeclar }
+const  //Tipos para declaraciones adicionales de variables
   {Define aditional declaration settings for variable. Depends on target CPU architecture.
   Each compiler will support only what fit to its architecture.}
-  TAdicDeclar = (
-    decNone,   //Normal declaration. Will be mapped in RAM according compiler decision.
-    decAbsol,  //Mapped in ABSOLUTE address
-    decZeroP,  //Mapped in Zero page
-    decDatSec, //Mapped at the Data section (Normal)
-    decRegis,  //Mapped at Work Register (WR)
-    decRegisA, //Mapped at A register
-    decRegisX, //Mapped at X register
-    decRegisY  //Mapped at Y register
-  );
+    //DEC_NONE   = 0;  //Normal declaration.
+    //DEC_ABSOL  = 1;  //Mapped in ABSOLUTE address
+    DEC_ZEROP  = 2;  //Mapped in Zero page
+    DEC_DATSEC = 3;  //Mapped at the Data section (Normal)
+    DEC_REGIS  = 4;  //Mapped at Work Register (WR)
+    DEC_REGISA = 5;  //Mapped at A register
+    DEC_REGISX = 6;  //Mapped at X register
+    DEC_REGISY = 7;  //Mapped at Y register
 
-  {Description for aditional information in variables declaration: ABSOLUTE ,
-  REGISTER,  or initialization. }
-  TAdicVarDec = record
-    //Absolute or register information.
-    hasAdic  : TAdicDeclar;   //Flag. Indicates when variable is register or absolute.
-//    absVar   : TAstVarDec;    //Reference to variable, when is ABSOLUTE <variable>
-    absAddr  : TExpression;   {Reference to the AST expression that returns the absolute
-                              address where the variable should be located. Only valid
-                              when: hasAdic = decAbsol.}
-    //Initialization information.
-    hasInit  : TExpression;   {Reference and Flag. When is not NIL, refers to the
-                              expression in the AST where is the initial value.
-                              Initial expression must be a child node.}
-    //*** También puede dejarse "hasInit" como boolean y crear otro campo "initVal".
-    {Although the "absolute address" and the "initial value" can be obtained from the
-    children nodes of the variable declaration, the quantity of nodes (1 or 2) and the
-    value of the first node (first can be "absolute address" or "initial value"), are not
-    fixed. That's why we have references to these nodes (absAddr and hasInit).}
-  end;
 implementation
 
 resourcestring
@@ -134,8 +112,8 @@ resourcestring
   ER_EXPECT_ADDR = 'Expected address.';
   ER_IDENT_EXPEC = 'Identifier expected.';
   WA_ADDR_TRUNC  = 'Address truncated to fit instruction.';
-  ER_INV_MEMADDR  = 'Invalid memory address.';
-
+  ER_INV_MEMADDR = 'Invalid memory address.';
+  ER_MODIF_INVAL_= 'Modificador inválido: %s';
 // Mensajes
 function TParserAsm6502.HayError: boolean;
 begin
@@ -972,178 +950,49 @@ begin
   lex.curCtx.OnDecodeNext := nil;   //Restore lexer here, in order to take the "END" with the new lexer and avoid problems of syntax.
   lex.Next;   //Take END with default lexer.
 end;
-procedure TParserAsm6502.ParseAdicVarDec(Items: TASTNodeList; idxVarIni: Integer);
-{Procesa la parte adicional de las declaraciones de variables. Esta parte opcional puede
-ser :
-ABSOLUTE <dirección>
-ABSOLUTE <variable>
-REGISTER
-Se separa el procesamiento en esta unidad, porque esta parte adicional es muy dependiente
-del hardware.}
-  function ReadAddres(tok: string): word;
-  {Lee una dirección de RAM a partir de una cadena numérica.
-  Puede generar error.}
-  var
-    n: LongInt;
-  begin
-    //COnvierte cadena (soporta binario y hexadecimal)
-    if not TryStrToInt(tok, n) then begin
-      //Podría fallar si es un número muy grande
-      GenError(ER_INV_MEMADDR);
-      {%H-}exit;
-    end;
-    if HayError then exit(0);
-    Result := n;
-  end;
-{var
-  n: integer;
-  tokL: String;
-  consTyp: TAstTypeDec;
-  nItems : integer;
-  consIni: TAstExpress;
-
-  aditVar: TAdicVarDec;}
+function TParserAsm6502.ParseAdicVarDec(varDecl: TVarDecl): boolean;
+{Procesa el modificador de las declaraciones de variables que no sean ABSOLUTE:
+VAR <identificador>: <tipo> [modificador] [ = <valor inicial>];
+Este modificador puede ser:
+- ABSOLUTE
+- REGISTER
+- REGISTERA
+- REGISTERX
+- REGISTERY
+- ZEROPAGE
+EL modificador ABSOLUTE no se evalúa acá, solo los adicionales.
+Si se produce algún error, devuelve FALSE.
+Se separa el procesamiento del modificador en esta unidad, porque esta parte adicional es
+muy dependiente del hardware.}
 begin
-{  aditVar.hasAdic  := decNone;       //Bandera
-  aditVar.hasInit  := nil;
-  tokL := lowercase(lex.token);
-  if (tokL = 'absolute') or (lex.token = '@') then begin
-    // Hay especificación de dirección absoluta ////
-    aditVar.hasAdic := decAbsol;    //marca bandera
+  if lex.curCtx.MatchToken('REGISTER') then begin    //Register type
+    varDecl.hasAdic := DEC_REGIS;    //marca bandera
     lex.Next;
     lex.SkipWhites;
-    aditVar.absAddr := GetConstValue(varTyp, mainTypCreated);  //Leemos como constante
-    if HayError then exit;
-
-  end else if tokL = 'register' then begin    //Register type
-    aditVar.hasAdic := decRegis;    //marca bandera
+  end else if lex.curCtx.MatchToken('REGISTERA') then begin //Register type
+    varDecl.hasAdic := DEC_REGISA;    //marca bandera
     lex.Next;
     lex.SkipWhites;
-  end else if tokL = 'registera' then begin //Register type
-    aditVar.hasAdic := decRegisA;    //marca bandera
+  end else if lex.curCtx.MatchToken('REGISTERX') then begin  //Register type
+    varDecl.hasAdic := DEC_REGISX;    //marca bandera
     lex.Next;
     lex.SkipWhites;
-  end else if tokL = 'registerx' then begin  //Register type
-    aditVar.hasAdic := decRegisX;    //marca bandera
+  end else if lex.curCtx.MatchToken('REGISTERY') then begin  //Register type
+    varDecl.hasAdic := DEC_REGISY;    //marca bandera
     lex.Next;
     lex.SkipWhites;
-  end else if tokL = 'registery' then begin  //Register type
-    aditVar.hasAdic := decRegisY;    //marca bandera
+  end else if lex.curCtx.MatchToken('ZEROPAGE') then begin   //Zero page
+    varDecl.hasAdic := DEC_ZEROP;    //Set flag
     lex.Next;
     lex.SkipWhites;
-  end else if tokL = 'zeropage' then begin   //Zero page
-    aditVar.hasAdic := decZeroP;    //Set flag
-    lex.Next;
-    lex.SkipWhites;
-  end;
-  //Verifica compatibilidad de tamaños
-  if aditVar.hasAdic in [decRegisA, decRegisX, decRegisY] then begin
-    //Solo pueden ser de tamaño byte
-    if not varTyp.IsByteSize then begin
-      GenError('Only byte-size types can be a specific register.');
-      exit;
-    end;
-  end;
-  //Puede seguir una sección de inicialización: var: char = 'A';
-  ProcComments;
-  if lex.token = '=' then begin
-    lex.Next;   //lo toma
-    ProcComments;
-    //Aquí debe seguir el valor inicial constante.
-    consIni := GetConstValue(varTyp, mainTypCreated);  //Leemos como constante
-    if HayError then exit;
-    consTyp := consIni.Typ;
-    aditVar.hasInit := consIni;
-    //Ya se tiene el valor constante para inicializar variable.
-    if aditVar.hasAdic in [decRegis, decRegisA, decRegisX, decRegisY] then begin
-      GenError('Cannot initialize REGISTER variables.');
-      exit;
-    end else if aditVar.hasAdic = decAbsol then begin
-      GenError('Cannot initialize ABSOLUTE variables.');
-      exit;
-    end else if aditVar.hasAdic = decZeroP then begin
-      GenError('Cannot initialize ZEROPAGE variables.');
-      exit;
-    end else if aditVar.hasAdic = decNone then begin
-      //Not specified declaration
-      {We force to be in Data Section. Otherwise compiler could try to allocate it in
-      primary Data section (defined by SET_DATA_ADDR ) and then it won't be able to be
-      initialized.}
-      aditVar.hasAdic := decDatSec;
-    end;
   end else begin
-    //No hay asignación inicial.
-    aditVar.hasInit := nil;
+    lex.Next;
+    lex.SkipWhites;
+    GenError(Format(ER_MODIF_INVAL_, [lex.token]));
+    Exit(false);
   end;
-  //Validate initialization for dynamic arrays.
-  if (varTyp.catType = tctArray) then begin
-    if varTyp.isDynam then begin
-      //Dynamic array
-      if aditVar.hasInit = nil then begin
-        //Es un arreglo dinámico. Debió inicializarse.
-        GenError(ER_EQU_EXPECTD);
-        exit;
-      end;
-      //Has initialization. Validates.
-      if consTyp.catType <> tctArray then begin
-        GenError('Expected an array.');
-        exit;
-      end;
-      //Here we assure "varTyp" and "consTyp" are both arrays.
-      //Validation for item types.
-      if varTyp.itmType <> consTyp.itmType then begin
-        //GenError('Item type doesn''t match for initialize array.');
-        GenError('Cannot initialize. Expected array of "%s". Got array of "%s".',
-                 [varTyp.itmType.name, consTyp.itmType.name]);
-        exit;
-      end;
-      //Both are arrays of the same item type.
-//      ast.DeleteTypeNode(varTyp);  //We don't need this type *** Genera error en la síntesis si se elimina.
-      varTyp := consTyp;  //Use the same array type declaration.
-      exit;
-    end;
-    if aditVar.hasInit<>nil then begin
-      nItems := consTyp.consNitm.value^.ValInt;
-      //Validation for category
-      if consTyp.catType <> tctArray then begin
-        GenError('Expected an array.');
-        exit;
-      end;
-      //both are arrays. Validation for item types.
-      if varTyp.itmType <> consTyp.itmType then begin
-        GenError('Item type doesn''t match for initialize array.');
-        exit;
-      end;
-      //Validation for size. Must have the same size to simplify creating and calling new types.
-      if varTyp.nItems < nItems then begin
-        GenError('Too many items to initialize array.');
-      end else if varTyp.nItems > nItems then begin
-        GenError('Too few items to initialize array.');
-      end ;
-      //Validate type compatibility
-      //First validation
-      if consTyp <> varTyp then begin
-        GenError('Expected type "%s". Got "%s".', [varTyp.name, consTyp.name]);
-        exit;
-      end;
-    end;
-  end else begin  //No array
-    if aditVar.hasInit<>nil then begin
-      if consTyp <> varTyp then begin
-        GenError('Cannot initialize. Expected type "%s". Got "%s".', [varTyp.name, consTyp.name]);
-        exit;
-      end;
-    end;
-  end;
-  {Ya se validó la pertinencia de la inicialización y ya se tiene el operando de
-  inicialización en "consIni". Ahora toca validar la compatibilidad de los tipos.}
-  //Por ahora solo se permite inicializar arreglos.
-  if aditVar.hasInit<>nil then begin
-    if (varTyp.catType = tctArray) then begin
-    end else begin
-    end;
-  end;
-}end;
+  Exit(true);
+end;
 constructor TParserAsm6502.Create(msg0: TMessageManager; lex0: TAleLexer);
 begin
   inherited Create;

@@ -1,5 +1,5 @@
 program muestra; 
-var a: byte;
+var a: byte absolute aaa;
     b,c: array[0..2] of byte;
 //procedure MostrarMensaje; forward;
 begin

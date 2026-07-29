@@ -602,6 +602,11 @@ type  //Nodos de sentencias
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
+const //Tipos de declaraciones de variables
+  DEC_NONE   = 0;  //Normal declaration. Will be mapped in RAM according compiler decision.
+  DEC_ABSOL  = 1;  //Mapped in ABSOLUTE address
+  {Queda abierta la definición de otros tipos de declaración si el compilador los soporta}
+
 type  //Nodos de declaraciones
   //Tipo de parámetro
   TParamType = (
@@ -616,7 +621,15 @@ type  //Nodos de declaraciones
     FIsParameter: Boolean;
     FParamType: TParamType;
   public
-    Name: string;
+    Name      : string;
+    hasAdic   : Byte;         {Valor que define el tipo de parámetro adicional. Por
+                               defecto toma el valor DEC_NONE. Se maneja como número en
+                               lugar de un enumerado fijo porque es dependiente del
+                               hardware}
+    initVal   : TExpression;   //La expresión que define el valor inicial
+    absAddr   : TExpression;   {Reference to the AST expression that returns the absolute
+                               address where the variable should be located.}
+  public   //Campos para el tipo
     //Indentificador del tipo, cuando es un tipo identificado.
     TypeName : string;
     //Referencia al tipo cuando el tipo es estructurado
@@ -1855,12 +1868,15 @@ end;
 constructor TVarDecl.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntVarDecl, ASrcPos);
-  Name := AName;
+  Name       := AName;
+  hasAdic    := DEC_NONE;  //Indica que no hay parñametros adicionales en la declaración
   FIsParameter := False;
   FParamType := ptyNone;
+  //initVal = Nil;    //No es necesario
+  //absAddr = Nil;    //No es necesario
   //La información de tipo debe completarse después
   TypeName := '';
-  TypeDef := nil;
+  //TypeDef := nil;   //No es necesario
   TypeOwner := False;
 end;
 destructor TVarDecl.Destroy;
@@ -1869,9 +1885,10 @@ begin
     //Este nodo es el propietario del tipo. Lo destruimos.
     TypeDef.Destroy;
   end;
+  absAddr.Free;     //Destruye si se ha usado
+  initVal.Free;     //Destruye si se ha usado
   inherited Destroy;
 end;
-
 function TVarDecl.ToString: string;
 begin
   Result := Format('VarDecl: %s: %s', [Name, TypeName]);

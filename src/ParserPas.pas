@@ -24,8 +24,8 @@ TParserPas = class
 private
   lex    : TAleLexer;       //Analizador léxico
   msg    : TMessageManager; //Referencia al gestor de mensajes
-  procedure ParseVariableBlockDeclar(varContainer: TASTNodeList;
-    paramType: TParamType);
+  function ParseVariableBlockDeclar(varContainer: TASTNodeList;
+    paramType: TParamType): byte;
 public    //Componentes principales del compilador
   astProg: TProgram;        //Árbol de sintaxis abstracto de un programa
   astUnit: TUnit;           //Árbol de sintaxis abstracto de una unidad
@@ -51,7 +51,7 @@ public    //Eventos
   //Llamada para procesar bloques ASM
   callParseASMblock: procedure(Body: TBlock) of object;
   //Llamada para procesar parámetros adicionales declaración de variables
-  callParseAdicVarDec: procedure(Items: TASTNodeList; idxVarIni: Integer) of object;
+  callParseAdicVarDec: function(varDecl: TVarDecl): boolean of object;
 protected // Métodos auxiliares para el parser
   function tokIdent: TTokenIdent; inline;
   function ConsumeSemicolon: boolean;
@@ -340,7 +340,7 @@ Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve
       ArrayAccess := TArrayIndex.Create(BaseExpr, lex.GetSrcPos);
       // Parsear índices
       while not HayError do begin
-        idxExpr := ParseExpression;
+        idxExpr := ParseSimpleExpression;
         if HayError then Break;
         ArrayAccess.AddIndex(idxExpr);
         if tokIdent = tiCOMMA then Next else Break;
@@ -682,13 +682,15 @@ begin
 end;
 {$endregion}
 {$region "Métodos auxiliares para las declaraciones"}
-procedure TParserPas.ParseVariableBlockDeclar(varContainer: TASTNodeList; paramType: TParamType);
+function TParserPas.ParseVariableBlockDeclar(varContainer: TASTNodeList;
+                                             paramType: TParamType): byte;
 {Analiza una declaracíon de tipo:
   a, b, c: tipo_simple;
 o también:
   a, b, c: <declaración de tipo estructurado>
 Conforme va reconociendo los ítems, va creando las variables correspondientes en la lista
-"varContainer".}
+"varContainer".
+Devuelve la cantidad de variables procesadas en el bloque.}
 var
   i, idxVarIni: Integer;
   typeDef: TTypeDef;
@@ -699,7 +701,7 @@ begin
   repeat
     if tokIdent <> tiIDENTIF then begin
       GenError('Se esperaba un identificador.');
-      Exit;
+      Exit(0);
     end;
     //Hay un identificador. Vamos creando la variable.
     varDecl := TVarDecl.Create(lex.token, lex.GetSrcPos);
@@ -710,7 +712,7 @@ begin
     Next;  //Toma la coma
   until false;
   if not ConsumeTok(tiCOLON, 'Se esperaba ":" después de la variable(s).') then
-    Exit;   //No es necesario limpiar nada adicional
+    Exit(0);   //No es necesario limpiar nada adicional
   //Lee el tipo y completa esa información en las variables creadas.
   if tokIdent  = tiIDENTIF then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
     //Actualiza el tipo en todas las variables creadas.
@@ -725,7 +727,7 @@ begin
     typeDef := ParseTypeDefinition;
     if HayError then begin
       typeDef.Free; //Por si acaso
-      Exit;
+      Exit(0);
     end;
     //Actualiza el tipo en todas las variables creadas, haciendo que todas las variables
     //creadas en un solo bloque, apunten al mismo tipo definido "typeDef".
@@ -741,6 +743,8 @@ begin
       end;
     end;
   end;
+  //Devuelve la cantidad de variables agregadas
+  Exit(varContainer.Count - idxVarIni);
 end;
 procedure TParserPas.ParseParameters(var Params: TASTNodeList);
 {Lee parámetros de un procedimiento o función en la lista "Params", que debe ser solo una
@@ -796,7 +800,7 @@ function TParserPas.ParseSubrangeType: TSubrangeTypeDef;
 var
   LowExpr, HighExpr: TExpression;
 begin
-  LowExpr := ParseExpression;
+  LowExpr := ParseFactor;
   if HayError then begin
     Result := nil;
     Exit;
@@ -808,7 +812,7 @@ begin
     Exit;
   end;
   Next;
-  HighExpr := ParseExpression;
+  HighExpr := ParseFactor;
   if HayError then begin
     LowExpr.Free;
     Result := nil;
@@ -853,11 +857,11 @@ begin
   if tokIdent = tiBRACK_OP then begin    //Es un arreglo estático: ARRAY[1..3] OF ...
     Next;     //Consume "[".
     while not HayError do begin
-      LowExpr := ParseExpression;
+      LowExpr := ParseFactor;
       if HayError then Break;
       if tokIdent = tiDOTDOT then begin
         Next;
-        HighExpr := ParseExpression;
+        HighExpr := ParseFactor;
         if HayError then begin
           LowExpr.Free;
           ArrayType.Free;
@@ -1110,17 +1114,54 @@ begin
   Next;  //Consumir ';'
 end;
 procedure TParserPas.ParseVarDeclaration(declars: TDeclarations);
+{Analiza la sección de declaración de variables. Esta sección puede incluri varios
+bloques de variables:
+VAR
+  a, b, c: Byte;  //Bloque 1
+  d, e: word;     //Bloque 2
+}
 var
-  idxVarIni: Integer;
+  nvars: Byte;    //Número de variables declaradas en un bloque
+  varDecl: TVarDecl;
 begin
   Next;  //Consume VAR
   repeat
-    idxVarIni := declars.Items.Count;  //Guardamos el índice de la primera variable.
-    ParseVariableBlockDeclar(declars.Items, ptyNone);
+    nvars := ParseVariableBlockDeclar(declars.Items, ptyNone);
     if HayError then Exit;
-    if tokIdent<>tiSEMIC then begin
-      //Debe ser un parámetro adicional de declaración.
-      callParseAdicVarDec(declars.Items, idxVarIni);  //Procesa ABSOLUTE, REGISTER, ...
+    //Puede seguir un modificador de declaración
+    if not(tokIdent in [tiSEMIC, tiEQUAL]) then begin
+      if nvars>1 then begin
+        GenError('No se puede aplicar este modificador a más de una variable.');
+        Exit;
+      end;
+      //Hay una sola variable declarada
+      varDecl := TVarDecl(declars.Items[declars.Items.Count-1]);  //La variable
+      //Procesa modificadores ABSOLUTE, REGISTER, ...
+      if tokIdent in [tiABSOLUTE, tiADDRESS] then begin
+        // Hay especificación de dirección absoluta
+        Next;
+        varDecl.hasAdic := DEC_ABSOL;    //marca bandera
+        varDecl.absAddr := ParseSimpleExpression;  //Leemos expresión de dirección
+        if HayError then exit;
+      end else begin
+        //No es ABSOLUTE, debe ser un modificador adicional
+        if not callParseAdicVarDec(varDecl) then begin
+          Exit;  //Hubo error
+        end;
+      end;
+    end;
+    //Puede seguir una sección de inicialización: var: char = 'A';
+    if tokIdent = tiEQUAL then begin  //"="
+      Next;   //Toma "="
+      if nvars>1 then begin
+        GenError('No se puede inicializar a más de una variable.');
+        Exit;
+      end;
+      //Hay una sola variable declarada
+      varDecl := TVarDecl(declars.Items[declars.Items.Count-1]);  //La variable
+      //Aquí debe seguir el valor inicial constante.
+      varDecl.initVal := ParseExpression(False);
+      if HayError then Exit;
     end;
     if not ConsumeSemicolon then Exit;   //Debe terminar con ";".
   until tokIdent<>tiIDENTIF;     //Sige otra declaración o BEGIN
@@ -1353,16 +1394,11 @@ var
 begin
   SrcPos := lex.GetSrcPos;
   if not ConsumeTok(tiWHILE, 'Se esperaba "while"') then Exit;
-
   Condition := ParseExpression;
-
   if HayError then Exit;
-
   if not ConsumeTok(tiDO, 'Se esperaba "do"') then Exit;
-
   Body := TBlock.Create(lex.GetSrcPos);
   ParseStatement(Body);
-
   if not HayError then
     Block.AddStatement(TWhileLoop.Create(Condition, Body, SrcPos));
 end;
@@ -1454,7 +1490,7 @@ var
 begin
   while not HayError do begin
     // Parsear el límite inferior
-    LowExpr := ParseExpression;
+    LowExpr := ParseFactor;
     if HayError then begin
       LowExpr.Free;
       Exit;
@@ -1463,7 +1499,7 @@ begin
     if tokIdent = tiDOTDOT then begin
       Next;  // Consumir '..'
       // Parsear el límite superior
-      HighExpr := ParseExpression;
+      HighExpr := ParseFactor;
       if HayError then begin
         LowExpr.Free;
         HighExpr.Free;
@@ -1517,7 +1553,7 @@ var
 begin
   SrcPos := lex.GetSrcPos;
   Next;  //Consume "CASE"
-  Selector := ParseExpression;
+  Selector := ParseSimpleExpression;
   if HayError then begin
     Selector.Free;
     Exit;
