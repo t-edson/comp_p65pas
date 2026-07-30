@@ -15,7 +15,7 @@ var
   sprite1color: byte absolute $D027;
   sprite1adres: [64]byte absolute $2000;
                              
-procedure initSprite1;
+procedure initSprite1(a: byte);
 
 implementation
     

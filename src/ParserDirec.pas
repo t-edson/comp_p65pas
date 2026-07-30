@@ -661,7 +661,7 @@ begin
   end;
 end;
 function TParserDirective.jerOp(operad: String): Integer;
-//Devuelve la jerarquía de un operador ver documentación técnica.
+//Devuelve la precedencia de un operador.Ver documentación técnica.
 begin
     case operad of
     'OR','XOR'             : Result := 2;

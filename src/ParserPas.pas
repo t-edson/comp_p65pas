@@ -83,7 +83,8 @@ private   // Declaraciones
   procedure ParseUsesClause(const unitContainer: TUnitRefList);
   procedure ParseVarDeclaration(declars: TDeclarations);
   procedure ParseConstDeclaration(declars: TDeclarations);
-  procedure ParseProcedureDeclaration(declars: TDeclarations);
+  procedure ParseProcedureDeclaration(declars: TDeclarations;
+    location: TElemLocation);
   procedure ParseTypeDeclaration(declars: TDeclarations);
 private   // Instrucciones
   procedure ParseAssigOrProcedureCall(var Block: TBlock);
@@ -98,7 +99,7 @@ private   // Instrucciones
   procedure ParseExitStatement(var Block: TBlock);
 public    // Sentencia, bloque y programa
   procedure ParseStatement(Body: TBlock);
-  procedure ParseDeclarations(Declars: TDeclarations);
+  procedure ParseDeclarations(Declars: TDeclarations; location: TElemLocation);
   procedure ParseBody(Body: TBlock);
   procedure ParseProgramHeader;
   procedure ParseProgram;
@@ -1226,7 +1227,7 @@ begin
     ConsumeSemicolon;
   end;
 end;
-procedure TParserPas.ParseProcedureDeclaration(declars: TDeclarations);
+procedure TParserPas.ParseProcedureDeclaration(declars: TDeclarations; location: TElemLocation);
 {Realiza el análisis de un procedimiento o función.}
 var
   Proc: TProcDecl;
@@ -1247,17 +1248,28 @@ begin
       if not ConsumeTok(tiCOLON, 'Se esperaba ":" después del nombre') then Exit;
       if not ConsumeIdent(returnType, 'Se esperaba el tipo de retorno.') then Exit;
   end;
-  if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then Exit;
+  if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then begin
+    Params.Free;   //Por si se creó
+    Exit;
+  end;
   //Verifica ASSEMBLER
   IsAssembler := False;
   if tokIdent = tiASSEMBLER then begin
     Next;     //Consume
-    if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then Exit;
+    if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then begin
+      Params.Free;   //Por si se creó
+      Exit;
+    end;
     IsAssembler := True;
   end;
-  if tokIdent = tiFORWARD then begin      //Es declaración FORWARD
-    Next;
-    if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then Exit;
+  if (tokIdent = tiFORWARD) or (location = locInterface) then begin      //Es declaración FORWARD
+    if tokIdent = tiFORWARD then begin
+      Next;   //Consume "FORWARD"
+      if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then begin
+        Params.Free;   //Por si se creó
+        Exit;
+      end;
+    end;
     Proc := TProcDecl.Create(procName, SrcPos, True);
     Proc.Parameters := Params;  //Puede ser NIL.
     Proc.ReturnTypeName := returnType;
@@ -1289,7 +1301,7 @@ begin
       declars.Add(Proc);
     end else begin
       //Es proc/función normal.
-      ParseDeclarations(Proc.Declarations);
+      ParseDeclarations(Proc.Declarations, location);
       if HayError then begin
         Proc.Destroy;
         Exit;
@@ -1704,7 +1716,7 @@ begin
     Next;
   end;
 end;
-procedure TParserPas.ParseDeclarations(Declars: TDeclarations);
+procedure TParserPas.ParseDeclarations(Declars: TDeclarations; location: TElemLocation);
 begin
   while not HayError do begin
     if tokIdent = tiVAR then
@@ -1712,7 +1724,7 @@ begin
     else if tokIdent = tiCONST then
       ParseConstDeclaration(Declars)
     else if (tokIdent = tiPROCED) or (tokIdent = tiFUNCT) then
-      ParseProcedureDeclaration(Declars)
+      ParseProcedureDeclaration(Declars, location)
     else if tokIdent = tiTYPE then
       ParseTypeDeclaration(Declars)
     else
@@ -1776,7 +1788,7 @@ begin
   if HayError then Exit;
 
   // Analizar las declaraciones
-  ParseDeclarations(astProg.Declarations);
+  ParseDeclarations(astProg.Declarations, locMain);
   if HayError then Exit;
 
   // Analizar el cuerpo principal
@@ -1809,7 +1821,7 @@ begin
   //USES en interface (opcional)
   if tokIdent = tiUSES then ParseUsesClause(astUnit.InterfaceUses);
   // Declaraciones de interface
-  ParseDeclarations(astUnit.InterfaceDecls);
+  ParseDeclarations(astUnit.InterfaceDecls, locInterface);
   if HayError then begin
     Exit;
   end;
@@ -1820,7 +1832,7 @@ begin
   //USES en implementation (opcional)
   if tokIdent = tiUSES then ParseUsesClause(astUnit.ImplementationUses);
   // Declaraciones de implementation
-  ParseDeclarations(astUnit.ImplementationDecls);
+  ParseDeclarations(astUnit.ImplementationDecls, locImplement);
   if HayError then begin
     Exit;
   end;
@@ -1843,6 +1855,7 @@ begin
     end;
   end;
   //Punto final
+  if not ConsumeTok(tiEND, 'Se esperaba "END"') then Exit;
   if tokIdent <> tiDOT then
     GenError('Se esperaba "." al final de la unidad');
   Next;

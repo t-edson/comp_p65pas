@@ -2,6 +2,10 @@ program muestra;
 var a: byte absolute aaa;
     b,c: array[0..2] of byte;
 //procedure MostrarMensaje; forward;
+procedure Locate(x: byte  registerX; y: byte  registerY);
+begin
+end;
+
 {$MSGBOX "He\tllo"}
 begin
   a := #$41'''def';
