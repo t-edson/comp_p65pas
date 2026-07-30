@@ -2,6 +2,7 @@ program muestra;
 var a: byte absolute aaa;
     b,c: array[0..2] of byte;
 //procedure MostrarMensaje; forward;
+{$MSGBOX "He\tllo"}
 begin
   a := #$41'''def';
   a := 'aaa'#65;

@@ -848,12 +848,17 @@ begin
   Result := EnumType;
 end;
 function TParserPas.ParseArrayTypeDef: TArrayTypeDef;
+{Procesa la declaración de tipos arreglo de la forma:
+ARRAY [<valor_ini>..<valor_fin>] OF <tipo>;
+Opcionalmente, y aunque no es estándar en Pascal, se acepta también la forma:
+[<valor_ini>..<valor_fin>] OF <tipo>;
+}
 var
   ArrayType: TArrayTypeDef;
   LowExpr, HighExpr: TExpression;
 begin
   ArrayType := TArrayTypeDef.Create(lex.GetSrcPos);
-  Next;     //Consume ARRAY
+  if tokIdent = tiARRAY then Next;     //Consume ARRAY, pero se acepta también que vaya "["
   if tokIdent = tiBRACK_OP then begin    //Es un arreglo estático: ARRAY[1..3] OF ...
     Next;     //Consume "[".
     while not HayError do begin
@@ -869,9 +874,9 @@ begin
         end;
         ArrayType.AddRange(TArrayRange.Create(LowExpr, HighExpr, lex.GetSrcPos));
       end else if tokIdent = tiBRACK_CL then begin
-        //Es una definiicón corta: ARRAY[5] OF ...
-        HighExpr := LowExpr;
-        LowExpr := TNumberLiteral.Create(0, lex.GetSrcPos);   //Índice menor = 0
+        //Es una definición corta: ARRAY[5] OF ...
+        HighExpr := Nil;   //Indica de esta forma que es la forma simplificada
+        //LowExpr := TNumberLiteral.Create(0, lex.GetSrcPos);   //Índice menor = 0
         ArrayType.AddRange(TArrayRange.Create(LowExpr, HighExpr, lex.GetSrcPos));
       end else begin   //Sigue otra cosa
         GenError('Se esperaba ".." o "]" en el rango del arreglo');
@@ -886,10 +891,11 @@ begin
       Exit(nil);
     end;
   end;
-  if not ConsumeTok(tiOF, 'Se esperaba "of"') then begin
-    ArrayType.Free;
-    Exit(nil);
-  end;
+  //if not ConsumeTok(tiOF, 'Se esperaba "of"') then begin
+  //  ArrayType.Free;
+  //  Exit(nil);
+  //end;
+  if tokIdent = tiOF then Next;   //Es opcional en P65Pas
   //Lee tipo de los elementos (puede ser cualquier tipo)
   if tokIdent = tiIDENTIF then begin
     ArrayType.ElementTypeName := lex.token;
@@ -1068,7 +1074,7 @@ begin
     tiPAREN_OP: begin        //Enumerado: = (Rojo, Verde, Azul)
       Result := ParseEnumType;
     end;
-    tiARRAY: begin           //Arreglo: = array[1..10] of integer
+    tiARRAY, tiBRACK_OP: begin //Arreglo: = array[1..10] of integer
       Result := ParseArrayTypeDef;
     end;
     tiRECORD: begin          //Registro: = record ... end

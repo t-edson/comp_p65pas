@@ -6,6 +6,49 @@ interface
 uses
   Classes, SysUtils, fgl, math, LazLogger, FileUtil,
   alexiaLex, ParserPas, CompGlobals, MirList, CompOptions;
+type //Identifcador de tokens para el lexer
+  TDIRTokenIdent = (
+    tdOTHER    ,  //Not identified.
+    tdEOF      ,  //End of file
+    //Keywords
+    tdAND      ,  //Keyword "AND"
+    tdNOT      ,  //Keyword "NOT"
+    tdOR       ,  //Keyword "OR"
+    tdXOR      ,  //Keyword "XOR"
+    //Symbols
+    //Operators
+    tdATSYMBOL ,  //Operator "@"
+    tdCOLON    ,  //Symbol ":"
+    tdCOMMA    ,  //Symbol ","
+    tdPAREN_OP ,  //Symbol "("
+    tdPAREN_CL ,  //Symbol ")"
+    tdHASH     ,  //Symbol "#"
+    //Operators
+    tdBACK     ,  //Operator "\"
+    tdDIV      ,  //Operator "/"
+    tdDOT      ,  //Operator "."
+    tdMINUS    ,  //Operator "-"
+    tdMINUSEQ  ,  //Operator "-="
+    tdMULT     ,  //Operator "*"
+    tdPERCEN   ,  //Operator "%"
+    tdPLUS     ,  //Operator "+"
+    tdPLUSEQ   ,  //Operator "+="
+    tdPOINTER  ,  //Operator "^"
+    //Logic operators
+    tdEQUAL    ,  //Operator "="
+    tdGREAT    ,  //Operator ">"
+    tdGREAT_E  ,  //Operator ">="
+    tdLESS     ,  //Operator "<"
+    tdLESS_E   ,  //Operator "<="
+    tdNOT_EQ   ,  //Operator "<>"
+    //Literals
+    tdLITNUMBER,  //Literal numérico como: 0123
+    tdLITSTRING,  //LIteral String
+    //Others
+    tdCOMMENT,    //Comentarios
+    tdIDENTIF     //Identificadores
+  );
+
 type  //Tipos para manejo de expresiones
   TDirDatType = (ddtNumber, ddtString);
 
@@ -70,7 +113,6 @@ type
     OnCall : TDirEveCallProc;
   end;
   TDirInstruc_list = specialize TFPGObjectList<TDirInstruc>;
-
 
   { TParserDirective }
   TParserDirective = class
@@ -147,8 +189,8 @@ type
     function DefinedVar(cad: string; out dvar: TDirVar): boolean;
     function AsigVariable(VarName: string; const value: TDirOperand): TDirVar;
   public   //Public
-    lexDir : TContext;  //lexer para analizar directivas
-
+    lexDir   : TContext;      //Lexer para analizar directivas
+    tokIdent : TDIRTokenIdent;   //Identificador de token
     procedure skipWhites;
     procedure GenErrorDir(txt: string);
     procedure GenErrorDir(txt: string; const Args: array of const);
@@ -319,16 +361,7 @@ begin
     Result.valNum := num;   //fija tipo a número
   end else if lexDir.tokType= tkString then begin
     //Es cadena
-    tmp := lexDir.ReadToken;
-    delim := tmp[1];
-    tmp := copy(tmp, 2, length(tmp)-2);  //quita delimitadores
-    if delim='"' then begin
-      //Es cadena con comilla doble
-      tmp := StringReplace(tmp, '\n', LineEnding, [rfReplaceAll]);
-      tmp := StringReplace(tmp, '\r', chr($0D), [rfReplaceAll]);
-      tmp := StringReplace(tmp, '\t', #9, [rfReplaceAll]);
-    end;
-    Result.valStr := tmp;
+    Result.valStr := lexDir.ReadToken;
     lexDir.Next;
   end else if GetDIdentif(cad) then begin
     {Es un identificador}
@@ -420,10 +453,10 @@ begin
     end;
     //No es variable ni función.
     GenErrorDir(ER_UNKNW_IDENT_, [cad]);
-  end else If lexDir.ReadToken= '(' Then begin
+  end else if tokIdent = tdPAREN_OP Then begin //"("
     Result := GetDExpressionPar;
     exit;  //Puede salir con error
-  end else If lexDir.ReadToken = '-' Then begin
+  end else if tokIdent = tdMINUS Then begin  //"-"
     //Puede ser número negativo
     lexDir.Next;  //toma el signo
     Result := GetDOperand();
@@ -553,74 +586,75 @@ function TParserDirective.GetDOperator: String;
  devuelve cadena vacía y no coge caracteres, salvo espacios iniciales.}
 begin
   Result := '';
-  skipWhites;     //quita blancos iniciales
-  Case UpCase(lexDir.ReadToken) of //completa con operador de más caracteres
-  '+': begin
+  skipWhites;     //Quita blancos iniciales
+  Case tokIdent of
+  tdPLUS: begin    //'+'
          Result := lexDir.ReadToken;
          lexDir.next;
         end;
-  '-': begin
+  tdMINUS: begin   //'-'
          Result := lexDir.ReadToken;
          lexDir.next;
       end;
-  '*': begin
+  tdMULT: begin    //'*'
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
-  '/': begin
+  tdDIV: begin     //'/'
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
-  '\': begin
+  tdBACK: begin    //'\'
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
-  '%': begin
+  tdPERCEN: begin  //'%'
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
-  '^': begin
+  tdPOINTER: begin //'^'
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
   //Operadores de comparación
-  '=': begin
+  tdEQUAL: begin   //'='
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
-  '<>': begin
+  tdNOT_EQ: begin  //'<>'
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
-  '>': begin
+  tdGREAT: begin   //'>'
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
-  '<': begin
+  tdLESS: begin    //'<'
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
-  '>=': begin
+  tdGREAT_E: begin //'>='
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
-  '<=': begin
+  tdLESS_E: begin //'<='
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
-  'AND': begin
+  //Operadores lógicos
+  tdAND: begin
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
-  'OR': begin
+  tdOR: begin
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
-  'XOR': begin
+  tdXOR: begin
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
-  'NOT': begin
+  tdNOT: begin
         Result := lexDir.ReadToken;
         lexDir.next;
       end;
@@ -1150,8 +1184,8 @@ procedure TParserDirective.ProcBOOTLOADER;
       exit(n);
     end else if lexdir.tokType = tkString then begin
       tok := lexdir.ReadToken;
-//      tok := copy(tok, 2, length(tok)-2);
-      case copy(tok, 2, length(tok)-2) of  //Without quotes
+      //case copy(tok, 2, length(tok)-2) of  //Without quotes
+      case tok of  //Without quotes
       'JMP': begin  //Absolute JMP instruction.
         lexdir.Next;
         exit(-$4C);
@@ -1678,14 +1712,15 @@ function TParserDirective.DecodeNext: boolean;
  - Value TRUE if the current line has changed.
 }
 var
-  col1, col2: Integer;
-  tok: String;
+  col1: Integer;
 begin
   if lexdir._Eof then begin
     lexdir.tokType := tkNull;
+    tokIdent := tdOTHER;
     exit(false);
   end else if lexdir._Eol then begin
     lexdir.tokType := tkEol;
+    tokIdent := tdOTHER;
     if lexdir._LastLine then begin
       //Cannot advance to a NextChar line. Keep position (EOF)
     end else begin
@@ -1699,12 +1734,14 @@ begin
   ',': begin
     lexdir._NextChar;
     lexdir.tokType := tkSymbol;
+    tokIdent := tdOTHER;
   end;
   #32, #9: begin
     repeat
       inc(lexdir.fcol);
     until lexdir._Eol or not(lexdir.curline[lexdir.fcol] in [#32, #9]);
     lexdir.tokType := tkSpace;
+    tokIdent := tdOTHER;
     //Leaves (lexdir.frow, lexdir.fcol) in the begin of the next token.
   end;
   '0'..'9': begin
@@ -1712,62 +1749,171 @@ begin
       inc(lexdir.fcol);
     until lexdir._Eol or not(lexdir.curline[lexdir.fcol] in ['0'..'9','.']);
     lexdir.tokType := tkLitNumber;
+    tokIdent := tdOTHER;
   end;
   '$': begin
     repeat
       inc(lexdir.fcol);
     until lexdir._Eol or not(lexdir.curline[lexdir.fcol] in ['0'..'9','A'..'F','a'..'f']);
     lexdir.tokType := tkLitNumber;
+    tokIdent := tdOTHER;
+  end;
+  'A','a': begin
+    lexdir.ScanIdentifier;
+    if lexdir.MatchToken('AND') then begin
+      lexdir.tokType := tkOperator;
+      tokIdent := tdAND;
+    end else begin
+      lexdir.tokType := tkIdentifier;
+      tokIdent := tdIDENTIF;
+    end;
+  end;
+  'N','n': begin
+    lexdir.ScanIdentifier;
+    if lexdir.MatchToken('NOT') then begin
+      lexdir.tokType := tkOperator;
+      tokIdent := tdNOT;
+    end else begin
+      lexdir.tokType := tkIdentifier;
+      tokIdent := tdIDENTIF;
+    end;
+  end;
+  'O','o': begin
+    lexdir.ScanIdentifier;
+    if lexdir.MatchToken('OR') then begin
+      lexdir.tokType := tkOperator;
+      tokIdent := tdOR;
+    end else begin
+      lexdir.tokType := tkIdentifier;
+      tokIdent := tdIDENTIF;
+    end;
+  end;
+  'X','x': begin
+    lexdir.ScanIdentifier;
+    if lexdir.MatchToken('XOR') then begin
+      lexdir.tokType := tkOperator;
+      tokIdent := tdXOR;
+    end else begin
+      lexdir.tokType := tkIdentifier;
+      tokIdent := tdIDENTIF;
+    end;
+  end;
+  'B'..'M','P'..'W','Y','Z','_',
+  'b'..'m','p'..'w','y','z': begin
+    lexdir.ScanIdentifier;
+    lexdir.tokType := tkIdentifier;
+    tokIdent := tdOTHER;
   end;
   //'%': begin
   //  repeat
   //    inc(lexdir.fcol);
   //  until lexdir._Eol or not(lexdir.curline[lexdir.fcol] in ['0','1']);
   //  lexdir.tokType := tkLitNumber;
+  //  tokIdent := tdOTHER;
   //end;
-  'A'..'Z','_',
-  'a'..'z': begin
-    col1 := lexdir.fcol;   //Token start
-    repeat inc(lexdir.fcol); until lexdir._Eol or not(lexdir.curline[lexdir.fcol] in ['_','a'..'z','A'..'Z','0'..'9']);
-    col2 := lexdir.fcol;   //Token end
-    lexdir.tokType := tkIdentifier;
-    tok := Upcase(copy(lexdir.curLine, col1, col2-col1));
-    if (tok='AND') or (tok='OR') or (tok='XOR') or (tok='NOT') then begin
-      lexdir.tokType := tkOperator;
-    end;
-  end;
-  '=','-','*','/','\','%','^': begin
+  '%': begin
     lexdir._NextChar;
     lexdir.tokType := tkOperator;
+    tokIdent := tdPERCEN;
+  end;
+  '^': begin
+    lexdir._NextChar;
+    lexdir.tokType := tkOperator;
+    tokIdent := tdPOINTER;
+  end;
+  '=': begin
+    lexdir._NextChar;
+    lexdir.tokType := tkOperator;
+    tokIdent := tdEQUAL;
   end;
   '+': begin
     lexdir._NextChar;
     lexdir.tokType := tkOperator;
-    if lexdir.curLine[lexdir.fcol]='=' then lexdir._NextChar;
+    if lexdir.curLine[lexdir.fcol]='=' then begin
+      lexdir._NextChar;
+      tokIdent := tdPLUSEQ;
+    end else begin
+      tokIdent := tdPLUS;
+    end;
+  end;
+  '-': begin
+    lexdir._NextChar;
+    lexdir.tokType := tkOperator;
+    if lexdir.curLine[lexdir.fcol]='=' then begin
+      lexdir._NextChar;
+      tokIdent := tdMINUSEQ;
+    end else begin
+      tokIdent := tdMINUS;
+    end;
+  end;
+  '*': begin
+    lexdir._NextChar;
+    lexdir.tokType := tkOperator;
+    tokIdent := tdMULT;
+  end;
+  '.': begin
+    lexdir._NextChar;
+    lexdir.tokType := tkOperator;
+    tokIdent := tdDOT;
+  end;
+  '/': begin
+    lexdir._NextChar;
+    lexdir.tokType := tkOperator;
+    tokIdent := tdDIV;
+  end;
+  '\': begin
+    lexdir._NextChar;
+    lexdir.tokType := tkOperator;
+    tokIdent := tdBACK;
   end;
   '>': begin
     lexdir._NextChar;
     lexdir.tokType := tkOperator;
-    if lexdir.curLine[lexdir.fcol]='=' then lexdir._NextChar;
+    if lexdir.curLine[lexdir.fcol]='=' then begin
+      lexdir._NextChar;
+      tokIdent := tdGREAT_E;
+    end else begin
+      tokIdent := tdGREAT;
+    end;
   end;
   '<': begin
     lexdir._NextChar;
     lexdir.tokType := tkOperator;
-    if lexdir.curLine[lexdir.fcol]='=' then lexdir._NextChar
-    else if lexdir.curLine[lexdir.fcol]='>' then lexdir._NextChar;
+    if lexdir.curLine[lexdir.fcol]='=' then begin
+      lexdir._NextChar;
+      tokIdent := tdLESS_E;
+    end else if lexdir.curLine[lexdir.fcol]='>' then begin
+      lexdir._NextChar;
+      tokIdent := tdNOT_EQ;
+    end else begin
+      tokIdent := tdLESS;
+    end;
   end;
-  '(',')','}': begin
+  '(': begin
     lexdir._NextChar;
-    lexdir.tokType := tkDirDelim;
+    lexdir.tokType := tkSymbol;
+    tokIdent := tdPAREN_OP;
+  end;
+  ')': begin
+    lexdir._NextChar;
+    lexdir.tokType := tkSymbol;
+    tokIdent := tdPAREN_CL;
   end;
   '{': begin
     lexdir._NextChar; //Toma token
     if lexdir.curLine[lexdir.fcol]='$' then begin
       lexdir._NextChar;
       lexdir.tokType := tkDirDelim;
+      tokIdent := tdOTHER;
     end else begin
       lexdir.tokType := tkNull;    //Unkmown token.
+      tokIdent := tdOTHER;
     end;
+  end;
+  '}': begin
+    lexdir._NextChar;
+    lexdir.tokType := tkDirDelim;
+    tokIdent := tdOTHER;
   end;
   '''': begin
     repeat inc(lexdir.fcol); until lexdir._Eol or (lexdir.curline[lexdir.fcol] = '''');
@@ -1777,19 +1923,50 @@ begin
       lexdir._NextChar;  //Go to next character
     end;
     lexdir.tokType := tkString;
+    tokIdent := tdLITSTRING;
+    lexdir.strToken := copy(lexdir.curLine, lexdir.col0+1, (lexdir.fcol-lexdir.col0-2));
   end;
-  '"': begin
-    repeat inc(lexdir.fcol); until lexdir._Eol or (lexdir.curline[lexdir.fcol] = '"');
-    if lexdir._Eol then begin
-      GenError('Unclosed string.');  //Don't stop scanning
-    end else begin
-      lexdir._NextChar;  //Go to next character
-    end;
+  '"': begin   //Cadenas con soporte para secuencais de escape
+    lexdir.strToken := '';
+    repeat
+      //Busca delimitador
+      col1 := lexdir.fcol+1;      //Guarda posición inicial de la cadena
+      repeat inc(lexdir.fcol);
+      until lexdir._Eol or (lexdir.curline[lexdir.fcol] in ['"','\']);
+      if lexdir._Eol then begin
+        GenError('Unclosed string.');  //Don't stop scanning
+        Break;
+      end;
+      if lexdir.curLine[lexdir.fcol]='\' then begin    //Escape character
+        //Copiamos la cadena en bloque hasta antes del "\".
+        lexdir.strToken += copy(lexdir.curLine, col1, (lexdir.fcol-col1));
+        inc(lexdir.fcol);   //Pasamos el "\"
+        if lexdir._Eol then begin
+          GenError('Unclosed string.');  //Don't stop scanning
+          Break;
+        end;
+        //El siguiente caracter define la secuencia de escape
+        case lexdir.curLine[lexdir.fcol] of
+        'n': lexdir.strToken += LineEnding;  //"\n"
+        'r': lexdir.strToken += #$0D;        //"\r"
+        't': lexdir.strToken += #9;          //"\t"
+        else
+          lexdir.strToken += lexdir.curLine[lexdir.fcol];
+        end;
+      end else begin  //End of string
+        //Se encontró el delimitador
+        lexdir.strToken += copy(lexdir.curLine, col1, (lexdir.fcol-col1));
+        inc(lexdir.fcol);   //Pasamos la comilla
+        break;
+      end;
+    until lexdir._Eol;
     lexdir.tokType := tkString;
+    tokIdent := tdLITSTRING;
   end;
   else
     //Unkmown token.
     lexdir.tokType := tkNull;  //WARNING: This make the current token will read as empty.
+    tokIdent := tdOTHER;
     lexdir._NextChar;
   end;
   exit(false);

@@ -1,9 +1,9 @@
 program Hello;
 uses Commodore64, C64Sprites;
 const
-  SPRITEPUCP = [$00,$7e,$00,$03,$ff,$c0,$0f,$ff,$f0,$1f,$ff,$fc,$3f,$ff,$fc,$7f
-                $ff,$fe,$ff,$ff,$ff,$80,$90,$83,$da,$b6,$db,$d2,$b7,$d3,$c6,$b7
-                $c7,$de,$b6,$df,$8e,$30,$8f,$ff,$ff,$ff,$ff,$ff,$ff,$7f,$ff,$fe
+  SPRITEPUCP = [$00,$7e,$00,$03,$ff,$c0,$0f,$ff,$f0,$1f,$ff,$fc,$3f,$ff,$fc,$7f,
+                $ff,$fe,$ff,$ff,$ff,$80,$90,$83,$da,$b6,$db,$d2,$b7,$d3,$c6,$b7,
+                $c7,$de,$b6,$df,$8e,$30,$8f,$ff,$ff,$ff,$ff,$ff,$ff,$7f,$ff,$fe,
                 $3f,$ff,$fe,$3f,$ff,$fc,$0f,$ff,$f0,$03,$ff,$c0,$00,$ff,$00,$01];
 var 
   sprPucp: [64]byte absolute $2000;  //Zona para almacenar el Sprite1

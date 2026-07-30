@@ -1989,8 +1989,8 @@ begin
 end;
 destructor TArrayRange.Destroy;
 begin
-  FLowExpr.Free;
-  FHighExpr.Free;
+  FLowExpr.Free;   //Libera si se ha creado
+  FHighExpr.Free;  //Libera si se ha creado
   inherited;
 end;
 function TArrayRange.ToString: string;

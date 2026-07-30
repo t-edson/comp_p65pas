@@ -47,12 +47,12 @@ type
   { TParserAsm6502 }
   TParserAsm6502 = class
   private
-    lex     : TAleLexer;       //Reference to the lexer
-    tokIdent: TASMTokenIdent;     //Identificador de token
-    msg     : TMessageManager; //Referencia al gestor de mensajes
-    labels  : TAsmInstructionList;   //Lista de etiquetas
-    curBlock: TAsmBlock;       //Bloque ASM actual.
-    curInst : TAsmInstruction;    //Instruction ASM actual.
+    lex     : TAleLexer;           //Reference to the lexer
+    tokIdent: TASMTokenIdent;      //Identificador de token
+    msg     : TMessageManager;     //Referencia al gestor de mensajes
+    labels  : TAsmInstructionList; //Lista de etiquetas
+    curBlock: TAsmBlock;           //Bloque ASM actual.
+    curInst : TAsmInstruction;     //Instruction ASM actual.
     function HayError: boolean; inline;
   private  //Mensajes
     procedure GenWarn(txt: string);
