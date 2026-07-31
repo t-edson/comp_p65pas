@@ -1039,6 +1039,7 @@ constructor TCodeContainer.Create(ANodeType: TASTNodeType;
 begin
   inherited Create(ANodeType, ASrcPos);
   FIsAssembler := False;  //Por defecto no es ASSEMBLER.
+  FIsForward := AIsForward;
   //Crea los elementos fijos del programa.
   if FIsForward then begin
     //En declaraciones FORWARD no es necesario crear las declaraciones y el cuerpo.

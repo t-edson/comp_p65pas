@@ -102,7 +102,6 @@ public    // Sentencia, bloque y programa
   procedure ParseStatement(Body: TBlock);
   procedure ParseDeclarations(Declars: TDeclarations; location: TElemLocation);
   procedure ParseBody(Body: TBlock);
-  procedure ParseProgramHeader;
   procedure ParseProgram;
   procedure ParseUnit;
   procedure ParseFile(mainFile: String);
@@ -115,7 +114,8 @@ end;
 implementation
 resourcestring
   ER_FIL_NOFOUND  = 'File not found: %s'         ;
-
+  ER_IDENTIF_EXP  = 'Se esperaba un identificador.';
+  ER_SEMICOL_EXP  = 'Se esperaba ";".';
 {$region "Messages"}
 procedure TParserPas.ClearError;
 {Limpia la bandera de errores. Tomar en cuenta que solo se debe usar para iniciar el
@@ -253,7 +253,7 @@ begin
     Next;   //pasa al siguiente
     exit(true);
   end else begin   //es un error
-    GenError('Se esperaba ";".');
+    GenError(ER_SEMICOL_EXP);
     exit(false);  //sale con error
   end;
 end;
@@ -1243,7 +1243,7 @@ begin
   SrcPos := lex.GetSrcPos;  //Posición donde empieza el proc/función.
   isFunction := (tokIdent = tiFUNCT);   //Identifica
   Next;  // Consume PROCEDURE o FUNCTION
-  if not ConsumeIdent(procName, 'Se esperaba un identificador.') then Exit;
+  if not ConsumeIdent(procName, ER_IDENTIF_EXP) then Exit;
   // Parsear parámetros
   ParseParameters(Params);
   if HayError then Exit;
@@ -1252,7 +1252,7 @@ begin
       if not ConsumeTok(tiCOLON, 'Se esperaba ":" después del nombre') then Exit;
       if not ConsumeIdent(returnType, 'Se esperaba el tipo de retorno.') then Exit;
   end;
-  if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then begin
+  if not ConsumeTok(tiSEMIC, ER_SEMICOL_EXP) then begin
     Params.Free;   //Por si se creó
     Exit;
   end;
@@ -1260,7 +1260,7 @@ begin
   IsAssembler := False;
   if tokIdent = tiASSEMBLER then begin
     Next;     //Consume
-    if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then begin
+    if not ConsumeTok(tiSEMIC, ER_SEMICOL_EXP) then begin
       Params.Free;   //Por si se creó
       Exit;
     end;
@@ -1269,7 +1269,7 @@ begin
   if (tokIdent = tiFORWARD) or (location = locInterface) then begin      //Es declaración FORWARD
     if tokIdent = tiFORWARD then begin
       Next;   //Consume "FORWARD"
-      if not ConsumeTok(tiSEMIC, 'Se esperaba ";".') then begin
+      if not ConsumeTok(tiSEMIC, ER_SEMICOL_EXP) then begin
         Params.Free;   //Por si se creó
         Exit;
       end;
@@ -1756,25 +1756,6 @@ begin
     if tokIdent = tiSEMIC then begin
       Next;
     end;
-  end;
-end;
-procedure TParserPas.ParseProgramHeader;
-begin
-  //Captura el encabezado, solo si existe.
-  if tokIdent = tiPROGRAM then begin
-    Next;  //pasa al nombre
-    if tokIdent<>tiIDENTIF then begin
-      GenError('Program name expected.');
-      exit;
-    end;
-    astProg.Name := lex.token;
-    astProg.SrcPos := lex.GetSrcPos;
-    Next;  //Toma el nombre y pasa al siguiente
-    if not ConsumeSemicolon then exit;
-  end;
-  if lex.atEof then begin
-    GenError('Expected "program", "begin", "var", "type" or "const".');
-    exit;
   end;
 end;
 procedure TParserPas.ParseProgram;

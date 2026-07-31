@@ -331,13 +331,13 @@ var
 constructor TAnalyzer.Create(msg0: TMessageManager);
 begin
   //Crea componentes del compilador
-  msg := msg0;
-  lexer := TAleLexer.Create(msg);
-  parser := TParserPas.Create(msg, lexer);
-  options  := TCompOptions.Create;
+  msg       := msg0;
+  lexer     := TAleLexer.Create(msg);
+  parser    := TParserPas.Create(msg, lexer);
+  options   := TCompOptions.Create;
   parserASM := TParserAsm6502.Create(msg, lexer);
   parserDir := TParserDirective.Create(msg, lexer, options);
-  mirRep   := TMirList.Create;
+  mirRep    := TMirList.Create;
   //Comenta los Parser de Ensamblador y de directivas
   parser.callProcDIRline     := @parserDir.ProcDIRline;
   parser.callParseASMblock   := @parserASM.ParseASMblock;
