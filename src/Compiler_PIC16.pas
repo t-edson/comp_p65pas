@@ -1105,7 +1105,7 @@ begin
 
     EndCountElapsed('-- Analyzed in: ');
     if options.comp_level >= clAnalOptim then begin  //Hay optimización
-      if not IsUnit then begin
+      if not parser.IsUnit then begin
         {Compila solo los procedimientos usados, leyendo la información del árbol de sintaxis,
         que debe haber sido actualizado en la primera pasada.}
         StartCountElapsed;
@@ -1115,7 +1115,7 @@ begin
       end;
     end;
     if options.comp_level >= clComplete then begin  //Hay síntesis
-      if not IsUnit then begin
+      if not parser.IsUnit then begin
         StartCountElapsed;
         DoGenerateCode;
         //EndCountElapsed('-- Synthetized in: ');

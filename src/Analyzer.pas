@@ -3,14 +3,13 @@ unit Analyzer;
 interface
 uses
   Classes, SysUtils, Types, alexiaLex, ParserPas, ParserASM_6502, ParserDirec,
-  CompGlobals, ASTunit, MirList, CompOptions, ParseAdicVarDec;
+  CompGlobals, ASTunit, MirList, CompOptions;
 type
 
   { TAnalyzer }
   TAnalyzer = class
   public    //Public attributes of compiler
     ID        : integer;     //Identificador para el compilador.
-    IsUnit    : boolean;     //Flag to identify a Unit
     //Variables públicas del compilador
     ejecProg  : boolean;     //Indicates the compiler is working
     stopEjec  : boolean;     //To stop compilation
@@ -18,7 +17,7 @@ type
     msg      : TMessageManager;  //Gestor de mensajes
     lexer    : TAleLexer;        //Analizador léxico
     parser   : TParserPas;       //Analizador sintáctico
-    parserASM: TParserAsm6502;  //Parser para ensamblador
+    parserASM: TParserAsm6502;   //Parser para ensamblador
     parserDir: TParserDirective; //Parser para directivas
     options  : TCompOptions;     //Opciones del compilador
   public  //Mensajes
@@ -61,7 +60,6 @@ resourcestring
   ER_INST_NEV_EXE = 'Instruction will never execute.';
   ER_UNKN_STRUCT  = 'Unknown structure.'          ;
   ER_DUPLIC_FUNC_ = 'Duplicated function: %s'     ;
-  ER_FIL_NOFOUND  = 'File not found: %s'         ;
   ER_PROG_NAM_EX  = 'Program name expected.'      ;
   ER_VARIAB_EXPEC = 'Variable expected.'         ;
   ER_ONL_BYT_WORD = 'Only BYTE or WORD index is allowed in FOR.';
@@ -98,24 +96,9 @@ Output: The AST.}
 begin
   //Preparación
   ClearError;
-  lexer.ClearContexts;   //Elimina todos los Contextos de entrada
-  parser.Clear;
-  parserDir.ClearMacros;         //Limpia las macros
-  //Compila el texto indicado
-  if not lexer.OpenContextFrom(options.mainFile) then begin
-    //No lo encuentra
-    GenError(Format(ER_FIL_NOFOUND, [options.mainFile]));
-    exit;
-  end;
-  IsUnit := parser.GetUnitDeclaration();   //Detecta si es unidad
-  if IsUnit then begin
-    parser.ParseUnit;
-  end else begin
-    //Es un programa
-    CreateSystemUnitInAST;  //Crea los elementos del sistema. 3ms aprox.
-    parser.ParseProgram;
-  end;
-  //TestAllConstructs;  //Llena el astProg con código de ejemplo
+  parserDir.ClearMacros; //Limpia las macros
+  parser.ParseFile(options.mainFile);
+  //TestAllConstructs;   //Llena el astProg con código de ejemplo
 end;
 //Inicialización
 procedure TAnalyzer.CreateSystemUnitInAST;
@@ -356,8 +339,8 @@ begin
   parserDir := TParserDirective.Create(msg, lexer, options);
   mirRep   := TMirList.Create;
   //Comenta los Parser de Ensamblador y de directivas
-  parser.callParseASMblock   := @parserASM.ParseASMblock;
   parser.callProcDIRline     := @parserDir.ProcDIRline;
+  parser.callParseASMblock   := @parserASM.ParseASMblock;
   parser.callParseAdicVarDec := @parserASM.ParseAdicVarDec;
   //Inicializa variables
   ejecProg := false;

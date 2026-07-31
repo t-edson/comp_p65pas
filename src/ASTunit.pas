@@ -872,7 +872,7 @@ type  //Nodos estructurales
   end;
   TUnitRefList = specialize TFPGObjectList<TUnitRef>;
   // Contenedor de declaraciones
-  TDeclarations = class(TASTNode)
+  TDeclarations = class(TASTNode)   //*** ¿NO bastaría con una simple lista en lugar de crear una clase?
   private
     FItems: TASTNodeList;  // Mezcla de VarDecl, ProcDecl, FunctionDecl
   public
@@ -911,7 +911,10 @@ type  //Nodos estructurales
     procedure PrintDebug(Indent: Integer = 0);
   end;
   // Unidad
-  TUnit = class(TCodeContainer)
+
+  { TUnit }
+
+  TUnit = class(TASTNode)
   private
     FUnitName: string;
     FInterfaceUses: TUnitRefList;    // USES en interface
@@ -921,6 +924,7 @@ type  //Nodos estructurales
     FInitializationBlock: TBlock;      // Bloque de inicialización
     FFinalizationBlock: TBlock;        // Bloque de finalización
   public
+    Name: String;
     property UnitName: string read FUnitName;
     property InterfaceUses: TUnitRefList read FInterfaceUses;
     property ImplementationUses: TUnitRefList read FImplementationUses;
@@ -929,6 +933,7 @@ type  //Nodos estructurales
     property InitializationBlock: TBlock read FInitializationBlock write FInitializationBlock;
     property FinalizationBlock: TBlock read FFinalizationBlock write FFinalizationBlock;
   public  //Inicialización y depuración
+    procedure Clear;
     constructor Create(const AUnitName: string; const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
@@ -2427,9 +2432,18 @@ begin
   FBody.PrintDebug(Indent + 4);
 end;
 // TUnit
+procedure TUnit.Clear;
+begin
+  FInterfaceUses.Clear;
+  FImplementationUses.Clear;
+  FInterfaceDecls.Items.Clear;
+  FImplementationDecls.Items.Clear;
+  if FInitializationBlock <> Nil then FInitializationBlock.Statements.Clear;
+  if FFinalizationBlock <> Nil then FFinalizationBlock.Statements.Clear;
+end;
 constructor TUnit.Create(const AUnitName: string; const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntUnit, ASrcPos, False);
+  inherited Create(ntUnit, ASrcPos);
   FUnitName := AUnitName;
   FInterfaceUses := TUnitRefList.Create(True);
   FImplementationUses := TUnitRefList.Create(True);

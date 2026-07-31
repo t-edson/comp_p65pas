@@ -98,20 +98,24 @@ private   // Instrucciones
   procedure ParseWithStatement(var Block: TBlock);
   procedure ParseExitStatement(var Block: TBlock);
 public    // Sentencia, bloque y programa
+  IsUnit : boolean;     //Flag to identify a Unit
   procedure ParseStatement(Body: TBlock);
   procedure ParseDeclarations(Declars: TDeclarations; location: TElemLocation);
   procedure ParseBody(Body: TBlock);
   procedure ParseProgramHeader;
   procedure ParseProgram;
   procedure ParseUnit;
+  procedure ParseFile(mainFile: String);
 public    // Inicialización
-  function GetUnitDeclaration: boolean;
   procedure Clear;  // Reinicia el compilador para un nuevo programa
   constructor Create(msg0: TMessageManager; lex0: TAleLexer);
   destructor Destroy; override;
 end;
 
 implementation
+resourcestring
+  ER_FIL_NOFOUND  = 'File not found: %s'         ;
+
 {$region "Messages"}
 procedure TParserPas.ClearError;
 {Limpia la bandera de errores. Tomar en cuenta que solo se debe usar para iniciar el
@@ -1777,11 +1781,14 @@ procedure TParserPas.ParseProgram;
 {Realiza en análisis sintáctico de un programa y construye el AST.
 El lexer debe haber sido cargado previamente con el código fuente del programa, y el AST
 debe haber sido limpiado}
+var
+  prgName: string;
 begin
-  // program <nombre> ;
-  SkipWhites;
-  ParseProgramHeader;
-  if HayError then Exit;
+  Next;  //Consume "PROGRAM"
+  astProg.SrcPos := lex.GetSrcPos;
+  if not ConsumeIdent(prgName, 'Program name expected.') then Exit;
+  astProg.Name := prgName;
+  if not ConsumeSemicolon then exit;
   //Parsear sección USES (opcional)
   if tokIdent = tiUSES then
     ParseUsesClause(astProg.UsedUnits);
@@ -1809,11 +1816,11 @@ procedure TParserPas.ParseUnit;
 var
   untName: string;
 begin
-  SkipWhites;
-  //Encabezado: unit Nombre;
-  if not ConsumeTok(tiUNIT, 'Se esperaba "unit"') then Exit;
+  Next;  //Consume "UNIT"
+  astUnit.SrcPos := lex.GetSrcPos;
   if not ConsumeIdent(untName, 'Se esperaba un nombre para la unidad') then Exit;
-  ConsumeSemicolon;
+  astUnit.Name := untName;
+  if not ConsumeSemicolon then exit;
   //Sección INTERFACE
   if not ConsumeTok(tiINTERF, 'Se esperaba "interface"') then begin
     Exit;
@@ -1864,22 +1871,35 @@ begin
       GenError('Código extra después del final de la unidad');
   end;
 end;
+procedure TParserPas.ParseFile(mainFile: String);
+{Analiza un archivo Pascal que puede representar aun programa completo o a una unidad.}
+begin
+  lex.ClearContexts;   //Elimina todos los Contextos de entrada
+  astProg.Clear;
+  astUnit.Clear;
+  //Lee el archivo indicado
+  if not lex.OpenContextFrom(mainFile) then begin
+    //No lo encuentra
+    GenError(Format(ER_FIL_NOFOUND, [mainFile]));
+    exit;
+  end;
+  //Analiza el archivo.
+  SkipWhites;
+  if          tokIdent = tiPROGRAM then begin
+    //Compila un programa
+    IsUnit := False;
+    ParseProgram;
+  end else if tokIdent = tiUNIT then begin
+    //Compila una unidad
+    IsUnit := True;
+    ParseUnit;
+  end else begin
+    //Es otra cosa
+    GenError('Se esperaba "program" o "unit".');
+  end;
+end;
 {$endregion}
 {$region "Inicialización"}
-function TParserPas.GetUnitDeclaration: boolean;
-{Indica si el archivo del contexto actual, es una unidad. Debe llamarse al inico de la
-exploración del archivo.}
-begin
-  //Salta blancos sin ejecutar directivas
-  SkipWhitesNoDirect;
-  //Busca UNIT
-  if tokIdent = tiUNIT then begin
-    lex.curCtx.StartScan;   //retorna al inicio
-    exit(true);
-  end;
-  lex.curCtx.StartScan;   //retorna al inicio
-  exit(false);
-end;
 procedure TParserPas.Clear;
 begin
   astProg.Clear;
@@ -1890,14 +1910,14 @@ begin
   //inherited;
   lex := lex0;
   msg := msg0;
-  astProg := TProgram.Create('prog', lex.GetSrcPos);
-  astUnit := TUnit.Create('unit', lex.GetSrcPos);
+  astProg := TProgram.Create('prog', lex.GetSrcPos); //*** No es necesario indicar nombre y ubicación
+  astUnit := TUnit.Create('unit', lex.GetSrcPos);    //*** No es necesario indicar nombre y ubicación
   ClearError;   //inicia motor de errores
 end;
 destructor TParserPas.Destroy;
 begin
-  astUnit.Destroy;
-  astProg.Destroy;
+  astUnit.Free;       //Destruye si se creó
+  astProg.Free;       //Destruye si se creó
   inherited Destroy;
 end;
 {$endregion}
