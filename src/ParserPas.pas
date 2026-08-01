@@ -1105,12 +1105,11 @@ procedure TParserPas.ParseUsesClause(const unitContainer: TUnitRefList);
 var
   untName: string;  //Nombre de la unidad.
 begin
-  if not ConsumeTok(tiUSES, 'Se esperaba "uses"') then Exit;
   // Parsear lista de unidades separadas por comas
   while not HayError do begin
     //Lee nombre de la unidad
     if not ConsumeIdent(untName, 'Se esperaba un nombre de unidad') then Break;
-    // Añadir la unidad al programa
+    //Añade la unidad al programa. El análisis de las unidades se hace con el gestor de unidades.
     unitContainer.Add(TUnitRef.Create(untName, lex.GetSrcPos));
     // Verificar si hay más unidades
     if tokIdent = tiCOMMA then
@@ -1771,8 +1770,7 @@ begin
   astProg.Name := prgName;
   if not ConsumeSemicolon then exit;
   //Parsear sección USES (opcional)
-  if tokIdent = tiUSES then
-    ParseUsesClause(astProg.UsedUnits);
+  if tokIdent = tiUSES then ParseUsesClause(astProg.UsedUnits);
   if HayError then Exit;
 
   // Analizar las declaraciones
@@ -1808,6 +1806,7 @@ begin
   end;
   //USES en interface (opcional)
   if tokIdent = tiUSES then ParseUsesClause(astUnit.InterfaceUses);
+  if HayError then Exit;
   // Declaraciones de interface
   ParseDeclarations(astUnit.InterfaceDecls, locInterface);
   if HayError then begin
@@ -1819,6 +1818,7 @@ begin
   end;
   //USES en implementation (opcional)
   if tokIdent = tiUSES then ParseUsesClause(astUnit.ImplementationUses);
+  if HayError then Exit;
   // Declaraciones de implementation
   ParseDeclarations(astUnit.ImplementationDecls, locImplement);
   if HayError then begin
