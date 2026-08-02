@@ -145,7 +145,7 @@ type  //Declaraciones y clases base para el AST
   public  //Inicialización y depuración
     procedure Clear;
     procedure PrintDebug(Indent: Integer = 0); override;
-    constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos; AIsForward: Boolean);
+    constructor Create(ANodeType: TASTNodeType; AIsForward: Boolean);
     destructor Destroy; override;
   end;
 
@@ -879,7 +879,7 @@ type  //Nodos estructurales
     procedure Add(Decl: TASTNode);
     property Items: TASTNodeList read FItems;
   public  //Inicialización y depuración
-    constructor Create(const ASrcPos: TSrcPos);
+    constructor Create;
     destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
@@ -894,6 +894,7 @@ type  //Nodos estructurales
   public  //Inicialización y depuración
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
+    constructor Create;
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
   end;
@@ -905,7 +906,7 @@ type  //Nodos estructurales
     procedure AddUnit(const AUnitName: string; const ASrcPos: TSrcPos);
     property UsedUnits: TUnitRefList read FUsedUnits;
   public  //Inicialización y depuración
-    constructor Create(const AName: string; const ASrcPos: TSrcPos);
+    constructor Create;
     destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0);
@@ -931,7 +932,7 @@ type  //Nodos estructurales
     property FinalizationBlock: TBlock read FFinalizationBlock write FFinalizationBlock;
   public  //Inicialización y depuración
     procedure Clear;
-    constructor Create(const AUnitName: string; const ASrcPos: TSrcPos);
+    constructor Create;
     destructor Destroy; override;
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
@@ -1033,10 +1034,12 @@ begin
     FBody.PrintDebug(Indent + 4);
   end;
 end;
-constructor TCodeContainer.Create(ANodeType: TASTNodeType;
-  const ASrcPos: TSrcPos; AIsForward: Boolean);
+constructor TCodeContainer.Create(ANodeType: TASTNodeType; AIsForward: Boolean);
 begin
-  inherited Create(ANodeType, ASrcPos);
+  {Notar que no se indica el "SrcPos" de este objeto, ni de FDeclarations y FBody porque
+  se actualizarán después.}
+  FNodeType := ANodeType; //Identifica al nodo
+
   FIsAssembler := False;  //Por defecto no es ASSEMBLER.
   FIsForward := AIsForward;
   //Crea los elementos fijos del programa.
@@ -1045,10 +1048,8 @@ begin
     FDeclarations := Nil;  //Marca para que no intenten destruirla.
     FBody := Nil;          //Marca para que no intenten destruirla.
   end else begin
-    {Notar que FDeclarations y FBody se crean en la misma posición que el programa, lo
-    cual no es preciso, pero se pueden actualizar después.}
-    FDeclarations := TDeclarations.Create(ASrcPos);
-    FBody := TBlock.Create(ASrcPos);
+    FDeclarations := TDeclarations.Create;
+    FBody := TBlock.Create;
   end;
   {No creamos la lista de parámetros aquí, por los siguientes motivos:
    - Para no usar memoria dinámica si el procedimiento/función no usa parámetros.
@@ -1973,7 +1974,8 @@ begin
 end;
 constructor TProcDecl.Create(const AName: string; const ASrcPos: TSrcPos; AIsForward: Boolean);
 begin
-  inherited Create(ntProcDecl, ASrcPos, AIsForward);
+  inherited Create(ntProcDecl, AIsForward);
+  FSrcPos := ASrcPos;
   FName := AName;
   FReturnTypeName := '';
   FReturnTypeDef := Nil;
@@ -2326,9 +2328,9 @@ begin
   WriteLn(StringOfChar(' ', Indent), ToString);
 end;
 // TDeclarations
-constructor TDeclarations.Create(const ASrcPos: TSrcPos);
+constructor TDeclarations.Create;
 begin
-  inherited Create(ntDeclarations, ASrcPos);
+  FNodeType := ntDeclarations;
   FItems := TASTNodeList.Create(True);
 end;
 destructor TDeclarations.Destroy;
@@ -2371,9 +2373,16 @@ begin
   for i := 0 to FStatements.Count - 1 do
     FStatements[i].PrintDebug(Indent + 2);
 end;
-constructor TBlock.Create(const ASrcPos: TSrcPos);
+constructor TBlock.Create;
 begin
-  inherited Create(ntBlock, ASrcPos);
+  FNodeType := ntBlock;
+  FStatements := TASTNodeList.Create(True);
+end;
+constructor TBlock.Create(const ASrcPos: TSrcPos);
+{Versión del constructor que indica la posición del bloque}
+begin
+  FNodeType := ntBlock;
+  FSrcPos := ASrcPos;
   FStatements := TASTNodeList.Create(True);
 end;
 destructor TBlock.Destroy;
@@ -2382,10 +2391,9 @@ begin
   inherited;
 end;
 // TProgram
-constructor TProgram.Create(const AName: string; const ASrcPos: TSrcPos);
+constructor TProgram.Create;
 begin
-  inherited Create(ntProgram, ASrcPos, False);
-  FName := AName;
+  inherited Create(ntProgram, False);
   FUsedUnits := TUnitRefList.Create(True);
 end;
 destructor TProgram.Destroy;
@@ -2441,14 +2449,13 @@ begin
   if FInitializationBlock <> Nil then FInitializationBlock.Statements.Clear;
   if FFinalizationBlock <> Nil then FFinalizationBlock.Statements.Clear;
 end;
-constructor TUnit.Create(const AUnitName: string; const ASrcPos: TSrcPos);
+constructor TUnit.Create;
 begin
-  inherited Create(ntUnit, ASrcPos);
-  FUnitName := AUnitName;
+  FNodeType := ntUnit;
   FInterfaceUses := TUnitRefList.Create(True);
   FImplementationUses := TUnitRefList.Create(True);
-  FInterfaceDecls := TDeclarations.Create(ASrcPos);
-  FImplementationDecls := TDeclarations.Create(ASrcPos);
+  FInterfaceDecls := TDeclarations.Create;
+  FImplementationDecls := TDeclarations.Create;
   FInitializationBlock := nil;
   FFinalizationBlock := nil;
 end;

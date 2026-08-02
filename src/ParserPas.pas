@@ -116,6 +116,7 @@ resourcestring
   ER_FIL_NOFOUND  = 'File not found: %s'         ;
   ER_IDENTIF_EXP  = 'Se esperaba un identificador.';
   ER_SEMICOL_EXP  = 'Se esperaba ";".';
+  ER_PROG_UNT_EXP = 'Se esperaba "program" o "unit".';
 {$region "Messages"}
 procedure TParserPas.ClearError;
 {Limpia la bandera de errores. Tomar en cuenta que solo se debe usar para iniciar el
@@ -1876,23 +1877,23 @@ begin
     ParseUnit;
   end else begin
     //Es otra cosa
-    GenError('Se esperaba "program" o "unit".');
+    GenError(ER_PROG_UNT_EXP);  //Se esperaba "program" o "unit".
   end;
 end;
 {$endregion}
 {$region "Inicialización"}
 procedure TParserPas.Clear;
 begin
-  astProg.Clear;
-  astUnit.Clear;
+  if astProg<>Nil then astProg.Clear;
+  if astUnit<>Nil then astUnit.Clear;
 end;
 constructor TParserPas.Create(msg0: TMessageManager; lex0: TAleLexer);
 begin
   //inherited;
   lex := lex0;
   msg := msg0;
-  astProg := TProgram.Create('prog', lex.GetSrcPos); //*** No es necesario indicar nombre y ubicación
-  astUnit := TUnit.Create('unit', lex.GetSrcPos);    //*** No es necesario indicar nombre y ubicación
+  astProg := TProgram.Create; //El nombre y la ubicación del objeto se indicarán después.
+  astUnit := TUnit.Create;    //El nombre y la ubicación del objeto se indicarán después.
   ClearError;   //inicia motor de errores
 end;
 destructor TParserPas.Destroy;
