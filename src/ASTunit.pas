@@ -911,9 +911,6 @@ type  //Nodos estructurales
     procedure PrintDebug(Indent: Integer = 0);
   end;
   // Unidad
-
-  { TUnit }
-
   TUnit = class(TASTNode)
   private
     FUnitName: string;
@@ -939,6 +936,8 @@ type  //Nodos estructurales
     function ToString: string; override;
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
+  TUnitList = specialize TFPGObjectList<TUnit>;
+
   // Funciones auxiliares
 function ForDirectionToString(Direction: TForDirection): string;
 
@@ -2481,7 +2480,6 @@ var
   i: Integer;
 begin
   WriteLn(StringOfChar(' ', Indent), ToString);
-
   // Mostrar interface USES
   if FInterfaceUses.Count > 0 then
   begin

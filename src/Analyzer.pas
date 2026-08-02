@@ -3,7 +3,7 @@ unit Analyzer;
 interface
 uses
   Classes, SysUtils, Types, alexiaLex, ParserPas, ParserASM_6502, ParserDirec,
-  CompGlobals, ASTunit, MirList, CompOptions;
+  CompGlobals, ASTunit, MirList, CompOptions, UnitManager;
 type
 
   { TAnalyzer }
@@ -19,6 +19,7 @@ type
     parser   : TParserPas;       //Analizador sintáctico
     parserASM: TParserAsm6502;   //Parser para ensamblador
     parserDir: TParserDirective; //Parser para directivas
+    unitmgr  : TUnitManager;     //Gestor de las unidades
     options  : TCompOptions;     //Opciones del compilador
   public  //Mensajes
     procedure ClearError;
@@ -37,33 +38,6 @@ type
   end;
 
 implementation
-resourcestring
-  ER_INV_MEMADDR  = 'Invalid memory address.';
-  ER_EXP_VAR_IDE  = 'Identifier of variable expected.';
-  ER_NUM_ADD_EXP  = 'Numeric address expected.';
-  ER_CON_EXP_EXP  = 'Constant expression expected.';
-  ER_EQU_EXPECTD  = '"=" expected.'               ;
-  ER_IDEN_EXPECT  = 'Identifier expected.'        ;
-  ER_NOT_IMPLEM_  = 'Not implemented: "%s"'       ;
-  ER_SEM_COM_EXP  = '":" or "," expected.'        ;
-  ER_INV_ARR_SIZ  = 'Invalid array size.';
-  ER_ARR_SIZ_BIG  = 'Array size to big.';
-  ER_IDE_TYP_EXP  = 'Identifier of type expected.';
-  ER_IDE_CON_EXP  = 'Identifier of constant expected.';
-  ER_EQU_COM_EXP  = '"=" or "," expected.';
-  ER_DUPLIC_IDEN  = 'Duplicated identifier: "%s"';
-  ER_BOOL_EXPECT  = 'Boolean expression expected.';
-  ER_EOF_END_EXP  = 'Unexpected end of file. "end" expected.';
-  ER_ELS_UNEXPEC  = '"else" unexpected.';
-  ER_END_EXPECTE  = '"end" expected.';
-  ER_NOT_AFT_END  = 'Syntax error. Nothing should be after "END."';
-  ER_INST_NEV_EXE = 'Instruction will never execute.';
-  ER_UNKN_STRUCT  = 'Unknown structure.'          ;
-  ER_DUPLIC_FUNC_ = 'Duplicated function: %s'     ;
-  ER_PROG_NAM_EX  = 'Program name expected.'      ;
-  ER_VARIAB_EXPEC = 'Variable expected.'         ;
-  ER_ONL_BYT_WORD = 'Only BYTE or WORD index is allowed in FOR.';
-  ER_UNKNOWN_IDE_ = 'Unknown identifier: %s'    ;
 
 procedure TAnalyzer.ClearError;
 {Limpia la bandera de errores. Tomar en cuenta que solo se debe usar para iniciar el
@@ -337,6 +311,7 @@ begin
   options   := TCompOptions.Create;
   parserASM := TParserAsm6502.Create(msg, lexer);
   parserDir := TParserDirective.Create(msg, lexer, options);
+  unitmgr   := TUnitManager.Create(msg, parser);
   mirRep    := TMirList.Create;
   //Comenta los Parser de Ensamblador y de directivas
   parser.callProcDIRline     := @parserDir.ProcDIRline;
@@ -348,6 +323,7 @@ end;
 destructor TAnalyzer.Destroy;
 begin
   mirRep.Destroy;
+  unitmgr.Destroy;
   parserDir.Destroy;
   parserASM.Destroy;
   options.Destroy;

@@ -29,7 +29,7 @@ private
 public    //Componentes principales del compilador
   astProg: TProgram;        //Árbol de sintaxis abstracto de un programa
   astUnit: TUnit;           //Árbol de sintaxis abstracto de una unidad
-private   //Messages
+public   //Messages
   procedure ClearError;
   function HayError: boolean; inline;          //Flag for errors
   //Rutinas de generación de mensajes
@@ -1856,8 +1856,6 @@ procedure TParserPas.ParseFile(mainFile: String);
 {Analiza un archivo Pascal que puede representar aun programa completo o a una unidad.}
 begin
   lex.ClearContexts;   //Elimina todos los Contextos de entrada
-  astProg.Clear;
-  astUnit.Clear;
   //Lee el archivo indicado
   if not lex.OpenContextFrom(mainFile) then begin
     //No lo encuentra
@@ -1869,9 +1867,11 @@ begin
   if          tokIdent = tiPROGRAM then begin
     //Compila un programa
     IsUnit := False;
+    astProg.Clear;
     ParseProgram;
   end else if tokIdent = tiUNIT then begin
     //Compila una unidad
+    astUnit.Clear;
     IsUnit := True;
     ParseUnit;
   end else begin
