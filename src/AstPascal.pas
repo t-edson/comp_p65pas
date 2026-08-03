@@ -1,4 +1,4 @@
-unit ASTunit;
+unit AstPascal;
 {$mode objfpc}{$H+}
 interface
 uses

@@ -6,8 +6,8 @@ unit Compiler_PIC16;
 interface
 uses
   Classes, SysUtils, fgl, LazLogger, LazFileUtils, StrUtils,
-  P65C02utils, CPUCore, ParserPas, ParserDirec, CompGlobals, AstElemP65,
-  Analyzer, MirList, alexiaLex, SIF_P65pas, CompOptions;
+  P65C02utils, CPUCore, ParserPas, CompGlobals, AstElemP65,
+  Analyzer, MirList, alexiaLex, SIF_P65pas;
 type
   { TCompiler_PIC16 }
   TCompiler_PIC16 = class(TAnalyzer)
@@ -86,7 +86,7 @@ var
   //Funciones básicas
 procedure SetLanguage;
 begin
-  ParserDirec.SetLanguage;
+//  ParserDirec.SetLanguage;
 //  ParserASM_6502.SetLanguage;
   SIF_P65pas.SetLanguage;
   {$I _language\tra_Compiler.pas}

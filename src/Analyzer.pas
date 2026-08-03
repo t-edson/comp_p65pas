@@ -3,24 +3,27 @@ unit Analyzer;
 interface
 uses
   Classes, SysUtils, Types, alexiaLex, ParserPas, ParserASM_6502, ParserDirec,
-  CompGlobals, ASTunit, MirList, CompOptions, UnitManager;
+  CompGlobals, AstPascal, MirList, CompOptions, UnitManager;
 type
 
   { TAnalyzer }
   TAnalyzer = class
   public    //Public attributes of compiler
-    ID        : integer;     //Identificador para el compilador.
+    ID        : integer;         //Identificador para el compilador.
     //Variables públicas del compilador
-    ejecProg  : boolean;     //Indicates the compiler is working
-    stopEjec  : boolean;     //To stop compilation
+    ejecProg  : boolean;         //Indicates the compiler is working
+    stopEjec  : boolean;         //To stop compilation
+    CompiledUnit: boolean;       //Activated when a Unit is compiled
   public   //Componentes del compilador
     msg      : TMessageManager;  //Gestor de mensajes
     lexer    : TAleLexer;        //Analizador léxico
     parser   : TParserPas;       //Analizador sintáctico
     parserASM: TParserAsm6502;   //Parser para ensamblador
     parserDir: TParserDirective; //Parser para directivas
-    unitmgr  : TUnitManager;     //Gestor de las unidades
-    options  : TCompOptions;     //Opciones del compilador
+    astProg  : TProgram;         //AST al compilar un programa.
+    astUnit  : TUnit;            //AST al compilar una unidad.
+    unitmgr  : TUnitManager;     //Gestor de las unidades.
+    options  : TCompOptions;     //Opciones del compilador.
   public  //Mensajes
     procedure ClearError;
     procedure GenError(txt: string);
@@ -32,7 +35,6 @@ type
     procedure DoAnalyze;
   public     //Incialización
     procedure CreateSystemUnitInAST;
-    procedure TestAllConstructs;
     constructor Create(msg0: TMessageManager);
     destructor Destroy; override;
   end;
@@ -71,7 +73,8 @@ begin
   //Preparación
   ClearError;
   parserDir.ClearMacros; //Limpia las macros
-  parser.ParseFile(options.mainFile);
+  parser.ParseFile(options.mainFile, astProg, astUnit);   //Puede generar errores
+  CompiledUnit := parser.IsUnit;   //Identifica lo que ha compilado
   //TestAllConstructs;   //Llena el astProg con código de ejemplo
 end;
 //Inicialización
@@ -197,111 +200,6 @@ begin
   //Close Unit
   astProg.CloseElement;
 }end;
-procedure TAnalyzer.TestAllConstructs;
-{CRea un código de prueba para el AST}
-var
-  SrcPos: TSrcPos;
-  VarDeclX, VarDeclY: TVarDecl;
-  Proc: TProcDecl;
-  Assign1, Assign2: TAssignment;
-  VarRef1, VarRef2: TExpression;
-  Literal1, Literal2: TNumberLiteral;
-  Param: TVarDecl;
-  ProcBody, FuncBody: TBlock;
-  astProg: TProgram;
-  begin
-    astProg := parser.astProg;
-    astProg.Clear;
-    // Inicializar posición (simulando la del lexer)
-    SrcPos.idCtx := 1;
-    SrcPos.row := 1;
-    SrcPos.col := 1;
-
-    // ============================================================
-    // 1. Declarar variables globales (orden preservado)
-    // ============================================================
-    SrcPos.row := 3;
-    SrcPos.col := 1;
-    VarDeclX := TVarDecl.Create('x', SrcPos);
-    VarDeclX.TypeName := 'byte';
-    astProg.Declarations.Add(VarDeclX);
-
-    SrcPos.row := 3;
-    SrcPos.col := 7;
-    VarDeclY := TVarDecl.Create('y', SrcPos);
-    VarDeclY.TypeName := 'byte';
-    astProg.Declarations.Add(VarDeclY);
-
-    // ============================================================
-    // 2. Declarar procedimiento: procedure Sumar(a: byte);
-    // ============================================================
-    SrcPos.row := 5;
-    SrcPos.col := 1;
-    Proc := TProcDecl.Create('Sumar', SrcPos, False);
-
-    // Añadir parserámetro
-    SrcPos.row := 5;
-    SrcPos.col := 15;
-    Param := TVarDecl.Create('a', SrcPos);
-    Param.TypeName := 'byte';
-    Param.IsParameter := True;
-    Proc.AddParameter(Param);
-
-    // Cuerpo del procedimiento (vacío)
-    SrcPos.row := 6;
-    SrcPos.col := 3;
-    ProcBody := TBlock.Create(SrcPos);
-    Proc.Body := ProcBody;
-
-    astProg.Declarations.Add(Proc);
-
-    // ============================================================
-    // 3. Declarar función: function Calcular: integer;
-    // ============================================================
-    SrcPos.row := 8;
-    SrcPos.col := 1;
-    Proc:= TProcDecl.Create('Calcular', SrcPos, False);
-    Proc.ReturnTypeName := 'integer';
-
-    // Cuerpo de la función (vacío)
-    SrcPos.row := 9;
-    SrcPos.col := 3;
-    FuncBody := TBlock.Create(SrcPos);
-    Proc.Body := FuncBody;
-
-    astProg.Declarations.Add(Proc);
-
-    // ============================================================
-    // 4. Cuerpo principal: x := 1; y := 2;
-    // ============================================================
-    // NOTA: astProg.Body ya existe, solo añadimos instrucciones
-
-    // x := 1;
-    SrcPos.row := 12;
-    SrcPos.col := 3;
-    VarRef1 := TVariableRef.Create('x', SrcPos);
-    Literal1 := TNumberLiteral.Create(1, SrcPos);
-    Assign1 := TAssignment.Create(VarRef1, Literal1, SrcPos);
-    astProg.Body.AddStatement(Assign1);
-
-    // y := 2;
-    SrcPos.row := 13;
-    SrcPos.col := 3;
-    VarRef2 := TVariableRef.Create('y', SrcPos);
-    Literal2 := TNumberLiteral.Create(2, SrcPos);
-    Assign2 := TAssignment.Create(VarRef2, Literal2, SrcPos);
-    astProg.Body.AddStatement(Assign2);
-
-    // ============================================================
-    // 5. Imprimir el astProg
-    // ============================================================
-    WriteLn('=== AST DEL PROGRAMA ===');
-    astProg.PrintDebug;
-
-    WriteLn;
-    WriteLn('Presiona Enter para salir...');
-//    ReadLn;
-  end;
 constructor TAnalyzer.Create(msg0: TMessageManager);
 begin
   //Crea componentes del compilador
@@ -322,6 +220,8 @@ begin
 end;
 destructor TAnalyzer.Destroy;
 begin
+  astUnit.Free;       //Destruye si se creó
+  astProg.Free;       //Destruye si se creó
   mirRep.Destroy;
   unitmgr.Destroy;
   parserDir.Destroy;

@@ -7,7 +7,7 @@ incluye un tipo de nodo que representa a los bloques ensamblador.
 unit ParserPas;
 interface
 uses
-  Classes, SysUtils, LazLogger, alexiaLex, ASTunit;
+  Classes, SysUtils, LazLogger, alexiaLex, AstPascal;
 type  //Tipos generales
 //Primary location for elements
 {Current location for scan. This tells the compiler where it's scanning. It useful because
@@ -26,9 +26,6 @@ private
   msg    : TMessageManager; //Referencia al gestor de mensajes
   function ParseVariableBlockDeclar(varContainer: TASTNodeList;
     paramType: TParamType): byte;
-public    //Componentes principales del compilador
-  astProg: TProgram;        //Árbol de sintaxis abstracto de un programa
-  astUnit: TUnit;           //Árbol de sintaxis abstracto de una unidad
 public   //Messages
   procedure ClearError;
   function HayError: boolean; inline;          //Flag for errors
@@ -102,9 +99,10 @@ public    // Sentencia, bloque y programa
   procedure ParseStatement(Body: TBlock);
   procedure ParseDeclarations(Declars: TDeclarations; location: TElemLocation);
   procedure ParseBody(Body: TBlock);
-  procedure ParseProgram;
-  procedure ParseUnit;
-  procedure ParseFile(mainFile: String);
+  procedure ParseProgram(astProg: TProgram);
+  procedure ParseUnit(astUnit: TUnit);
+  procedure ParseFile(mainFile: String; var astProg: TProgram; var astUnit: TUnit);
+  procedure ParseUnitFile(mainFile: String; var astUnit: TUnit);
 public    // Inicialización
   procedure Clear;  // Reinicia el compilador para un nuevo programa
   constructor Create(msg0: TMessageManager; lex0: TAleLexer);
@@ -117,6 +115,9 @@ resourcestring
   ER_IDENTIF_EXP  = 'Se esperaba un identificador.';
   ER_SEMICOL_EXP  = 'Se esperaba ";".';
   ER_PROG_UNT_EXP = 'Se esperaba "program" o "unit".';
+  ER_UNT_EXPEXTED = 'Se esperaba "unit".';
+  ER_PROGNAM_EXP  = 'Program name expected.';
+  ER_UNITNAME_EXP = 'Se esperaba un nombre de unidad';
 {$region "Messages"}
 procedure TParserPas.ClearError;
 {Limpia la bandera de errores. Tomar en cuenta que solo se debe usar para iniciar el
@@ -1109,7 +1110,7 @@ begin
   // Parsear lista de unidades separadas por comas
   while not HayError do begin
     //Lee nombre de la unidad
-    if not ConsumeIdent(untName, 'Se esperaba un nombre de unidad') then Break;
+    if not ConsumeIdent(untName, ER_UNITNAME_EXP) then Break;
     //Añade la unidad al programa. El análisis de las unidades se hace con el gestor de unidades.
     unitContainer.Add(TUnitRef.Create(untName, lex.GetSrcPos));
     // Verificar si hay más unidades
@@ -1119,10 +1120,7 @@ begin
       Break; //No hay más unidades
   end;
   if HayError then Exit;
-  // Verificar ';' después de la lista
-  if tokIdent <> tiSEMIC then
-    GenError('Se esperaba ";" después de la sección USES');
-  Next;  //Consumir ';'
+  ConsumeSemicolon;  //Puede generar error
 end;
 procedure TParserPas.ParseVarDeclaration(declars: TDeclarations);
 {Analiza la sección de declaración de variables. Esta sección puede incluri varios
@@ -1758,7 +1756,7 @@ begin
     end;
   end;
 end;
-procedure TParserPas.ParseProgram;
+procedure TParserPas.ParseProgram(astProg: TProgram);
 {Realiza en análisis sintáctico de un programa y construye el AST.
 El lexer debe haber sido cargado previamente con el código fuente del programa, y el AST
 debe haber sido limpiado}
@@ -1767,7 +1765,7 @@ var
 begin
   Next;  //Consume "PROGRAM"
   astProg.SrcPos := lex.GetSrcPos;
-  if not ConsumeIdent(prgName, 'Program name expected.') then Exit;
+  if not ConsumeIdent(prgName, ER_PROGNAM_EXP) then Exit;
   astProg.Name := prgName;
   if not ConsumeSemicolon then exit;
   //Parsear sección USES (opcional)
@@ -1792,7 +1790,7 @@ begin
       GenError('Código extra después del final del programa');
   end;
 end;
-procedure TParserPas.ParseUnit;
+procedure TParserPas.ParseUnit(astUnit: TUnit);
 var
   untName: string;
 begin
@@ -1853,8 +1851,13 @@ begin
       GenError('Código extra después del final de la unidad');
   end;
 end;
-procedure TParserPas.ParseFile(mainFile: String);
-{Analiza un archivo Pascal que puede representar aun programa completo o a una unidad.}
+procedure TParserPas.ParseFile(mainFile: String; var astProg: TProgram;
+  var astUnit: TUnit);
+{Analiza un archivo Pascal que puede representar a un programa completo o a una unidad.
+Si el archivo es una programa, llena el AST en "astProg". Si es una unidad, llena el AST
+en "astUnit".
+Si "astProg" o "astUnit" no han sido creados, se les crea aquí, pero no se destruyen aquí.
+}
 begin
   lex.ClearContexts;   //Elimina todos los Contextos de entrada
   //Lee el archivo indicado
@@ -1864,42 +1867,62 @@ begin
     exit;
   end;
   //Analiza el archivo.
-  SkipWhites;
+  SkipWhites;   //OJO: Se procesan directivas aquí
   if          tokIdent = tiPROGRAM then begin
     //Compila un programa
     IsUnit := False;
-    astProg.Clear;
-    ParseProgram;
+    if astProg = Nil then astProg := TProgram.Create else astProg.Clear;
+    ParseProgram(astProg);
   end else if tokIdent = tiUNIT then begin
     //Compila una unidad
-    astUnit.Clear;
     IsUnit := True;
-    ParseUnit;
+    if astUnit = Nil then astUnit := TUnit.Create else astUnit.Clear;
+    ParseUnit(astUnit);
   end else begin
     //Es otra cosa
     GenError(ER_PROG_UNT_EXP);  //Se esperaba "program" o "unit".
+  end;
+end;
+procedure TParserPas.ParseUnitFile(mainFile: String; var astUnit: TUnit);
+{Analiza un archivo Pascal que representa a una unidad y llena su AST en "astUnit".
+Si "astUnit" no ha sido creado, se crea aquí, pero no se destruye aquí.
+}
+begin
+  lex.ClearContexts;   //Elimina todos los Contextos de entrada
+  //Lee el archivo indicado
+  if not lex.OpenContextFrom(mainFile) then begin
+    //No lo encuentra
+    GenError(Format(ER_FIL_NOFOUND, [mainFile]));
+    exit;
+  end;
+  //Analiza el archivo.
+  SkipWhites;   //OJO: Se procesan directivas aquí
+  if tokIdent = tiUNIT then begin
+    //Compila una unidad
+    IsUnit := True;
+    if astUnit = Nil then astUnit := TUnit.Create else astUnit.Clear;
+    ParseUnit(astUnit);
+  end else begin
+    //Es otra cosa
+    GenError(ER_UNT_EXPEXTED);  //Se esperaba "unit".
   end;
 end;
 {$endregion}
 {$region "Inicialización"}
 procedure TParserPas.Clear;
 begin
-  if astProg<>Nil then astProg.Clear;
-  if astUnit<>Nil then astUnit.Clear;
+  //Se deben limpiar configuraciones del Parser.
+
 end;
 constructor TParserPas.Create(msg0: TMessageManager; lex0: TAleLexer);
 begin
   //inherited;
   lex := lex0;
   msg := msg0;
-  astProg := TProgram.Create; //El nombre y la ubicación del objeto se indicarán después.
-  astUnit := TUnit.Create;    //El nombre y la ubicación del objeto se indicarán después.
   ClearError;   //inicia motor de errores
 end;
 destructor TParserPas.Destroy;
 begin
-  astUnit.Free;       //Destruye si se creó
-  astProg.Free;       //Destruye si se creó
   inherited Destroy;
 end;
 {$endregion}

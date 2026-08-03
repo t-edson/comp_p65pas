@@ -7,9 +7,9 @@ interface
 uses  Classes, SysUtils, StrUtils, EpikTimer, LazLogger;
 
 const
-  NOM_PROG = 'P65Pas';   //Program name
-  VER_PROG = '1.0.0-Beta';
-
+  NOM_PROG = 'P65Pas'; //Program name
+  VER_PROG = '1.0.0-Alfa';
+  MAX_ERRORS = 50;     //Cantidad máxima de errores a detectar
 type
 
 

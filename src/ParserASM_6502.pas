@@ -8,7 +8,7 @@ unit ParserASM_6502;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, fgl, alexiaLex, CompGlobals, P65C02utils, ASTunit,
+  Classes, SysUtils, fgl, alexiaLex, CompGlobals, P65C02utils, AstPascal,
   LazLogger;
 type //Identifcador de tokens para el lexer
   TASMTokenIdent = (
@@ -924,8 +924,6 @@ end;
 //Inicialización
 procedure TParserAsm6502.ParseASMblock(Body: TBlock);
 {Punto de entrada para analizar un bloque ASM, de la forma ASM ... END.}
-var
-  blkEnd: boolean;
 begin
   lex.Next;     //Get ASM
   lex.curCtx.OnDecodeNext := @DecodeNext;   //Set a new syntax
@@ -940,7 +938,7 @@ begin
 //    debugln('fil=' + IntTostr(lex.curCtx.row0) + ', col=' + IntToStr(lex.curCtx.col0));
     ProcASMline;
     lex.SkipWhitesNoEOL;  //Omite espacios iniciales de la línea
-    if msg.nErrors>=100 then Break;
+    if msg.nErrors>=MAX_ERRORS then Break;
   end;
   if lex.atEof then begin
     GenError('Unclosed ASM block.');  //Don't stop scanning

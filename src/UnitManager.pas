@@ -9,14 +9,14 @@ unit UnitManager;
 {$mode ObjFPC}{$H+}
 interface
 uses
-  Classes, SysUtils, ASTunit, ParserPas, alexiaLex;
+  Classes, SysUtils, AstPascal, ParserPas, alexiaLex;
 
 type
   TUnitState = (
-    usNotLoaded,   // La unidad aún no se ha cargado
-    usLoading,     // La unidad está en proceso de carga
-    usLoaded,      // La unidad está completamente cargada
-    usFailed       // La unidad falló al cargarse
+    usNotLoaded,   //La unidad aún no se ha cargado
+    usLoading,     //La unidad está en proceso de carga
+    usLoaded,      //La unidad está completamente cargada
+    usFailed       //La unidad falló al cargarse
   );
 
   TCompiledUnit = class
@@ -53,7 +53,6 @@ type
 
     function GetUnit(const AUnitName: string): TCompiledUnit;
     function ResolvePath(const AUnitName: string): string;
-    function ParseUnit(const AUnitPath: string): TUnit;
     procedure CollectDependencies(const AUnitName: string);
     procedure BuildDependencyGraph;
     function TopologicalSort: TStringList;
@@ -124,7 +123,7 @@ begin
     Result := nil;
 end;
 function TUnitManager.ResolvePath(const AUnitName: string): string;
-// ResolvePath - Resolver la ruta del archivo de la unidad
+//Resuelve la ruta del archivo de la unidad.
 var
   i: Integer;
   SearchPath: string;
@@ -158,22 +157,6 @@ begin
 
   // 4. No se encontró
   Result := '';
-end;
-function TUnitManager.ParseUnit(const AUnitPath: string): TUnit;
-// ParseUnit - Parsear una unidad (crea un AST separado)
-begin
-{    Lexer.SetText(LoadFile(AUnitPath));
-    Parser.ParseUnit;
-
-    if Parser.HayError then begin
-      Result := nil;
-      Exit;
-    end;
-
-    Result := Parser.astUnit;
-    // El AST se transfiere al UnitManager
-    Parser.astUnit := nil;  // Evitar doble liberación
-}
 end;
 procedure TUnitManager.CollectDependencies(const AUnitName: string);
 // CollectDependencies - Recoger dependencias de una unidad
@@ -315,11 +298,13 @@ var
   CompUnit: TCompiledUnit;
   Path, DepName: String;
   i: Integer;
+  astUnit: TUnit;
 begin
   // 1. Verificar si ya está cargada
   CompUnit := GetUnit(AUnitName);
   if CompUnit <> nil then begin
     if CompUnit.State = usLoaded then begin
+      //Ya está cargada, no necesita cargarse de nuevo
       Exit(CompUnit.AST)
     end else if CompUnit.State = usLoading then begin
       AddError('Dependencia circular detectada: ' + AUnitName);
@@ -351,11 +336,13 @@ begin
   FLoadingStack.Add(AUnitName);
 
   // 5. Parsear la unidad
-  CompUnit.AST := ParseUnit(Path);
-  if CompUnit.AST = nil then begin
+  parser.ParseUnitFile(Path, astUnit);   //Puede generar errores
+  if Parser.HayError then begin
     CompUnit.State := usFailed;
     FLoadingStack.Delete(FLoadingStack.IndexOf(AUnitName));
     Exit(nil);
+  end else begin
+    CompUnit.AST := astUnit;
   end;
 
   // 6. Recoger dependencias
@@ -413,8 +400,7 @@ begin
 
   // 4. Ordenar las unidades topológicamente
   SortedUnits := TopologicalSort;
-  if SortedUnits = nil then
-  begin
+  if SortedUnits = nil then begin
     Result.Free;
     Result := nil;
     Exit;
@@ -429,8 +415,7 @@ begin
 
     Result.Clear;
 
-    for i := 0 to SortedUnits.Count - 1 do
-    begin
+    for i := 0 to SortedUnits.Count - 1 do begin
       untName := SortedUnits[i];
       idx := UnitMap.IndexOf(untName);
       if idx >= 0 then
@@ -443,8 +428,7 @@ begin
   end;
 
   // 6. Asignar órdenes de compilación
-  for i := 0 to Result.Count - 1 do
-  begin
+  for i := 0 to Result.Count - 1 do begin
     CompUnit := GetUnit(Result[i].unitName);
     if CompUnit <> nil then
       CompUnit.Order := i;
@@ -563,4 +547,4 @@ begin
 end;
 
 end.
-
+//549
