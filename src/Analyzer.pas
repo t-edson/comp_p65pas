@@ -31,6 +31,7 @@ type
   public
     mirRep: TMirList;    //Container for MIR representation
   private
+    procedure parsercallUnitAdded(const untName: string);
   protected  //Elements processing
     procedure DoAnalyze;
   public     //Incialización
@@ -63,7 +64,6 @@ procedure TAnalyzer.GenError(txt: string; const srcPos: TSrcPos);
 begin
   msg.error(lexer.GetMsgInfoE(txt, srcPos));
 end;
-
 //Compilación de secciones
 procedure TAnalyzer.DoAnalyze;
 {Performs the Analysis (Lexical, syntactic and semantic).
@@ -76,6 +76,10 @@ begin
   parser.ParseFile(options.mainFile, astProg, astUnit);   //Puede generar errores
   CompiledUnit := parser.IsUnit;   //Identifica lo que ha compilado
   //TestAllConstructs;   //Llena el astProg con código de ejemplo
+end;
+procedure TAnalyzer.parsercallUnitAdded(const curFile: string; const untName: string);
+begin
+
 end;
 //Inicialización
 procedure TAnalyzer.CreateSystemUnitInAST;
@@ -211,10 +215,11 @@ begin
   parserDir := TParserDirective.Create(msg, lexer, options);
   unitmgr   := TUnitManager.Create(msg, parser);
   mirRep    := TMirList.Create;
-  //Comenta los Parser de Ensamblador y de directivas
+  //Conecta el parser a los otros componentes del compilador.
   parser.callProcDIRline     := @parserDir.ProcDIRline;
   parser.callParseASMblock   := @parserASM.ParseASMblock;
   parser.callParseAdicVarDec := @parserASM.ParseAdicVarDec;
+  parser.callUnitAdded       := @parsercallUnitAdded;
   //Inicializa variables
   ejecProg := false;
 end;

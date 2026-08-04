@@ -857,11 +857,11 @@ type  //Nodos de declaraciones de tipos
     procedure PrintDebug(Indent: Integer = 0); override;
   end;
 type  //Nodos estructurales
-  // Nodo para la sección USES
+  // Nodo para la sección USES. ***** ¿No bastaría con un simple string?
   TUnitRef = class(TASTNode)
   private
     FUnitName: string;
-    FUnitPath: string;  // Ruta completa (resuelta en análisis semántico)
+    FUnitPath: string;  // Ruta completa (resuelta en análisis semántico)  ***¿Se usa?
   public
     property UnitName: string read FUnitName;
     property UnitPath: string read FUnitPath write FUnitPath;
@@ -903,7 +903,6 @@ type  //Nodos estructurales
   private
     FUsedUnits: TUnitRefList;  //Lista de unidades usadas
   public
-    procedure AddUnit(const AUnitName: string; const ASrcPos: TSrcPos);
     property UsedUnits: TUnitRefList read FUsedUnits;
   public  //Inicialización y depuración
     constructor Create;
@@ -2400,10 +2399,6 @@ destructor TProgram.Destroy;
 begin
   FUsedUnits.Free;
   inherited;
-end;
-procedure TProgram.AddUnit(const AUnitName: string; const ASrcPos: TSrcPos);
-begin
-  FUsedUnits.Add(TUnitRef.Create(AUnitName, ASrcPos));
 end;
 function TProgram.ToString: string;
 begin

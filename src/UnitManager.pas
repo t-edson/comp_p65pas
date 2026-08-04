@@ -60,7 +60,7 @@ type
     procedure DetectCircularDependency(const AUnitName: string);
     procedure AddError(const Msg: string);
   public
-    function LoadUnit(const AUnitName: string): TUnit;
+    function LoadUnit(const curFile: string; const AUnitName: string): TUnit;
     function LoadUnits(const AUnitNames: TStringList): TUnitList;
     procedure AddSearchPath(const APath: string);
     procedure SetMainPath(const APath: string);
@@ -71,7 +71,9 @@ type
     destructor Destroy; override;
   end;
 
+
 implementation
+
 // TCompiledUnit
 constructor TCompiledUnit.Create(const AUnitName: string);
 begin
@@ -292,7 +294,9 @@ begin
     end;
   end;
 end;
-function TUnitManager.LoadUnit(const AUnitName: string): TUnit;
+function TUnitManager.LoadUnit(const curFile: string;   //Archivo que se está analizando
+                               const AUnitName: string    //Nombre de la unidad en USES:
+                               ): TUnit;
 // LoadUnit - Cargar una unidad (punto de entrada principal)
 var
   CompUnit: TCompiledUnit;
