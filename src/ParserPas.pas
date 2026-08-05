@@ -773,6 +773,8 @@ Si no se encuentran parámetros, se devuelve NIL en "Params".
 Si se encuentra algún error, se libera "Params" (si se creó) y se pone a NIL.}
 var
   paramType: TParamType;
+  nvars: Byte;
+  varDecl: TVarDecl;
 begin
   Params := nil;
   if tokIdent <> tiPAREN_OP then Exit;   //"("
@@ -795,8 +797,19 @@ begin
     end;
     // Leer identificadores y tipo
     if Params = nil then Params:= TASTNodeList.Create(true);
-    ParseVariableBlockDeclar(Params, paramType);
+    nvars := ParseVariableBlockDeclar(Params, paramType);
     if HayError then Break;
+    //Puede seguir un modificador de declaración
+    if not(tokIdent in [tiSEMIC, tiPAREN_CL]) then begin
+      if nvars>1 then begin
+        GenError('No se puede aplicar un modificador a más de una variable.');
+        Break;
+      end;
+      //Hay una sola variable declarada
+      varDecl := TVarDecl(Params[Params.Count-1]);  //La variable
+      //Procesa modificadores REGISTER, ...
+      if not callParseAdicVarDec(varDecl) then Break;
+    end;
     // Verificar si hay más parámetros
     if tokIdent = tiSEMIC then begin
       Next;
@@ -1165,7 +1178,7 @@ begin
     //Puede seguir un modificador de declaración
     if not(tokIdent in [tiSEMIC, tiEQUAL]) then begin
       if nvars>1 then begin
-        GenError('No se puede aplicar este modificador a más de una variable.');
+        GenError('No se puede aplicar un modificador a más de una variable.');
         Exit;
       end;
       //Hay una sola variable declarada
@@ -1175,7 +1188,9 @@ begin
         // Hay especificación de dirección absoluta
         Next;
         varDecl.hasAdic := DEC_ABSOL;    //marca bandera
-        varDecl.absAddr := ParseSimpleExpression;  //Leemos expresión de dirección
+        //Leemos expresión de dirección. Notar que estamos asumiendo que el formato de
+        //una dirección física es igual al de un número que puede reconocer este parser.
+        varDecl.absAddr := ParseSimpleExpression;
         if HayError then exit;
       end else begin
         //No es ABSOLUTE, debe ser un modificador adicional

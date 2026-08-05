@@ -7,7 +7,6 @@ procedure Locate(x: byte  registerX; y: byte  registerY);
 begin
 end;
 
-{$MSGBOX "He\tllo"}
 begin
   a := #$41'''def';
   a := 'aaa'#65;
