@@ -33,7 +33,6 @@ type
   protected  //Elements processing
     procedure DoAnalyze;
   public     //Incialización
-    procedure CreateSystemUnitInAST;
     constructor Create(msg0: TMessageManager);
     destructor Destroy; override;
   end;
@@ -88,128 +87,6 @@ begin
 
 end;
 //Inicialización
-procedure TAnalyzer.CreateSystemUnitInAST;
-{Initialize the system elements. Must be executed just one time when compiling.}
-//var
-//  uni: TAstUnit;
-//  pars: TAstParamArray;  //Array of parameters
-//  pars1null: TAstParamArray;  //Array of parameters with one Null parameter
-//  f, sifDelayMs, sifWord: TAstFunDec;
-begin
-{  //////// Funciones del sistema ////////////
-  //Implement calls to Code Generator
-  callDefineArray  := @DefineArray;
-  callDefineObject := @DefineObject;
-  callDefinePointer:= @DefinePointer;
-  callStartProgram := @Cod_StartProgram;
-  callEndProgram   := @Cod_EndProgram;
-  //////////////////////// Create "System" Unit. //////////////////////
-  {Must be done once in First Pass. Originally system functions were created in a special
-  list and has a special treatment but it implied a lot of work for manage the memory,
-  linking, use of variables, and optimization. Now we create a "system unit" like a real
-  unit (more less) and we create the system function here, so we use the same code for
-  linking, calling and optimization that we use in common functions. Moreover, we can
-  create private functions.}
-  uni := CreateEleUnit('System');  //System unit
-  astProg.AddElementAndOpen(uni);  //Open Unit
-  CreateSystemTypesAndVars;
-  lexer.curLocation := locInterface;   {Maybe not needed because element here are created directly.}
-  //Creates operations
-  CreateBooleanOperations;
-  CreateByteOperations;
-  CreateCharOperations;
-  CreateWordOperations;
-  CreateDWordOperations;
-
-  //Fills "pars1null" with one Null parameter. Parameter NULL, allows any type.
-  SetLength(pars1null, 0);
-  AddParam(pars1null, 'n', srcPosNull, AstTree.typNull, decNone);
-
-  ///////////////// System INLINE functions (SIF) ///////////////
-  //Create system function "delay_ms". Too complex as SIF. We better implement as SNF.
-//  setlength(pars, 0);  //Reset parameters
-//  AddParam(pars, 'ms', srcPosNull, typWord, decRegis);  //Add parameter
-//  sifDelayMs :=
-//  AddSIFtoUnit('delay_ms', typNull, srcPosNull, pars, @SIF_delay_ms);
-
-  //Create system function "exit"
-  setlength(pars, 0);  //Reset parameters
-  AddSIFtoUnit('exit', SFI_EXIT0, AstTree.typNull, srcPosNull, pars);  //Versión sin parserámetros
-  sifFunInc :=
-  AddSIFtoUnit('exit', SFI_EXIT1, AstTree.typNull, srcPosNull, pars1null);
-  //Create system function "inc"
-  sifFunInc :=
-  AddSIFtoUnit('inc', SFI_INC, AstTree.typNull, srcPosNull, pars1null);
-  //Create system function "dec"
-  AddSIFtoUnit('dec', SFI_DEC, AstTree.typNull, srcPosNull, pars1null);
-  //Create system function "ord"
-  AddSIFtoUnit('ord', SFI_ORD, typByte, srcPosNull, pars1null);
-  //Create system function "chr"
-  AddSIFtoUnit('chr', SFI_CHR, typChar, srcPosNull, pars1null);
-  //Create system function "byte"
-  AddSIFtoUnit('byte', SFI_BYTE, typByte, srcPosNull, pars1null);
-  //Create system function "boolean"
-  AddSIFtoUnit('boolean', SFI_BOOLEAN, typBool, srcPosNull, pars1null);
-  //Create system function "word"
-  sifWord :=
-  AddSIFtoUnit('word', SFI_WORD, typWord, srcPosNull, pars1null);
-//  AddCallerToFrom(H, sifWord.BodyNode);  //Require H
-  //Create system function "word"
-  //sifWord :=
-  AddSIFtoUnit('dword', SFI_DWORD,  typDWord, srcPosNull, pars1null);
-
-  {*** Revisar esto luego
-
-  ///////////////// System Normal functions (SNF) ///////////////
-  //Multiply system function
-  setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'A', srcPosNull, typByte, decNone);  //Add parameter
-  AddParam(pars, 'B', srcPosNull, typByte, decNone);  //Add parameter
-  snfBytMulByt16 :=
-  AddSNFtoUnit('byt_mul_byt_16', typWord, srcPosNull, pars, @SNF_byt_mul_byt_16);
-  //Division system function
-  setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'A', srcPosNull, typByte, decRegisA);  //Add parameter
-  AddParam(pars, 'B', srcPosNull, typByte, decRegisX);  //Add parameter
-  snfBytDivByt8 :=
-  AddSNFtoUnit('byt_div_byt_8', typByte, srcPosNull, pars, @SNF_byt_div_byt_8);
-  AddCallerToFrom(E, snfBytDivByt8.BodyNode);
-  //Division system function
-  setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'A', srcPosNull, typWord, decNone);  //Add parameter
-  AddParam(pars, 'B', srcPosNull, typWord, decNone);  //Add parameter
-  AddLocVar(pars, 'tmp', srcPosNull, typWord, decNone);  //Add local variable
-  snfWrdDivWrd16 :=
-  AddSNFtoUnit('wrd_div_wrd_16', typWord, srcPosNull, pars, @SNF_wrd_div_wrd_16);
-  AddCallerToFrom(E, snfWrdDivWrd16.BodyNode);
-  //Word shift left
-  setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, typByte, decRegisX);   //Parameter counter shift
-  snfWordShift_l :=
-  AddSNFtoUnit('word_shift_l', typWord, srcPosNull, pars, @SNF_word_shift_l);
-  //Delay system function
-  setlength(pars, 0);  //Reset parameters
-  AddParam(pars, 'n', srcPosNull, typWord, decRegis);
-  snfDelayMs :=
-  AddSNFtoUnit('delay_ms', typWord, srcPosNull, pars, @SNF_delay_ms);
-  //AddCallerToFrom(snfDelayMs, sifDelayMs.bodyNode);  //Dependency
-  AddCallerToFrom(H, snfDelayMs.BodyNode);  //Require H
-
-  //Add dependencies of TByte._mul.
-  AddCallerToFrom(snfBytMulByt16, sifByteMulByte.bodyNode);
-  AddCallerToFrom(snfWordShift_l, sifByteMulByte.bodyNode);
-
-  AddCallerToFrom(snfBytDivByt8, sifByteDivByte.BodyNode);
-  AddCallerToFrom(snfBytDivByt8, sifByteModByte.BodyNode);
-
-  AddCallerToFrom(snfWrdDivWrd16, sifWordDivWord.BodyNode);
-  AddCallerToFrom(snfWrdDivWrd16, sifWordModWord.BodyNode);
-
-  AddCallerToFrom(snfWordShift_l, sifWordShlByte.bodyNode);
-}
-  //Close Unit
-  astProg.CloseElement;
-}end;
 constructor TAnalyzer.Create(msg0: TMessageManager);
 begin
   //Crea componentes del compilador
