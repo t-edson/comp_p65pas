@@ -1010,7 +1010,7 @@ begin
 //    //No incluye información de ruta. Asume que está en la misma ruta.
 //    filPath := ExtractFileDir(mainFile) + DirectorySeparator + filPath;
 //  end;
-  filPath := options.ExpandRelPathToMain(filPath);
+  filPath := options.ExpandRelPathToMain(filPath);  //***¿Y si es un include dentro de una unidad?
   if not FileExists(filPath) then begin
     GenErrorDir(ER_FILE_NO_FND_, [filPath]);
     exit;

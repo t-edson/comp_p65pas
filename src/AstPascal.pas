@@ -143,7 +143,6 @@ type  //Declaraciones y clases base para el AST
     property IsForward: Boolean read FIsForward;
     property IsAssembler: Boolean read FIsAssembler write FIsAssembler;
   public  //Inicialización y depuración
-    procedure Clear;
     procedure PrintDebug(Indent: Integer = 0); override;
     constructor Create(ANodeType: TASTNodeType; AIsForward: Boolean);
     destructor Destroy; override;
@@ -905,6 +904,7 @@ type  //Nodos estructurales
   public
     property UsedUnits: TUnitRefList read FUsedUnits;
   public  //Inicialización y depuración
+    procedure Clear;
     constructor Create;
     destructor Destroy; override;
     function ToString: string; override;
@@ -1003,10 +1003,11 @@ begin
   Param.IsParameter := True;
   Parameters.Add(Param);
 end;
-procedure TCodeContainer.Clear;
+procedure TProgram.Clear;
 {Limpia al árbol de sintaxis del programa o subprograma, y lo deja listo para iniciar el
 llenado}
 begin
+  FUsedUnits.Clear;
   //Limpiar declaraciones (eliminar todos los elementos)
   FDeclarations.Items.Clear;
   //Limpiar cuerpo principal (eliminar todas las instrucciones)

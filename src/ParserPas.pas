@@ -40,7 +40,7 @@ public   //Messages
   procedure GenError(txt: String; const Args: array of const; const srcPos: TSrcPos);
   procedure GenError(txt: string);
   procedure GenError(txt: String; const Args: array of const);
-public    //Eventos
+public    //Eventos y propiedades
   {Se separa en eventos las llamadas a módulos separados del Parser que son muy
   dependientes del hardware.}
   //LLamada para procesar directivas
@@ -50,9 +50,9 @@ public    //Eventos
   //Llamada para procesar parámetros adicionales declaración de variables
   callParseAdicVarDec: function(varDecl: TVarDecl): boolean of object;
   //LLamada para indicar que se ha incluido una unidad nueva
-  callUnitAdded: procedure(const curFile: string;   //Archivo que se está analizando
-                           const untName: string    //Nombre de la unidad en USES:
+  callUnitAdded: procedure(const untName: string    //Nombre de la unidad en USES:
                            ) of object;
+  function curFile: string; inline;
 protected // Métodos auxiliares para el parser
   function tokIdent: TTokenIdent; inline;
   function ConsumeSemicolon: boolean;
@@ -99,15 +99,15 @@ private   // Instrucciones
   procedure ParseWithStatement(var Block: TBlock);
   procedure ParseExitStatement(var Block: TBlock);
 public    // Sentencia, bloque y programa
-  IsUnit  : boolean;     //Flag to identify a Unit
-  mainFile: String;      //Archivo parseado actualmente
+  IsUnit  : boolean;     //Flag to identify a Unit in the main File
   procedure ParseStatement(Body: TBlock);
   procedure ParseDeclarations(Declars: TDeclarations; location: TElemLocation);
   procedure ParseBody(Body: TBlock);
   procedure ParseProgram(astProg: TProgram);
   procedure ParseUnit(astUnit: TUnit);
-  procedure ParseFile(mainFile0: String; var astProg: TProgram; var astUnit: TUnit);
-  procedure ParseUnitFile(mainFile0: String; var astUnit: TUnit);
+  procedure ParseFile(mainFile: String; var astProg: TProgram; var astUnit: TUnit
+    );
+  procedure ParseUnitFile(mainFile: String; var astUnit: TUnit);
 public    // Inicialización
   procedure Clear;  // Reinicia el compilador para un nuevo programa
   constructor Create(msg0: TMessageManager; lex0: TAleLexer);
@@ -184,6 +184,11 @@ begin
 end;
 {$EndRegion}
 {$region "Métodos auxiliares para el parser"}
+function TParserPas.curFile: string;
+{Devuelve el archivo que se está procesando actualmente.}
+begin
+  Exit(lex.curCtx.fileSrc);
+end;
 function TParserPas.tokIdent: TTokenIdent;
 begin
   exit(lex.curCtx.tokIdent);
@@ -1115,23 +1120,24 @@ var
   unitRef, untNod: TUnitRef;
 begin
   if tokIdent <> tiUSES then Exit;
+  Next;
   // Parsear lista de unidades separadas por comas
   while not HayError do begin
     //Lee nombre de la unidad
     if not ConsumeIdent(untName, ER_UNITNAME_EXP) then Break;
     //Valida si es duplicado.
     {En realidad este análisis es más de tipo semántico, pero se incluye aquí para evitar
-    lanzar el evento con nombres duplicados}
+    lanzar el evento callUnitAdded() con nombres duplicados}
     for untNod in unitContainer do begin
       if CompareText(untNod.UnitName, untName) = 0 then begin
-        GenError(ER_DUPLIC_UNIT);
+        GenError(ER_DUPLIC_UNIT);   //Ya está en la lista.
         Exit;
       end;
     end;
     //Añade la unidad al programa.
     unitRef := TUnitRef.Create(untName, lex.GetSrcPos);
     unitContainer.Add(unitRef);
-    callUnitAdded(mainFile, untName);   //Genera el evento para el gestor de unidades.
+    callUnitAdded(untName);   //Genera el evento para el gestor de unidades.
     // Verificar si hay más unidades
     if tokIdent = tiCOMMA then
       Next   //Consumir ',' y continuar
@@ -1870,7 +1876,7 @@ begin
       GenError('Código extra después del final de la unidad');
   end;
 end;
-procedure TParserPas.ParseFile(mainFile0: String; var astProg: TProgram;
+procedure TParserPas.ParseFile(mainFile: String; var astProg: TProgram;
   var astUnit: TUnit);
 {Analiza un archivo Pascal que puede representar a un programa completo o a una unidad.
 Si el archivo es una programa, llena el AST en "astProg". Si es una unidad, llena el AST
@@ -1878,7 +1884,6 @@ en "astUnit".
 Si "astProg" o "astUnit" no han sido creados, se les crea aquí, pero no se destruyen aquí.
 }
 begin
-  mainFile := mainFile0;  //Guarda la referencia al archivo actual
   lex.ClearContexts;   //Elimina todos los Contextos de entrada
   //Lee el archivo indicado
   if not lex.OpenContextFrom(mainFile) then begin
@@ -1903,20 +1908,20 @@ begin
     GenError(ER_PROG_UNT_EXP);  //Se esperaba "program" o "unit".
   end;
 end;
-procedure TParserPas.ParseUnitFile(mainFile0: String; var astUnit: TUnit);
+procedure TParserPas.ParseUnitFile(mainFile: String; var astUnit: TUnit);
 {Analiza un archivo Pascal que representa a una unidad y llena su AST en "astUnit".
 Si "astUnit" no ha sido creado, se crea aquí, pero no se destruye aquí.
-}
+A diferencia de ParseFile(), no se limpian los contextos previos, sino que se agrega uno
+nuevo y se cierra al terminar la exploración.}
 begin
-  mainFile := mainFile0;  //Guarda la referencia al archivo actual
-  lex.ClearContexts;   //Elimina todos los Contextos de entrada
+  //lex.ClearContexts;   //No limpiamos. Agregamos un nuevo contexto.
   //Lee el archivo indicado
   if not lex.OpenContextFrom(mainFile) then begin
     //No lo encuentra
     GenError(Format(ER_FIL_NOFOUND, [mainFile]));
     exit;
   end;
-  //Analiza el archivo.
+  //Estamos en otro contexo. Analizamos el archivo.
   SkipWhites;   //OJO: Se procesan directivas aquí
   if tokIdent = tiUNIT then begin
     //Compila una unidad
@@ -1927,6 +1932,8 @@ begin
     //Es otra cosa
     GenError(ER_UNT_EXPEXTED);  //Se esperaba "unit".
   end;
+  //Retoma el contexto anterior
+  lex.ReturnToPrevContext(false);  //Retorna al contexto padre.
 end;
 {$endregion}
 {$region "Inicialización"}

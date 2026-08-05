@@ -30,8 +30,6 @@ type
     procedure GenError(txt: string; const srcPos: TSrcPos);
   public
     mirRep: TMirList;    //Container for MIR representation
-  private
-    procedure parsercallUnitAdded(const untName: string);
   protected  //Elements processing
     procedure DoAnalyze;
   public     //Incialización
@@ -73,13 +71,10 @@ begin
   //Preparación
   ClearError;
   parserDir.ClearMacros; //Limpia las macros
+  unitmgr.Clear;
   parser.ParseFile(options.mainFile, astProg, astUnit);   //Puede generar errores
   CompiledUnit := parser.IsUnit;   //Identifica lo que ha compilado
   //TestAllConstructs;   //Llena el astProg con código de ejemplo
-end;
-procedure TAnalyzer.parsercallUnitAdded(const curFile: string; const untName: string);
-begin
-
 end;
 //Inicialización
 procedure TAnalyzer.CreateSystemUnitInAST;
@@ -219,7 +214,7 @@ begin
   parser.callProcDIRline     := @parserDir.ProcDIRline;
   parser.callParseASMblock   := @parserASM.ParseASMblock;
   parser.callParseAdicVarDec := @parserASM.ParseAdicVarDec;
-  parser.callUnitAdded       := @parsercallUnitAdded;
+  parser.callUnitAdded       := @unitmgr.LoadUnit;
   //Inicializa variables
   ejecProg := false;
 end;
