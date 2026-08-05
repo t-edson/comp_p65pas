@@ -99,7 +99,7 @@ private   // Instrucciones
   procedure ParseWithStatement(var Block: TBlock);
   procedure ParseExitStatement(var Block: TBlock);
 public    // Sentencia, bloque y programa
-  IsUnit  : boolean;     //Flag to identify a Unit in the main File
+  IsUnit  : boolean;     //Flag to identify a Unit in the main File.
   procedure ParseStatement(Body: TBlock);
   procedure ParseDeclarations(Declars: TDeclarations; location: TElemLocation);
   procedure ParseBody(Body: TBlock);
@@ -1803,11 +1803,13 @@ debe haber sido limpiado}
 var
   prgName: string;
 begin
-  Next;  //Consume "PROGRAM"
-  astProg.SrcPos := lex.GetSrcPos;
-  if not ConsumeIdent(prgName, ER_PROGNAM_EXP) then Exit;
-  astProg.Name := prgName;
-  if not ConsumeSemicolon then exit;
+  if tokIdent = tiPROGRAM then begin   //Se permite omitir "program"
+    Next;  //Consume "PROGRAM"
+    astProg.SrcPos := lex.GetSrcPos;
+    if not ConsumeIdent(prgName, ER_PROGNAM_EXP) then Exit;
+    astProg.Name := prgName;
+    if not ConsumeSemicolon then exit;
+  end;
   //Parsear sección USES (opcional)
   ParseUsesClause(astProg.UsedUnits);
   if HayError then Exit;
@@ -1908,7 +1910,7 @@ begin
   end;
   //Analiza el archivo.
   SkipWhites;   //OJO: Se procesan directivas aquí
-  if          tokIdent = tiPROGRAM then begin
+  if tokIdent in [tiPROGRAM, tiUSES]  then begin
     //Compila un programa
     IsUnit := False;
     if astProg = Nil then astProg := TProgram.Create else astProg.Clear;
@@ -1940,7 +1942,6 @@ begin
   SkipWhites;   //OJO: Se procesan directivas aquí
   if tokIdent = tiUNIT then begin
     //Compila una unidad
-    IsUnit := True;
     if astUnit = Nil then astUnit := TUnit.Create else astUnit.Clear;
     ParseUnit(astUnit);
   end else begin

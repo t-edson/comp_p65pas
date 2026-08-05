@@ -3,7 +3,7 @@ unit Analyzer;
 interface
 uses
   Classes, SysUtils, Types, alexiaLex, ParserPas, ParserASM_6502, ParserDirec,
-  CompGlobals, AstPascal, MirList, CompOptions, UnitManager;
+  CompGlobals, AstPascal, MirList, CompOptions, UnitManager, LazLogger;
 type
 
   { TAnalyzer }
@@ -67,6 +67,9 @@ procedure TAnalyzer.DoAnalyze;
 {Performs the Analysis (Lexical, syntactic and semantic).
 Input: The current context.
 Output: The AST.}
+var
+  unt: TCompiledUnit;
+  i: Integer;
 begin
   //Preparación
   ClearError;
@@ -74,7 +77,15 @@ begin
   unitmgr.Clear;
   parser.ParseFile(options.mainFile, astProg, astUnit);   //Puede generar errores
   CompiledUnit := parser.IsUnit;   //Identifica lo que ha compilado
-  //TestAllConstructs;   //Llena el astProg con código de ejemplo
+  //Muestra el orden de las unidades:
+  DebugLn('Orden de creación de las unidades:');
+  for i := 0 to unitmgr.Units.Count - 1 do begin
+    // Obtener y castear el objeto asociado al índice i
+    unt := TCompiledUnit(unitmgr.Units.Objects[i]);
+    // Hacer algo con unt
+    DebugLn('Unidad: ' + unt.UnitName + ', Idx=' + IntToStr(unt.Order));
+  end;
+
 end;
 //Inicialización
 procedure TAnalyzer.CreateSystemUnitInAST;

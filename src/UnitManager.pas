@@ -3,53 +3,60 @@ unidades:
 - Evita la carga múltiple de la misma unidad.
 - Ordena las unidades según sus dependencias.
 - Gestiona el ciclo de vida de las unidades (carga, análisis, liberación).
-- Detecta dependencias circulares .
+- Detecta dependencias circulares.
+Por Tito Hinostroza 2026.
 }
 unit UnitManager;
 {$mode ObjFPC}{$H+}
 interface
 uses
-  Classes, SysUtils, AstPascal, ParserPas, CompGlobals, alexiaLex;
+  Classes, SysUtils, AstPascal, ParserPas, CompGlobals, LazLogger, alexiaLex;
 
 type
+  //Estados que puede tener una unidad durante el ciclo de compilación.
   TUnitState = (
-    usNotLoaded,   //La unidad aún no se ha cargado
+    usNotLoaded,   //La unidad aún no se ha cargado. Estado temporal. Prescindible.
     usLoading,     //La unidad está en proceso de carga
     usLoaded,      //La unidad está completamente cargada
     usFailed       //La unidad falló al cargarse
   );
-
+  {Objeto que modela a una unidad analizada ("parseada") o en proceso de análisis
+  ("parseo").}
   TCompiledUnit = class
   private
     FUnitName: string;
     FUnitPath: string;
-    FState: TUnitState;
-    FAST: TUnit;
-    FUsedBy: TStringList;
+    FState   : TUnitState;
+    FAST     : TUnit;
+    FOrder   : Integer;
   public
     property UnitName: string read FUnitName;
     property UnitPath: string read FUnitPath write FUnitPath;
     property State: TUnitState read FState write FState;
     property AST: TUnit read FAST write FAST;
-    property UsedBy: TStringList read FUsedBy;
+    property Order: Integer read FOrder write FOrder;  //Orden para la compilación
   public   //Inicialización.
     constructor Create(const AUnitName: string);
     destructor Destroy; override;
   end;
-
+  {Gestor de las unidades. Es el punto de dentrada para agregar las unidades y
+  gestionarlas. Su lista Units guarda la referencia a todas las unidades leídas.
+  El modo de trabajo consiste ir agregando, una a una, las unidades que se listan en la
+  sección USES de un programa o unidad. Previamente se debe llamar a Clear() para
+  preparar el proceso.}
   TUnitManager = class
   private
-    FUnits: TStringList;                 // Nombre → TCompiledUnit
+    FUnits: TStringList;             //Lista de TCompiledUnit
     FMessageManager: TMessageManager;
     Parser: TParserPas;              //Referencia al parser
+    OrderIdx: Integer;               //Contador para el orden.
     function GetUnit(const UnitPath: string): TCompiledUnit;
     function ResolvePath(const AUnitName: string): string;
-    procedure AddError(const Msg: string);
   public
+    property Units: TStringList read FUnits;
     procedure LoadUnit(const AUnitName: string);
-    procedure Clear;
-    property Units[const AUnitName: string]: TCompiledUnit read GetUnit;
   public   //Inicialización
+    procedure Clear;
     constructor Create(AMessageManager: TMessageManager; Aparser: TParserPas);
     destructor Destroy; override;
   end;
@@ -63,26 +70,14 @@ begin
   FUnitName := AUnitName;
   FState := usNotLoaded;
   FAST := nil;
-  FUsedBy := TStringList.Create;
-  FUsedBy.Sorted := True;
-  FUsedBy.Duplicates := dupIgnore;
   FUnitPath := '';
 end;
 destructor TCompiledUnit.Destroy;
 begin
   FAST.Free;
-  FUsedBy.Free;
   inherited;
 end;
 // TUnitManager
-procedure TUnitManager.Clear;
-var
-  i: Integer;
-begin
-  for i := 0 to FUnits.Count - 1 do
-    FUnits.Objects[i].Free;
-  FUnits.Clear;
-end;
 function TUnitManager.GetUnit(const UnitPath: string): TCompiledUnit;
 {Devuelve la unidad que tiene la rura "UnitPath". Si no existe esa unidad, devuelve FALSE.}
 var
@@ -124,15 +119,33 @@ begin
   //Resuelve la ruta del archivo de unidad.
   UnitPath := ResolvePath(AUnitName);
   if UnitPath = '' then begin
-    AddError('Unidad no encontrada: ' + AUnitName);
+    Parser.GenError('Unidad no encontrada: ' + AUnitName);
     Exit;
   end;
   //Verifica si la unidad ya está cargada.
   CompUnit := GetUnit(UnitPath);
   if CompUnit = nil then begin
-    //No existe
+    //No existe. Crea la nueva unidad.
     CompUnit := TCompiledUnit.Create(AUnitName);
+    CompUnit.State := usLoading;
+    CompUnit.UnitPath := UnitPath;
+    //Agrega la unidad en "FUnits".
+    {Se agrega antes de parsear para que se puedan detectar las dependencias circulares}
     FUnits.AddObject(UnitPath, CompUnit);
+    //Parsea la unidad.
+    astUnit := Nil;
+    parser.ParseUnitFile(UnitPath, astUnit);  //Pueden generarse llamadas recursivas a LoadUnit().
+    //Valida el error.
+    if parser.HayError then begin
+      CompUnit.State := usFailed;
+      astUnit.Free;
+      Exit;
+    end;
+    CompUnit.AST := astUnit;     //Actualiza el AST
+    CompUnit.Order := OrderIdx;  //Actualiza orden de compilación
+    Inc(OrderIdx);
+    ///Marcar como cargada
+    CompUnit.State := usLoaded;
   end else begin
     //Ya existe la unidad.
     if CompUnit.State = usLoaded then begin
@@ -140,38 +153,31 @@ begin
       Exit;   //Devuelve el AST
     end else if CompUnit.State = usLoading then begin
       //Se está analizando actualmente.
-      AddError('Dependencia circular detectada: ' + AUnitName);
+      Parser.GenError('Dependencia circular detectada: ' + AUnitName);
       Exit;
     end else if CompUnit.State = usFailed then begin
       //Se analizó pero falló.
       Exit;
     end;
   end;
-  //Actualiza el registro de la unidad
-  CompUnit.State := usLoading;
-  CompUnit.UnitPath := UnitPath;
-  //Parsea la unidad
-  astUnit := Nil;
-  parser.ParseUnitFile(UnitPath, astUnit);   //Puede generar errores
-  if Parser.HayError then begin
-    CompUnit.State := usFailed;
-    astUnit.Free;
-    Exit;
-  end;
-  CompUnit.AST := astUnit;
-  ///Marcar como cargada
-  CompUnit.State := usLoaded;
 end;
-procedure TUnitManager.AddError(const Msg: string);
-// AddError - Añadir un error al gestor de mensajes
+//Inicialización
+procedure TUnitManager.Clear;
+var
+  i: Integer;
 begin
-  Parser.GenError(Msg);
+  for i := 0 to FUnits.Count - 1 do
+    FUnits.Objects[i].Free;
+  FUnits.Clear;
+  OrderIdx := 1;
 end;
 constructor TUnitManager.Create(AMessageManager: TMessageManager; Aparser: TParserPas);
 begin
+  //Lista de unidades
   FUnits := TStringList.Create;
   FUnits.Sorted := True;  // Para búsqueda rápida
   FMessageManager := AMessageManager;
+  //Guarda referencia al parser
   Parser := Aparser;
 end;
 destructor TUnitManager.Destroy;
@@ -182,4 +188,4 @@ begin
 end;
 
 end.
-//549
+

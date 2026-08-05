@@ -1,18 +1,10 @@
 program muestra; 
-uses sprite1;
-var a: byte absolute aaa;
-    b,c: array[0..2] of byte;
+uses unit1, unit2;
+var a: byte;
 //procedure MostrarMensaje; forward;
-procedure Locate(x: byte  registerX; y: byte  registerY);
 begin
-end;
-
-begin
-  a := #$41'''def';
-  a := 'aaa'#65;
-  a := 'aaa'#32'aaa';  
   asm clc end;
-//  y := aaa.bbb[5];
+  y := aaa.bbb[5];
 //  y := bbb.aaa(1);  *** Falta implementar
 //  y := aaa[i];
 //  empleado.Evaluaciones[1] := 5;
