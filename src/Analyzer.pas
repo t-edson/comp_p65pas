@@ -3,7 +3,8 @@ unit Analyzer;
 interface
 uses
   Classes, SysUtils, Types, alexiaLex, ParserPas, ParserASM_6502, ParserDirec,
-  CompGlobals, AstPascal, MirList, CompOptions, UnitManager, LazLogger;
+  CompGlobals, AstPascal, MirList, CompOptions, UnitManager, SemAnalizer,
+  LazLogger;
 type
 
   { TAnalyzer }
@@ -24,6 +25,7 @@ type
     astUnit  : TUnit;            //AST al compilar una unidad.
     unitmgr  : TUnitManager;     //Gestor de las unidades.
     options  : TCompOptions;     //Opciones del compilador.
+    checker  : TSemanticAnalyzer;//Analizador semántico
   public  //Mensajes
     procedure ClearError;
     procedure GenError(txt: string);

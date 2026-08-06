@@ -103,7 +103,6 @@ type  //Declaraciones y clases base para el AST
 
     constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); virtual;
   end;
 
   // Expresión (clase abstracta)
@@ -143,7 +142,6 @@ type  //Declaraciones y clases base para el AST
     property IsForward: Boolean read FIsForward;
     property IsAssembler: Boolean read FIsAssembler write FIsAssembler;
   public  //Inicialización y depuración
-    procedure PrintDebug(Indent: Integer = 0); override;
     constructor Create(ANodeType: TASTNodeType; AIsForward: Boolean);
     destructor Destroy; override;
   end;
@@ -176,7 +174,6 @@ type  //Nodos de expresiones
     function AsVariant: Variant;
 
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Literal booleano
   TBooleanLiteral = class(TExpression)
@@ -187,7 +184,6 @@ type  //Nodos de expresiones
 
     constructor Create(AValue: Boolean; const ASrcPos: TSrcPos);
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Literal string
   TStringLiteral = class(TExpression)
@@ -198,7 +194,6 @@ type  //Nodos de expresiones
   public  //Inicialización y depuración
     constructor Create(const AValue: string; const ASrcPos: TSrcPos);
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Literal de arreglos
   TArrayLiteral = class(TExpression)
@@ -212,7 +207,6 @@ type  //Nodos de expresiones
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Inicializador de campo para literales RECORD: nombre: 'Juan'
   TFieldInitializer = class(TASTNode)
@@ -228,7 +222,6 @@ type  //Nodos de expresiones
     property Value: TExpression read FValue;
 
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   TFieldInitializerList = specialize TFPGObjectList<TFieldInitializer>;
   // Literal de RECORD: (nombre: 'Juan'; edad: 30)
@@ -242,7 +235,6 @@ type  //Nodos de expresiones
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Literales de puntero: nil o $100.
   {De momento solo se soportará NIL porque, formalmente, un literal de puntero implica un
@@ -262,7 +254,6 @@ type  //Nodos de expresiones
     constructor Create(const ASrcPos: TSrcPos); overload;  // nil
     constructor Create(AAddress: Integer; const ASrcPos: TSrcPos); overload;  // dirección literal
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Referencia a variable
   TVariableRef = class(TExpression)
@@ -270,13 +261,11 @@ type  //Nodos de expresiones
     FName: string;
     FDeclaration: TVarDecl;
   public
-    constructor Create(const AName: string; const ASrcPos: TSrcPos);
-
     property Name: string read FName;
     property Declaration: TVarDecl read FDeclaration write FDeclaration;
 
+    constructor Create(const AName: string; const ASrcPos: TSrcPos);
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Expresión binaria
   TBinaryOp = class(TExpression)
@@ -293,7 +282,6 @@ type  //Nodos de expresiones
                        const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Expresión unaria
   TUnaryOp = class(TExpression)
@@ -301,15 +289,13 @@ type  //Nodos de expresiones
     FOp: string;
     FOperand: TExpression;
   public
-    constructor Create(const AOp: string; AOperand: TExpression;
-                       const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
     property Op: string read FOp;
     property Operand: TExpression read FOperand;
 
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
+    constructor Create(const AOp: string; AOperand: TExpression;
+                       const ASrcPos: TSrcPos);
+    destructor Destroy; override;
   end;
   // Llamada a función
   TFunctionCall = class(TExpression)
@@ -326,7 +312,6 @@ type  //Nodos de expresiones
     property Arguments: TExpressionList read FArguments;
 
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Acceso a campo: persona.edad
   TFieldAccess = class(TExpression)
@@ -342,7 +327,6 @@ type  //Nodos de expresiones
     property FieldName: string read FFieldName;
 
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Dereferencia de puntero: p^
   TPointerDeref = class(TExpression)
@@ -353,7 +337,6 @@ type  //Nodos de expresiones
     constructor Create(APointer: TExpression; const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Acceso a arreglo: variable[index]
   TArrayIndex = class(TExpression)
@@ -368,7 +351,6 @@ type  //Nodos de expresiones
     constructor Create(AArrayVar: TExpression; const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
 
 type  //Nodos de sentencias
@@ -387,7 +369,6 @@ type  //Nodos de sentencias
     property Value: TExpression read FValue;
 
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Sentencia IF
   TIfStatement = class(TASTNode)
@@ -405,7 +386,6 @@ type  //Nodos de sentencias
     property ElseBranch: TBlock read FElseBranch;
 
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Sentencia WHILE
   TWhileLoop = class(TASTNode)
@@ -421,7 +401,6 @@ type  //Nodos de sentencias
     property Body: TBlock read FBody;
 
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Sentencia REPEAT...UNTIL
   TRepeatUntil = class(TASTNode)
@@ -437,7 +416,6 @@ type  //Nodos de sentencias
     property Condition: TExpression read FCondition;
 
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Sentencia FOR
   TForLoop = class(TASTNode)
@@ -459,7 +437,6 @@ type  //Nodos de sentencias
                        const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Rama de CASE (constante: instrucción)
   TCaseBranch = class(TASTNode)
@@ -474,7 +451,6 @@ type  //Nodos de sentencias
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   TCaseBranchList = specialize TFPGObjectList<TCaseBranch>;
   // Sentencia CASE
@@ -494,7 +470,6 @@ type  //Nodos de sentencias
     constructor Create(ASelector: TExpression; const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Nodo para WITH
   TWithStatement = class(TASTNode)
@@ -509,7 +484,6 @@ type  //Nodos de sentencias
                        const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Nodo para la instrucción EXIT
   TExitStatement = class(TASTNode)
@@ -523,7 +497,6 @@ type  //Nodos de sentencias
     constructor Create(AReturnValue: TExpression; const ASrcPos: TSrcPos); overload;
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   //Tipos para soporte a instrucciones ASM
   //ASM instruction type
@@ -581,7 +554,6 @@ type  //Nodos de sentencias
   public  //Inicialización y depuración
     constructor Create(const ASrcPos: TSrcPos);
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   TAsmInstructionList = specialize TFPGObjectList<TAsmInstruction>;
   // Nodo para un bloque ASM
@@ -599,7 +571,6 @@ type  //Nodos de sentencias
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
 const //Tipos de declaraciones de variables
   DEC_NONE   = 0;  //Normal declaration. Will be mapped in RAM according compiler decision.
@@ -646,7 +617,6 @@ type  //Nodos de declaraciones
     constructor Create(const AName: string; const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Declaraciones de constantes
   TConstDecl = class(TASTNode)
@@ -668,7 +638,6 @@ type  //Nodos de declaraciones
       AValue: TExpression; const ASrcPos: TSrcPos); overload;
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Declaración de procedimiento
 
@@ -680,6 +649,7 @@ type  //Nodos de declaraciones
     FReturnTypeDef: TTypeDef;    // Resuelto en análisis semántico
   public
     property ReturnTypeName: string read FReturnTypeName write FReturnTypeName;
+    property ReturnTypeDef: TTypeDef read FReturnTypeDef;
     function IsFunction: Boolean; inline;
   public  //Inicialización y depuración
     function ToString: string; override;
@@ -697,7 +667,6 @@ type  //Definiciones previas para declaraciones de tipos
       constructor Create(ANodeType: TASTNodeType; const ATypeName: string;
           const ASrcPos: TSrcPos);
       function ToString: string; override;
-      procedure PrintDebug(Indent: Integer = 0); override;
     end;
   // Rango de arreglo (1..10, 'a'..'z', etc.)
   TArrayRange = class(TASTNode)
@@ -711,7 +680,6 @@ type  //Definiciones previas para declaraciones de tipos
     constructor Create(ALowExpr, AHighExpr: TExpression; const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   TArrayRangeList = specialize TFPGObjectList<TArrayRange>;
   //Definición de campo de RECORD. No se usa. Se está usando TVarDecl para los campos.
@@ -737,7 +705,6 @@ type  //Definiciones previas para declaraciones de tipos
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   TVariantBranchList = specialize TFPGObjectList<TVariantBranch>;
 type  //Nodos de declaraciones de tipos
@@ -745,7 +712,7 @@ type  //Nodos de declaraciones de tipos
   {Este nodo representa a una supuesta definición de los tipos básicos, que se supone ya
   están definidos. No se creará por códio.}
   TSimpleTypeDef = class(TTypeDef)
-  public
+  public  //Inicialización y depuración
     constructor Create(const ATypeName: string; const ASrcPos: TSrcPos);
     function ToString: string; override;
   end;
@@ -755,28 +722,24 @@ type  //Nodos de declaraciones de tipos
     FLowExpr: TExpression;
     FHighExpr: TExpression;
   public
-    constructor Create(ALowExpr, AHighExpr: TExpression; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
     property LowExpr: TExpression read FLowExpr;
     property HighExpr: TExpression read FHighExpr;
-
+  public  //Inicialización y depuración
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
+    constructor Create(ALowExpr, AHighExpr: TExpression; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
   end;
   // Enumerado (Rojo, Verde, Azul)
   TEnumTypeDef = class(TTypeDef)
   private
     FValues: TStringList;  // Lista de nombres de valores
   public
-    constructor Create(const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
     procedure AddValue(const Value: string);
     property Values: TStringList read FValues;
-
+  public  //Inicialización y depuración
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
+    constructor Create(const ASrcPos: TSrcPos);
+    destructor Destroy; override;
   end;
   // Alias (type TEdad = integer)
   TAliasTypeDef = class(TTypeDef)
@@ -784,14 +747,12 @@ type  //Nodos de declaraciones de tipos
     FBaseTypeName: string;
     FBaseTypeDef: TTypeDef;
   public
-    constructor Create(const ABaseTypeName: string; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
     property BaseTypeName: string read FBaseTypeName;
     property BaseTypeDef: TTypeDef read FBaseTypeDef write FBaseTypeDef;
-
+  public  //Inicialización y depuración
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
+    constructor Create(const ABaseTypeName: string; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
   end;
   // Arreglo (array[1..10] of TPersona)
   TArrayTypeDef = class(TTypeDef)
@@ -808,7 +769,6 @@ type  //Nodos de declaraciones de tipos
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Registro (record ... end)
   TRecordTypeDef = class(TTypeDef)
@@ -822,7 +782,6 @@ type  //Nodos de declaraciones de tipos
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Puntero (^TLista, ^integer)
   // ============================================================
@@ -837,7 +796,6 @@ type  //Nodos de declaraciones de tipos
     constructor Create(const ATargetTypeName: string; const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Tipo procedural: procedure(a: integer; b: integer);
   TProceduralType = class(TTypeDef)
@@ -853,7 +811,6 @@ type  //Nodos de declaraciones de tipos
     constructor Create(AIsFunction: Boolean; const ASrcPos: TSrcPos); overload;
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
 type  //Nodos estructurales
   // Nodo para la sección USES. ***** ¿No bastaría con un simple string?
@@ -867,7 +824,6 @@ type  //Nodos estructurales
   public  //Inicialización y depuración
     constructor Create(const AUnitName: string; const ASrcPos: TSrcPos);
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   TUnitRefList = specialize TFPGObjectList<TUnitRef>;
   // Contenedor de declaraciones
@@ -881,7 +837,6 @@ type  //Nodos estructurales
     constructor Create;
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   // Bloque (lista de instrucciones)
   TBlock = class(TASTNode)
@@ -892,7 +847,6 @@ type  //Nodos estructurales
     property Statements: TASTNodeList read FStatements;
   public  //Inicialización y depuración
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
     constructor Create;
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -908,7 +862,6 @@ type  //Nodos estructurales
     constructor Create;
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0);
   end;
   // Unidad
   TUnit = class(TASTNode)
@@ -934,7 +887,6 @@ type  //Nodos estructurales
     constructor Create;
     destructor Destroy; override;
     function ToString: string; override;
-    procedure PrintDebug(Indent: Integer = 0); override;
   end;
   TUnitList = specialize TFPGObjectList<TUnit>;
 
@@ -960,10 +912,6 @@ end;
 function TASTNode.ToString: string;
 begin
   Result := Format('Node(%d) at %s', [Ord(FNodeType), FSrcPos.RowColString]);
-end;
-procedure TASTNode.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
 end;
 // TExpression
 function TExpression.ValueStr: String;
@@ -1013,27 +961,6 @@ begin
   //Limpiar cuerpo principal (eliminar todas las instrucciones)
   FBody.Statements.Clear;
 end;
-procedure TCodeContainer.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  if Parameters.Count > 0 then begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Parameters:');
-    for i := 0 to Parameters.Count - 1 do
-      Parameters[i].PrintDebug(Indent + 4);
-  end;
-
-  if FDeclarations.Items.Count > 0 then
-    FDeclarations.PrintDebug(Indent + 2)
-  else
-    WriteLn(StringOfChar(' ', Indent + 2), 'Local declarations: (none)');
-
-  if FBody <> nil then begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Body:');
-    FBody.PrintDebug(Indent + 4);
-  end;
-end;
 constructor TCodeContainer.Create(ANodeType: TASTNodeType; AIsForward: Boolean);
 begin
   {Notar que no se indica el "SrcPos" de este objeto, ni de FDeclarations y FBody porque
@@ -1081,25 +1008,7 @@ begin
     Result := Result + ' -> ' + FDeclaration.Name;
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TVariableRef.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-end;
 // TNumberLiteral
-constructor TNumberLiteral.Create(AValue: Int64; const ASrcPos: TSrcPos);
-// Constructor para enteros
-begin
-  inherited Create(ntNumberLiteral, ASrcPos);
-  FKind := nkInteger;
-  FIntValue := AValue;
-end;
-constructor TNumberLiteral.Create(AValue: Double; const ASrcPos: TSrcPos);
-// Constructor para flotantes
-begin
-  inherited Create(ntNumberLiteral, ASrcPos);
-  FKind := nkFloat;
-  FFloatValue := AValue;
-end;
 function TNumberLiteral.IsInteger: Boolean;
 begin
   Result := FKind = nkInteger;
@@ -1130,6 +1039,20 @@ begin
       Result := Null;
   end;
 end;
+constructor TNumberLiteral.Create(AValue: Int64; const ASrcPos: TSrcPos);
+// Constructor para enteros
+begin
+  inherited Create(ntNumberLiteral, ASrcPos);
+  FKind := nkInteger;
+  FIntValue := AValue;
+end;
+constructor TNumberLiteral.Create(AValue: Double; const ASrcPos: TSrcPos);
+// Constructor para flotantes
+begin
+  inherited Create(ntNumberLiteral, ASrcPos);
+  FKind := nkFloat;
+  FFloatValue := AValue;
+end;
 function TNumberLiteral.ToString: string;
 begin
   case FKind of
@@ -1143,10 +1066,6 @@ begin
 
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TNumberLiteral.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-end;
 // TBooleanLiteral
 constructor TBooleanLiteral.Create(AValue: Boolean; const ASrcPos: TSrcPos);
 begin
@@ -1157,10 +1076,6 @@ function TBooleanLiteral.ToString: string;
 begin
   Result := Format('BooleanLiteral: %s', [BoolToStr(FValue, True)]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TBooleanLiteral.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
 end;
 // TStringLiteral
 constructor TStringLiteral.Create(const AValue: string; const ASrcPos: TSrcPos);
@@ -1173,21 +1088,7 @@ begin
   Result := Format('StringLiteral: "%s"', [FValue]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TStringLiteral.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-end;
 // TArrayLiteral
-constructor TArrayLiteral.Create(const ASrcPos: TSrcPos);
-begin
-  inherited Create(ntArrayLiteral, ASrcPos);
-  FValues := TExpressionList.Create(True);
-end;
-destructor TArrayLiteral.Destroy;
-begin
-  FValues.Free;
-  inherited;
-end;
 procedure TArrayLiteral.AddValue(Value: TExpression);
 begin
   FValues.Add(Value);
@@ -1211,17 +1112,15 @@ begin
     Result := Result + ' [multidimensional]';
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TArrayLiteral.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
+constructor TArrayLiteral.Create(const ASrcPos: TSrcPos);
 begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  if FValues.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Values:');
-    for i := 0 to FValues.Count - 1 do
-      FValues[i].PrintDebug(Indent + 4);
-  end;
+  inherited Create(ntArrayLiteral, ASrcPos);
+  FValues := TExpressionList.Create(True);
+end;
+destructor TArrayLiteral.Destroy;
+begin
+  FValues.Free;
+  inherited;
 end;
 // TFieldInitializer
 constructor TFieldInitializer.Create(const AFieldName: string; AValue: TExpression;
@@ -1241,12 +1140,6 @@ begin
   Result := Format('FieldInitializer: %s = %s',
                    [FFieldName, FValue.ToString]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TFieldInitializer.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Value:');
-  FValue.PrintDebug(Indent + 4);
 end;
 // TRecordLiteral
 constructor TRecordLiteral.Create(const ASrcPos: TSrcPos);
@@ -1268,27 +1161,7 @@ begin
   Result := Format('RecordLiteral: %d fields', [FFieldInitializers.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TRecordLiteral.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  for i := 0 to FFieldInitializers.Count - 1 do
-    TFieldInitializer(FFieldInitializers[i]).PrintDebug(Indent + 2);
-end;
 // TPointerLiteral
-constructor TPointerLiteral.Create(const ASrcPos: TSrcPos);
-// Constructor para nil
-begin
-  inherited Create(ntPointerLiteral, ASrcPos);
-  FAddress := -1;
-end;
-constructor TPointerLiteral.Create(AAddress: Integer; const ASrcPos: TSrcPos);
-// Constructor para dirección literal
-begin
-  inherited Create(ntPointerLiteral, ASrcPos);
-  FAddress := AAddress;
-end;
 function TPointerLiteral.IsNil: Boolean;
 begin
   Result := FAddress = -1;
@@ -1305,9 +1178,17 @@ begin
     Result := Format('PointerLiteral: $%4.4x', [FAddress]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TPointerLiteral.PrintDebug(Indent: Integer = 0);
+constructor TPointerLiteral.Create(const ASrcPos: TSrcPos);
+// Constructor para nil
 begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
+  inherited Create(ntPointerLiteral, ASrcPos);
+  FAddress := -1;
+end;
+constructor TPointerLiteral.Create(AAddress: Integer; const ASrcPos: TSrcPos);
+// Constructor para dirección literal
+begin
+  inherited Create(ntPointerLiteral, ASrcPos);
+  FAddress := AAddress;
 end;
 // TBinaryOp
 constructor TBinaryOp.Create(const AOp: string; ALeft, ARight: TExpression;
@@ -1329,14 +1210,6 @@ begin
   Result := Format('BinaryOp: %s', [FOp]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TBinaryOp.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Left:');
-  FLeft.PrintDebug(Indent + 4);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Right:');
-  FRight.PrintDebug(Indent + 4);
-end;
 // TUnaryOp
 constructor TUnaryOp.Create(const AOp: string; AOperand: TExpression;
                              const ASrcPos: TSrcPos);
@@ -1354,12 +1227,6 @@ function TUnaryOp.ToString: string;
 begin
   Result := Format('UnaryOp: %s', [FOp]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TUnaryOp.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Operand:');
-  FOperand.PrintDebug(Indent + 4);
 end;
 // TFunctionCall
 constructor TFunctionCall.Create(const AName: string; const ASrcPos: TSrcPos);
@@ -1382,18 +1249,6 @@ begin
   Result := Format('FunctionCall: %s (%d args)', [FName, FArguments.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TFunctionCall.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  if FArguments.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Arguments:');
-    for i := 0 to FArguments.Count - 1 do
-      FArguments[i].PrintDebug(Indent + 4);
-  end;
-end;
 // TFieldAccess
 constructor TFieldAccess.Create(ARecordVar: TExpression; const AFieldName: string;
                                 const ASrcPos: TSrcPos);
@@ -1412,12 +1267,6 @@ begin
   Result := Format('FieldAccess: %s.%s', [FRecordVar.ToString, FFieldName]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TFieldAccess.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Record variable:');
-  FRecordVar.PrintDebug(Indent + 4);
-end;
 // TPointerDeref
 constructor TPointerDeref.Create(APointer: TExpression; const ASrcPos: TSrcPos);
 begin
@@ -1433,12 +1282,6 @@ function TPointerDeref.ToString: string;
 begin
   Result := Format('PointerDeref: %s^', [FPointer.ToString]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TPointerDeref.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Pointer:');
-  FPointer.PrintDebug(Indent + 4);
 end;
 // TArrayIndex
 procedure TArrayIndex.AddIndex(Index: TExpression);
@@ -1462,20 +1305,6 @@ begin
   Result := Format('ArrayIndex: %s (%d indices)',
                    [FArrayVar.ToString, FIndices.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TArrayIndex.PrintDebug(Indent: Integer);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Array variable:');
-  FArrayVar.PrintDebug(Indent + 4);
-  if FIndices.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Indices:');
-    for i := 0 to FIndices.Count - 1 do
-      FIndices[i].PrintDebug(Indent + 4);
-  end;
 end;
 {$endregion}
 {$region "Nodos de sentencias"}
@@ -1511,12 +1340,6 @@ begin
   Result := Format('Assignment: %s := ...', [TargetStr]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TAssignment.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  FTarget.PrintDebug(Indent + 2);
-  FValue.PrintDebug(Indent + 2);
-end;
 // TIfStatement
 constructor TIfStatement.Create(ACondition: TExpression; AThenBranch: TBlock;
                                AElseBranch: TBlock; const ASrcPos: TSrcPos);
@@ -1538,19 +1361,6 @@ begin
   Result := 'IfStatement';
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TIfStatement.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Condition:');
-  FCondition.PrintDebug(Indent + 4);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Then branch:');
-  FThenBranch.PrintDebug(Indent + 4);
-  if FElseBranch <> nil then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Else branch:');
-    FElseBranch.PrintDebug(Indent + 4);
-  end;
-end;
 // TWhileLoop
 constructor TWhileLoop.Create(ACondition: TExpression; ABody: TBlock;
                               const ASrcPos: TSrcPos);
@@ -1570,14 +1380,6 @@ begin
   Result := 'WhileLoop';
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TWhileLoop.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Condition:');
-  FCondition.PrintDebug(Indent + 4);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Body:');
-  FBody.PrintDebug(Indent + 4);
-end;
 // TRepeatUntil
 constructor TRepeatUntil.Create(ABody: TBlock; ACondition: TExpression;
                                 const ASrcPos: TSrcPos);
@@ -1596,14 +1398,6 @@ function TRepeatUntil.ToString: string;
 begin
   Result := 'RepeatUntil';
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TRepeatUntil.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Body:');
-  FBody.PrintDebug(Indent + 4);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Condition (exit when true):');
-  FCondition.PrintDebug(Indent + 4);
 end;
 // TForLoop
 constructor TForLoop.Create(AControlVar: TVariableRef; ADirection: TForDirection;
@@ -1631,20 +1425,6 @@ begin
                    [FControlVar.Name, ForDirectionToString(FDirection), '...']);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TForLoop.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Control variable:');
-  FControlVar.PrintDebug(Indent + 4);
-  WriteLn(StringOfChar(' ', Indent + 2), Format('Direction: %s',
-           [ForDirectionToString(FDirection)]));
-  WriteLn(StringOfChar(' ', Indent + 2), 'Start expression:');
-  FStartExpr.PrintDebug(Indent + 4);
-  WriteLn(StringOfChar(' ', Indent + 2), 'End expression:');
-  FEndExpr.PrintDebug(Indent + 4);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Body:');
-  FBody.PrintDebug(Indent + 4);
-end;
 // TCaseStatement
 procedure TCaseStatement.AddBranch(Branch: TCaseBranch);
 begin
@@ -1671,22 +1451,6 @@ begin
     Result := Result + ' (with else)';
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TCaseStatement.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Selector:');
-  FSelector.PrintDebug(Indent + 4);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Branches:');
-  for i := 0 to FBranches.Count - 1 do
-    FBranches[i].PrintDebug(Indent + 4);
-  if FElseBranch <> nil then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Else branch:');
-    FElseBranch.PrintDebug(Indent + 4);
-  end;
-end;
 // TCaseBranch
 constructor TCaseBranch.Create(const ASrcPos: TSrcPos);
 begin
@@ -1709,20 +1473,6 @@ begin
   Result := Format('CaseBranch (%d constants)', [FConstants.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TCaseBranch.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Constants:');
-  for i := 0 to FConstants.Count - 1 do
-    FConstants[i].PrintDebug(Indent + 4);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Statement:');
-  if FStatement <> nil then
-    FStatement.PrintDebug(Indent + 4)
-  else
-    WriteLn(StringOfChar(' ', Indent + 4), '(empty)');
-end;
 // TWithStatement
 constructor TWithStatement.Create(ARecordVar: TExpression; ABody: TBlock;
                                   const ASrcPos: TSrcPos);
@@ -1741,14 +1491,6 @@ function TWithStatement.ToString: string;
 begin
   Result := Format('WithStatement: %s', [FRecordVar.ToString]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TWithStatement.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Record variable:');
-  FRecordVar.PrintDebug(Indent + 4);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Body:');
-  FBody.PrintDebug(Indent + 4);
 end;
 // TExitStatement
 function TExitStatement.HasReturnValue: Boolean;
@@ -1780,15 +1522,6 @@ begin
     Result := 'ExitStatement';
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TExitStatement.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  if HasReturnValue then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Return value:');
-    FReturnValue.PrintDebug(Indent + 4);
-  end;
-end;
 // TAsmOperand
 procedure TAsmOperand.ClearOperations;
 begin
@@ -1819,10 +1552,6 @@ begin
   Result := 'AsmInstruction';
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TAsmInstruction.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-end;
 // TAsmBlock
 constructor TAsmBlock.Create(const ASrcPos: TSrcPos);
 begin
@@ -1852,21 +1581,6 @@ begin
   if FRegisters.Count > 0 then
     Result := Result + Format(' modifies [%s]', [FRegisters.CommaText]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TAsmBlock.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  if FRegisters.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Registers:');
-    for i := 0 to FRegisters.Count - 1 do
-      WriteLn(StringOfChar(' ', Indent + 4), FRegisters[i]);
-  end;
-  WriteLn(StringOfChar(' ', Indent + 2), 'Instructions:');
-  for i := 0 to FInstructions.Count - 1 do
-    FInstructions[i].PrintDebug(Indent + 4);
 end;
 {$endregion}
 {$region "Nodos de declaraciones"}
@@ -1907,11 +1621,11 @@ begin
   end;
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TVarDecl.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-end;
 // TConstDecl
+function TConstDecl.HasType: Boolean;
+begin
+  Result := FTypeName <> '';
+end;
 constructor TConstDecl.Create(const AName: string; AValue: TExpression;
                               const ASrcPos: TSrcPos);
 begin
@@ -1937,10 +1651,6 @@ begin
   FTypeDef.Free;
   inherited;
 end;
-function TConstDecl.HasType: Boolean;
-begin
-  Result := FTypeName <> '';
-end;
 function TConstDecl.ToString: string;
 begin
   Result := Format('ConstDecl: %s', [FName]);
@@ -1948,17 +1658,6 @@ begin
     Result := Result + Format(': %s', [FTypeName]);
   Result := Result + Format(' = %s', [FValue.ToString]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TConstDecl.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  if HasType and (FTypeDef <> nil) then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Type:');
-    FTypeDef.PrintDebug(Indent + 4);
-  end;
-  WriteLn(StringOfChar(' ', Indent + 2), 'Value:');
-  FValue.PrintDebug(Indent + 4);
 end;
 // TProcDecl
 function TProcDecl.IsFunction: Boolean;
@@ -2005,20 +1704,6 @@ begin
   Result := 'ArrayRange';
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TArrayRange.PrintDebug(Indent: Integer);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Low:');
-  if FLowExpr <> nil then
-    FLowExpr.PrintDebug(Indent + 4)
-  else
-    WriteLn(StringOfChar(' ', Indent + 4), '(nil)');
-  WriteLn(StringOfChar(' ', Indent + 2), 'High:');
-  if FHighExpr <> nil then
-    FHighExpr.PrintDebug(Indent + 4)
-  else
-    WriteLn(StringOfChar(' ', Indent + 4), '(nil)');
-end;
 // TVariantBranch
 constructor TVariantBranch.Create(const ASrcPos: TSrcPos);
 begin
@@ -2046,24 +1731,6 @@ begin
                    [FSelectorValues.Count, FFields.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TVariantBranch.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  if FSelectorValues.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Selectors:');
-    for i := 0 to FSelectorValues.Count - 1 do
-      FSelectorValues[i].PrintDebug(Indent + 4);
-  end;
-  if FFields.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Fields:');
-    for i := 0 to FFields.Count - 1 do
-      FFields[i].PrintDebug(Indent + 4);
-  end;
-end;
 // TTypeDef
 constructor TTypeDef.Create(ANodeType: TASTNodeType; const ATypeName: string;
                             const ASrcPos: TSrcPos);
@@ -2074,10 +1741,6 @@ end;
 function TTypeDef.ToString: string;
 begin
   Result := Format('TypeDef(%d): %s', [Ord(NodeType), FTypeName]);
-end;
-procedure TTypeDef.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
 end;
 {$endregion}
 {$region "Nodos de declaraciones de tipos"}
@@ -2109,15 +1772,15 @@ begin
   Result := Format('Subrange: %s..%s',
                    [FLowExpr.ToString, FHighExpr.ToString]);
 end;
-procedure TSubrangeTypeDef.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Low:');
-  FLowExpr.PrintDebug(Indent + 4);
-  WriteLn(StringOfChar(' ', Indent + 2), 'High:');
-  FHighExpr.PrintDebug(Indent + 4);
-end;
 // TEnumTypeDef
+procedure TEnumTypeDef.AddValue(const Value: string);
+begin
+  FValues.Add(Value);
+end;
+function TEnumTypeDef.ToString: string;
+begin
+  Result := Format('Enum: (%s)', [FValues.CommaText]);
+end;
 constructor TEnumTypeDef.Create(const ASrcPos: TSrcPos);
 begin
   inherited Create(ntEnumType, '', ASrcPos);
@@ -2128,24 +1791,11 @@ begin
   FValues.Free;
   inherited;
 end;
-procedure TEnumTypeDef.AddValue(const Value: string);
-begin
-  FValues.Add(Value);
-end;
-function TEnumTypeDef.ToString: string;
-begin
-  Result := Format('Enum: (%s)', [FValues.CommaText]);
-end;
-procedure TEnumTypeDef.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Values:');
-  for i := 0 to FValues.Count - 1 do
-    WriteLn(StringOfChar(' ', Indent + 4), FValues[i]);
-end;
 // TAliasTypeDef
+function TAliasTypeDef.ToString: string;
+begin
+  Result := Format('Alias: %s = %s', [FTypeName, FBaseTypeName]);
+end;
 constructor TAliasTypeDef.Create(const ABaseTypeName: string;
   const ASrcPos: TSrcPos);
 begin
@@ -2155,14 +1805,6 @@ end;
 destructor TAliasTypeDef.Destroy;
 begin
   inherited Destroy;
-end;
-function TAliasTypeDef.ToString: string;
-begin
-  Result := Format('Alias: %s = %s', [FTypeName, FBaseTypeName]);
-end;
-procedure TAliasTypeDef.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
 end;
 // TArrayTypeDef
 procedure TArrayTypeDef.AddRange(Range: TArrayRange);
@@ -2192,18 +1834,6 @@ begin
     typName := FElementTypeName;
   Result := Format('ArrayType: [%d dims] of %s', [FIndexRanges.Count, typName]);
 end;
-procedure TArrayTypeDef.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Index ranges:');
-  for i := 0 to FIndexRanges.Count - 1 do
-    FIndexRanges[i].PrintDebug(Indent + 4);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Element type: ', FElementTypeName);
-  if FElementTypeDef <> nil then
-    FElementTypeDef.PrintDebug(Indent + 4);
-end;
 // TRecordTypeDef
 constructor TRecordTypeDef.Create(const ASrcPos: TSrcPos);
 begin
@@ -2223,15 +1853,6 @@ function TRecordTypeDef.ToString: string;
 begin
   Result := Format('Record: %d fields', [Fields.Count]);
 end;
-procedure TRecordTypeDef.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Fields:');
-  for i := 0 to Fields.Count - 1 do
-    Fields[i].PrintDebug(Indent + 4);
-end;
 // TPointerTypeDef
 constructor TPointerTypeDef.Create(const ATargetTypeName: string;
   const ASrcPos: TSrcPos);
@@ -2248,13 +1869,6 @@ end;
 function TPointerTypeDef.ToString: string;
 begin
   Result := Format('Pointer: ^%s', [FTargetTypeName]);
-end;
-procedure TPointerTypeDef.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  WriteLn(StringOfChar(' ', Indent + 2), 'Target type: ', FTargetTypeName);
-  if FTargetTypeDef <> nil then
-    FTargetTypeDef.PrintDebug(Indent + 4);
 end;
 // TProceduralType
 constructor TProceduralType.Create(AIsFunction: Boolean; const ASrcPos: TSrcPos);
@@ -2286,27 +1900,6 @@ begin
     Result := Format('ProcedureType: (%d params)', [Parameters.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TProceduralType.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-
-  if Parameters.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Parameters:');
-    for i := 0 to Parameters.Count - 1 do
-      Parameters[i].PrintDebug(Indent + 4);
-  end;
-
-  if FIsFunction and (ReturnTypeName <> '') then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Return type:');
-    WriteLn(StringOfChar(' ', Indent + 4), ReturnTypeName);
-    if ReturnTypeDef <> nil then
-      ReturnTypeDef.PrintDebug(Indent + 4);
-  end;
-end;
 {$endregion}
 {$region "Nodos estructurales"}
 // TUnitRef
@@ -2322,10 +1915,6 @@ begin
   if FUnitPath <> '' then
     Result := Result + Format(' -> %s', [FUnitPath]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TUnitRef.PrintDebug(Indent: Integer = 0);
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
 end;
 // TDeclarations
 constructor TDeclarations.Create;
@@ -2347,14 +1936,6 @@ begin
   Result := Format('Declarations (%d items)', [FItems.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
-procedure TDeclarations.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  for i := 0 to FItems.Count - 1 do
-    FItems[i].PrintDebug(Indent + 2);
-end;
 // TBlock
 procedure TBlock.AddStatement(Statement: TASTNode);
 begin
@@ -2364,14 +1945,6 @@ function TBlock.ToString: string;
 begin
   Result := Format('Block (%d statements)', [FStatements.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TBlock.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  for i := 0 to FStatements.Count - 1 do
-    FStatements[i].PrintDebug(Indent + 2);
 end;
 constructor TBlock.Create;
 begin
@@ -2409,31 +1982,6 @@ begin
   if FDeclarations <> nil then
     Result := Result + Format(' (%d decls)', [FDeclarations.Items.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TProgram.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-
-  // Mostrar USES
-  if FUsedUnits.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Uses:');
-    for i := 0 to FUsedUnits.Count - 1 do
-      FUsedUnits[i].PrintDebug(Indent + 4);
-  end;
-
-  // Mostrar declaraciones
-  if FDeclarations.Items.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Declarations:');
-    FDeclarations.PrintDebug(Indent + 4);
-  end;
-
-  // Mostrar cuerpo
-  WriteLn(StringOfChar(' ', Indent + 2), 'Main body:');
-  FBody.PrintDebug(Indent + 4);
 end;
 // TUnit
 procedure TUnit.Clear;
@@ -2477,55 +2025,6 @@ begin
   if FImplementationDecls.Items.Count > 0 then
     Result := Result + Format(' (impl %d decls)', [FImplementationDecls.Items.Count]);
   Result := Result + Format(' at %s', [FSrcPos.RowColString]);
-end;
-procedure TUnit.PrintDebug(Indent: Integer = 0);
-var
-  i: Integer;
-begin
-  WriteLn(StringOfChar(' ', Indent), ToString);
-  // Mostrar interface USES
-  if FInterfaceUses.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Interface uses:');
-    for i := 0 to FInterfaceUses.Count - 1 do
-      FInterfaceUses[i].PrintDebug(Indent + 4);
-  end;
-
-  // Mostrar interface declarations
-  if FInterfaceDecls.Items.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Interface declarations:');
-    FInterfaceDecls.PrintDebug(Indent + 4);
-  end;
-
-  // Mostrar implementation USES
-  if FImplementationUses.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Implementation uses:');
-    for i := 0 to FImplementationUses.Count - 1 do
-      FImplementationUses[i].PrintDebug(Indent + 4);
-  end;
-
-  // Mostrar implementation declarations
-  if FImplementationDecls.Items.Count > 0 then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Implementation declarations:');
-    FImplementationDecls.PrintDebug(Indent + 4);
-  end;
-
-  // Mostrar initialization block
-  if FInitializationBlock <> nil then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Initialization:');
-    FInitializationBlock.PrintDebug(Indent + 4);
-  end;
-
-  // Mostrar finalization block
-  if FFinalizationBlock <> nil then
-  begin
-    WriteLn(StringOfChar(' ', Indent + 2), 'Finalization:');
-    FFinalizationBlock.PrintDebug(Indent + 4);
-  end;
 end;
 {$endregion}
 end.
