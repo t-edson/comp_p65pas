@@ -23,9 +23,9 @@ type
     parserDir: TParserDirective; //Parser para directivas
     astProg  : TProgram;         //AST al compilar un programa.
     astUnit  : TUnit;            //AST al compilar una unidad.
-    unitmgr  : TUnitManager;     //Gestor de las unidades.
-    options  : TCompOptions;     //Opciones del compilador.
+    unitmgr  : TUnitManager;     //Gestor de unidades.
     checker  : TSemanticAnalyzer;//Analizador semántico
+    options  : TCompOptions;     //Opciones del compilador.
   public  //Mensajes
     procedure ClearError;
     procedure GenError(txt: string);
@@ -76,17 +76,18 @@ begin
   ClearError;
   parserDir.ClearMacros; //Limpia las macros
   unitmgr.Clear;
+  //Análisis sintáctico.
   parser.ParseFile(options.mainFile, astProg, astUnit);   //Puede generar errores
   CompiledUnit := parser.IsUnit;   //Identifica lo que ha compilado
   //Muestra el orden de las unidades:
-  DebugLn('Orden de creación de las unidades:');
-  for i := 0 to unitmgr.Units.Count - 1 do begin
-    // Obtener y castear el objeto asociado al índice i
-    unt := TCompiledUnit(unitmgr.Units.Objects[i]);
-    // Hacer algo con unt
-    DebugLn('Unidad: ' + unt.UnitName + ', Idx=' + IntToStr(unt.Order));
-  end;
+  //DebugLn('Orden de creación de las unidades:');
+  //for i := 0 to unitmgr.Units.Count - 1 do begin
+  //  unt := TCompiledUnit(unitmgr.Units.Objects[i]);
+  //  DebugLn('Unidad: ' + unt.UnitName + ', Idx=' + IntToStr(unt.Order));
+  //end;
 
+  //Análisis semántico
+  //checker.Analyze(astProg);
 end;
 //Inicialización
 constructor TAnalyzer.Create(msg0: TMessageManager);
@@ -95,10 +96,11 @@ begin
   msg       := msg0;
   lexer     := TAleLexer.Create(msg);
   parser    := TParserPas.Create(msg, lexer);
-  options   := TCompOptions.Create;
   parserASM := TParserAsm6502.Create(msg, lexer);
   parserDir := TParserDirective.Create(msg, lexer, options);
   unitmgr   := TUnitManager.Create(msg, parser);
+  checker   := TSemanticAnalyzer.Create;
+  options   := TCompOptions.Create;
   mirRep    := TMirList.Create;
   //Conecta el parser a los otros componentes del compilador.
   parser.callProcDIRline     := @parserDir.ProcDIRline;
@@ -110,13 +112,14 @@ begin
 end;
 destructor TAnalyzer.Destroy;
 begin
-  astUnit.Free;       //Destruye si se creó
-  astProg.Free;       //Destruye si se creó
   mirRep.Destroy;
+  options.Destroy;
+  checker.Destroy;
   unitmgr.Destroy;
   parserDir.Destroy;
   parserASM.Destroy;
-  options.Destroy;
+  astUnit.Free;       //Destruye si se creó
+  astProg.Free;       //Destruye si se creó
   parser.Destroy;
   lexer.Destroy;
   inherited Destroy;

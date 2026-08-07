@@ -710,7 +710,7 @@ type  //Definiciones previas para declaraciones de tipos
 type  //Nodos de declaraciones de tipos
   // Declaración de tipos pedefinidos (integer, byte, boolean, etc.)
   {Este nodo representa a una supuesta definición de los tipos básicos, que se supone ya
-  están definidos. No se creará por códio.}
+  están definidos. No se creará por código.}
   TSimpleTypeDef = class(TTypeDef)
   public  //Inicialización y depuración
     constructor Create(const ATypeName: string; const ASrcPos: TSrcPos);
@@ -911,7 +911,7 @@ begin
 end;
 function TASTNode.ToString: string;
 begin
-  Result := Format('Node(%d) at %s', [Ord(FNodeType), FSrcPos.RowColString]);
+  Result := Format('Node(%d)', [Ord(FNodeType)]);
 end;
 // TExpression
 function TExpression.ValueStr: String;
@@ -1006,7 +1006,6 @@ begin
   Result := Format('VarRef: %s', [FName]);
   if FDeclaration <> nil then
     Result := Result + ' -> ' + FDeclaration.Name;
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TNumberLiteral
 function TNumberLiteral.IsInteger: Boolean;
@@ -1063,8 +1062,6 @@ begin
     else
       Result := 'NumberLiteral: (unknown)';
   end;
-
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TBooleanLiteral
 constructor TBooleanLiteral.Create(AValue: Boolean; const ASrcPos: TSrcPos);
@@ -1075,7 +1072,6 @@ end;
 function TBooleanLiteral.ToString: string;
 begin
   Result := Format('BooleanLiteral: %s', [BoolToStr(FValue, True)]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TStringLiteral
 constructor TStringLiteral.Create(const AValue: string; const ASrcPos: TSrcPos);
@@ -1086,7 +1082,6 @@ end;
 function TStringLiteral.ToString: string;
 begin
   Result := Format('StringLiteral: "%s"', [FValue]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TArrayLiteral
 procedure TArrayLiteral.AddValue(Value: TExpression);
@@ -1110,7 +1105,6 @@ begin
   Result := Format('ArrayLiteral: %d values', [FValues.Count]);
   if IsMultiDimensional then
     Result := Result + ' [multidimensional]';
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 constructor TArrayLiteral.Create(const ASrcPos: TSrcPos);
 begin
@@ -1139,7 +1133,6 @@ function TFieldInitializer.ToString: string;
 begin
   Result := Format('FieldInitializer: %s = %s',
                    [FFieldName, FValue.ToString]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TRecordLiteral
 constructor TRecordLiteral.Create(const ASrcPos: TSrcPos);
@@ -1159,7 +1152,6 @@ end;
 function TRecordLiteral.ToString: string;
 begin
   Result := Format('RecordLiteral: %d fields', [FFieldInitializers.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TPointerLiteral
 function TPointerLiteral.IsNil: Boolean;
@@ -1176,7 +1168,6 @@ begin
     Result := 'PointerLiteral: nil'
   else
     Result := Format('PointerLiteral: $%4.4x', [FAddress]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 constructor TPointerLiteral.Create(const ASrcPos: TSrcPos);
 // Constructor para nil
@@ -1208,7 +1199,6 @@ end;
 function TBinaryOp.ToString: string;
 begin
   Result := Format('BinaryOp: %s', [FOp]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TUnaryOp
 constructor TUnaryOp.Create(const AOp: string; AOperand: TExpression;
@@ -1226,7 +1216,6 @@ end;
 function TUnaryOp.ToString: string;
 begin
   Result := Format('UnaryOp: %s', [FOp]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TFunctionCall
 constructor TFunctionCall.Create(const AName: string; const ASrcPos: TSrcPos);
@@ -1247,7 +1236,6 @@ end;
 function TFunctionCall.ToString: string;
 begin
   Result := Format('FunctionCall: %s (%d args)', [FName, FArguments.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TFieldAccess
 constructor TFieldAccess.Create(ARecordVar: TExpression; const AFieldName: string;
@@ -1265,7 +1253,6 @@ end;
 function TFieldAccess.ToString: string;
 begin
   Result := Format('FieldAccess: %s.%s', [FRecordVar.ToString, FFieldName]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TPointerDeref
 constructor TPointerDeref.Create(APointer: TExpression; const ASrcPos: TSrcPos);
@@ -1281,7 +1268,6 @@ end;
 function TPointerDeref.ToString: string;
 begin
   Result := Format('PointerDeref: %s^', [FPointer.ToString]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TArrayIndex
 procedure TArrayIndex.AddIndex(Index: TExpression);
@@ -1304,7 +1290,6 @@ function TArrayIndex.ToString: string;
 begin
   Result := Format('ArrayIndex: %s (%d indices)',
                    [FArrayVar.ToString, FIndices.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 {$endregion}
 {$region "Nodos de sentencias"}
@@ -1338,7 +1323,6 @@ begin
       TargetStr := '<Expression>';
   end;
   Result := Format('Assignment: %s := ...', [TargetStr]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TIfStatement
 constructor TIfStatement.Create(ACondition: TExpression; AThenBranch: TBlock;
@@ -1359,7 +1343,6 @@ end;
 function TIfStatement.ToString: string;
 begin
   Result := 'IfStatement';
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TWhileLoop
 constructor TWhileLoop.Create(ACondition: TExpression; ABody: TBlock;
@@ -1378,7 +1361,6 @@ end;
 function TWhileLoop.ToString: string;
 begin
   Result := 'WhileLoop';
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TRepeatUntil
 constructor TRepeatUntil.Create(ABody: TBlock; ACondition: TExpression;
@@ -1397,7 +1379,6 @@ end;
 function TRepeatUntil.ToString: string;
 begin
   Result := 'RepeatUntil';
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TForLoop
 constructor TForLoop.Create(AControlVar: TVariableRef; ADirection: TForDirection;
@@ -1423,7 +1404,6 @@ function TForLoop.ToString: string;
 begin
   Result := Format('ForLoop: %s %s %s',
                    [FControlVar.Name, ForDirectionToString(FDirection), '...']);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TCaseStatement
 procedure TCaseStatement.AddBranch(Branch: TCaseBranch);
@@ -1449,7 +1429,6 @@ begin
   Result := Format('CaseStatement (%d branches)', [FBranches.Count]);
   if FElseBranch <> nil then
     Result := Result + ' (with else)';
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TCaseBranch
 constructor TCaseBranch.Create(const ASrcPos: TSrcPos);
@@ -1471,7 +1450,6 @@ end;
 function TCaseBranch.ToString: string;
 begin
   Result := Format('CaseBranch (%d constants)', [FConstants.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TWithStatement
 constructor TWithStatement.Create(ARecordVar: TExpression; ABody: TBlock;
@@ -1490,7 +1468,6 @@ end;
 function TWithStatement.ToString: string;
 begin
   Result := Format('WithStatement: %s', [FRecordVar.ToString]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TExitStatement
 function TExitStatement.HasReturnValue: Boolean;
@@ -1520,7 +1497,6 @@ begin
     Result := Format('ExitStatement: return %s', [FReturnValue.ToString])
   else
     Result := 'ExitStatement';
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TAsmOperand
 procedure TAsmOperand.ClearOperations;
@@ -1550,7 +1526,6 @@ end;
 function TAsmInstruction.ToString: string;
 begin
   Result := 'AsmInstruction';
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TAsmBlock
 constructor TAsmBlock.Create(const ASrcPos: TSrcPos);
@@ -1580,7 +1555,6 @@ begin
   Result := Format('AsmBlock (%d instructions)', [FInstructions.Count]);
   if FRegisters.Count > 0 then
     Result := Result + Format(' modifies [%s]', [FRegisters.CommaText]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 {$endregion}
 {$region "Nodos de declaraciones"}
@@ -1612,14 +1586,12 @@ end;
 function TVarDecl.ToString: string;
 begin
   Result := Format('VarDecl: %s: %s', [Name, TypeName]);
-  if FIsParameter then
-  begin
+  if FIsParameter then begin
     Result := Result + ' (parameter';
     if FParamType = ptyVar then
       Result := Result + ', var';
     Result := Result + ')';
   end;
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TConstDecl
 function TConstDecl.HasType: Boolean;
@@ -1657,7 +1629,6 @@ begin
   if HasType then
     Result := Result + Format(': %s', [FTypeName]);
   Result := Result + Format(' = %s', [FValue.ToString]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TProcDecl
 function TProcDecl.IsFunction: Boolean;
@@ -1669,7 +1640,6 @@ function TProcDecl.ToString: string;
 begin
   Result := Format('Procedure: %s (%d params, %d locals)',
                    [FName, Parameters.Count, FDeclarations.Items.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 constructor TProcDecl.Create(const AName: string; const ASrcPos: TSrcPos; AIsForward: Boolean);
 begin
@@ -1702,7 +1672,6 @@ end;
 function TArrayRange.ToString: string;
 begin
   Result := 'ArrayRange';
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TVariantBranch
 constructor TVariantBranch.Create(const ASrcPos: TSrcPos);
@@ -1729,7 +1698,6 @@ function TVariantBranch.ToString: string;
 begin
   Result := Format('VariantBranch: %d selectors, %d fields',
                    [FSelectorValues.Count, FFields.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TTypeDef
 constructor TTypeDef.Create(ANodeType: TASTNodeType; const ATypeName: string;
@@ -1898,7 +1866,6 @@ begin
                      [Parameters.Count, ReturnTypeName])
   else
     Result := Format('ProcedureType: (%d params)', [Parameters.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 {$endregion}
 {$region "Nodos estructurales"}
@@ -1914,7 +1881,6 @@ begin
   Result := Format('UnitRef: %s', [FUnitName]);
   if FUnitPath <> '' then
     Result := Result + Format(' -> %s', [FUnitPath]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TDeclarations
 constructor TDeclarations.Create;
@@ -1934,7 +1900,6 @@ end;
 function TDeclarations.ToString: string;
 begin
   Result := Format('Declarations (%d items)', [FItems.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TBlock
 procedure TBlock.AddStatement(Statement: TASTNode);
@@ -1944,7 +1909,6 @@ end;
 function TBlock.ToString: string;
 begin
   Result := Format('Block (%d statements)', [FStatements.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 constructor TBlock.Create;
 begin
@@ -1981,7 +1945,6 @@ begin
     Result := Result + Format(' (uses %d units)', [FUsedUnits.Count]);
   if FDeclarations <> nil then
     Result := Result + Format(' (%d decls)', [FDeclarations.Items.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 // TUnit
 procedure TUnit.Clear;
@@ -2024,7 +1987,6 @@ begin
     Result := Result + Format(' (interface %d decls)', [FInterfaceDecls.Items.Count]);
   if FImplementationDecls.Items.Count > 0 then
     Result := Result + Format(' (impl %d decls)', [FImplementationDecls.Items.Count]);
-  Result := Result + Format(' at %s', [FSrcPos.RowColString]);
 end;
 {$endregion}
 end.

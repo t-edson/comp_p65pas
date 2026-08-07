@@ -6,7 +6,7 @@ begin
   asm clc end;
   y := aaa.bbb[5];
 //  y := bbb.aaa(1);  *** Falta implementar
-//  y := aaa[i];
+  y := aaa[i];
 //  empleado.Evaluaciones[1] := 5;
 //  x := -1 + 2;
 //  aaa(12) := 1;
