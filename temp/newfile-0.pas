@@ -1,12 +1,27 @@
 program muestra; 
-uses unit1, unit2;
-var a: byte;
-//procedure MostrarMensaje; forward;
+//uses unit1, unit2;
+var 
+//  b: byte;
+//  w: real;
+//  y: byte;
+//  aaa: array[0..3] of word;
+  i: byte;
+  procedure proc1; forward;
+  
+  procedure proc1;
+  begin
+    i := 5;
+  end; 
 begin
-  asm clc end;
-  y := aaa.bbb[5];
+//  asm clc end;
+//  y := 1;
+//  y := 1 + y*2;
+//  i := 0;
+//  b := w;
+//  y := aaa[i];
+//  y := aaa.bbb[5];
+//MostrarMensaje;
 //  y := bbb.aaa(1);  *** Falta implementar
-  y := aaa[i];
 //  empleado.Evaluaciones[1] := 5;
 //  x := -1 + 2;
 //  aaa(12) := 1;

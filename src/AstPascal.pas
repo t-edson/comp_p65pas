@@ -92,15 +92,14 @@ type  //Declaraciones y clases base para el AST
   // Nodo base (clase abstracta)
   TASTNode = class
   private
-    FNodeType: TASTNodeType;
-    FSrcPos: TSrcPos;
+    FNodeType: TASTNodeType;  //Tipo de nodo.
+    FSrcPos: TSrcPos;         //Ubicación en el texto.
+    FParent: TASTNode;        //Referencia al nodo padre.
   public
     property NodeType: TASTNodeType read FNodeType;
     property SrcPos: TSrcPos read FSrcPos write FSrcPos;
-    property LineNumber: Integer read FSrcPos.row;
-    property ColumnNumber: Integer read FSrcPos.col;
-    property ContextId: Integer read FSrcPos.idCtx;
-
+    property Parent: TASTNode read FParent write FParent;
+  public  //Inicialización y depuración
     constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
     function ToString: string; override;
   end;
@@ -118,7 +117,7 @@ type  //Declaraciones y clases base para el AST
     function HasFormat: Boolean;
     function HasDecimals: Boolean;
     function ValueStr: String;
-
+  public  //Inicialización
     constructor Create(ANodeType: TASTNodeType; const ASrcPos: TSrcPos);
   end;
 
@@ -263,7 +262,7 @@ type  //Nodos de expresiones
   public
     property Name: string read FName;
     property Declaration: TVarDecl read FDeclaration write FDeclaration;
-
+  public  //Inicialización y depuración
     constructor Create(const AName: string; const ASrcPos: TSrcPos);
     function ToString: string; override;
   end;
@@ -302,15 +301,17 @@ type  //Nodos de expresiones
   private
     FName: string;
     FArguments: TExpressionList;
+    FDeclaration: TProcDecl;    //Enlace a la declaración
+    FIsProcedure: Boolean;      //"True" si es llamada a procedimiento
   public
-    constructor Create(const AName: string; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-
     procedure AddArgument(Arg: TExpression);
-
     property Name: string read FName;
     property Arguments: TExpressionList read FArguments;
-
+    property Declaration: TProcDecl read FDeclaration write FDeclaration;
+    property IsProcedure: Boolean read FIsProcedure write FIsProcedure;
+  public  //Inicialización y depuración
+    constructor Create(const AName: string; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
     function ToString: string; override;
   end;
   // Acceso a campo: persona.edad
@@ -600,10 +601,14 @@ type  //Nodos de declaraciones
     absAddr   : TExpression;   {Reference to the AST expression that returns the absolute
                                address where the variable should be located.}
   public   //Campos para el tipo
-    //Indentificador del tipo, cuando es un tipo identificado.
+    //Indentificador del tipo, cuando es un tipo identificador. Algo como "byte", "word"
+    //o "mi_tipo".
     TypeName : string;
-    //Referencia al tipo cuando el tipo es estructurado
+    //Referencia al tipo cuando el tipo es estructurado y definido en la misma declaración
+    //de la variable. Algo como: var1: ARRAY[1..3] OF Byte;
     TypeDef  : TTypeDef;
+    //Ubicación del tipo, cuando se usa TypeName.
+    TypeSrc  : TSrcPos;
     //Bandera para indicar que este nodo es propietario del tipo y, en consecuencia, debe
     //responsabilizarse de destruirlo. Esta variable es necesaria porque las declaraciones
     //de la forma:
@@ -846,10 +851,10 @@ type  //Nodos estructurales
     procedure AddStatement(Statement: TASTNode);
     property Statements: TASTNodeList read FStatements;
   public  //Inicialización y depuración
-    function ToString: string; override;
     constructor Create;
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
+    function ToString: string; override;
   end;
   // Programa prinicpal
   TProgram = class(TCodeContainer)
@@ -1087,6 +1092,7 @@ end;
 procedure TArrayLiteral.AddValue(Value: TExpression);
 begin
   FValues.Add(Value);
+  Value.Parent := Self;
 end;
 function TArrayLiteral.IsMultiDimensional: Boolean;
 var
@@ -1123,6 +1129,7 @@ begin
   inherited Create(ntFieldInitializer, ASrcPos);
   FFieldName := AFieldName;
   FValue := AValue;
+  if FValue<>nil then FValue.Parent := Self;
 end;
 destructor TFieldInitializer.Destroy;
 begin
@@ -1188,7 +1195,9 @@ begin
   inherited Create(ntBinaryOp, ASrcPos);
   FOp := AOp;
   FLeft := ALeft;
+  FLeft.Parent := Self;
   FRight := ARight;
+  FRight.Parent := Self;
 end;
 destructor TBinaryOp.Destroy;
 begin
@@ -1223,6 +1232,8 @@ begin
   inherited Create(ntFunctionCall, ASrcPos);
   FName := AName;
   FArguments := TExpressionList.Create(True);
+  FDeclaration := nil;
+  FIsProcedure := False;
 end;
 destructor TFunctionCall.Destroy;
 begin
@@ -1231,6 +1242,7 @@ begin
 end;
 procedure TFunctionCall.AddArgument(Arg: TExpression);
 begin
+  Arg.Parent := Self;
   FArguments.Add(Arg);
 end;
 function TFunctionCall.ToString: string;
@@ -1273,6 +1285,7 @@ end;
 procedure TArrayIndex.AddIndex(Index: TExpression);
 begin
   FIndices.Add(Index);
+  Index.Parent := Self;
 end;
 constructor TArrayIndex.Create(AArrayVar: TExpression; const ASrcPos: TSrcPos);
 begin
@@ -1299,6 +1312,7 @@ constructor TAssignment.Create(ATarget: TExpression; AValue: TExpression;
 begin
   inherited Create(ntAssignment, ASrcPos);
   FTarget := ATarget;
+  FTarget.Parent := Self;
   FValue := AValue;
 end;
 destructor TAssignment.Destroy;
@@ -1414,6 +1428,7 @@ constructor TCaseStatement.Create(ASelector: TExpression; const ASrcPos: TSrcPos
 begin
   inherited Create(ntCaseStatement, ASrcPos);
   FSelector := ASelector;
+  FSelector.Parent := Self;
   FBranches := TCaseBranchList.Create(True);
   FElseBranch := nil;
 end;
@@ -1904,6 +1919,7 @@ end;
 // TBlock
 procedure TBlock.AddStatement(Statement: TASTNode);
 begin
+  Statement.Parent := Self;
   FStatements.Add(Statement);
 end;
 function TBlock.ToString: string;

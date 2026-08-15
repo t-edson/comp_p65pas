@@ -26,7 +26,7 @@ private
   msg    : TMessageManager; //Referencia al gestor de mensajes
   function ParseVariableBlockDeclar(varContainer: TASTNodeList;
     paramType: TParamType): byte;
-public   //Messages
+public    //Messages
   procedure ClearError;
   function HayError: boolean; inline;          //Flag for errors
   //Rutinas de generación de mensajes
@@ -355,7 +355,7 @@ Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve
     end else if tokIdent = tiBRACK_OP then begin //"[" -> Arreglo
       Next;  // Consumir '['
       //Crea nodo de arreglo a partir de la expresión base
-      ArrayAccess := TArrayIndex.Create(BaseExpr, lex.GetSrcPos);
+      ArrayAccess := TArrayIndex.Create(BaseExpr, BaseExpr.SrcPos);
       // Parsear índices
       while not HayError do begin
         idxExpr := ParseSimpleExpression;
@@ -738,6 +738,7 @@ begin
       //Todos estos ítems deben ser los que hemos agregados
       varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
       varDecl.TypeName := lex.token;  //Es tipo simple
+      varDecl.TypeSrc := lex.GetSrcPos;  //Guarda la ubicación
       //varDecl.TypeDef := Nil;  //No es necesario actualizar
     end;
     Next;   //Consume el identificador de tipo
@@ -965,6 +966,7 @@ Si se encuentra algún error, se devuelve NIL.}
       //Creamos la variable selector con su tipo.
       varDecl := TVarDecl.Create(selectorName, SrcPos);
       varDecl.TypeName := lex.token;  //No pemitiremos tipos complejos aquí
+      varDecl.TypeSrc := lex.GetSrcPos;  //Guarda la ubicación
       Next;
     end else begin //Debe ser una definición Inline: record ... end
       typeDef := ParseTypeDefinition;
@@ -1191,6 +1193,7 @@ begin
         //Leemos expresión de dirección. Notar que estamos asumiendo que el formato de
         //una dirección física es igual al de un número que puede reconocer este parser.
         varDecl.absAddr := ParseSimpleExpression;
+        varDecl.absAddr.Parent := varDecl;
         if HayError then exit;
       end else begin
         //No es ABSOLUTE, debe ser un modificador adicional

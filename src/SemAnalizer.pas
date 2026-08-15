@@ -44,6 +44,8 @@ type
     property Scope: TScope read FScope write FScope;
     property IsForward: Boolean read FIsForward write FIsForward;
     property Parameters: TASTNodeList read FParameters write FParameters;
+    //Tipo de retorno. Usado solo para procedimientos y funciones.
+    {Se mantiene separado de "DataType" porque son semánticamente diferentes.}
     property ReturnType: TTypeDef read FReturnType write FReturnType;
   end;
 
@@ -67,8 +69,13 @@ type
   end;
 
   // Analizador semántico
+
+  { TSemanticAnalyzer }
+
   TSemanticAnalyzer = class
   private
+    msg: TMessageManager;    //Referencia al gestor de mensajes
+    lex: TAleLexer;
     FGlobalScope: TScope;    //Ámbito global
     FCurrentScope: TScope;   //Ámbito actual
     FCurrentProcedure: TProcDecl;
@@ -79,6 +86,7 @@ type
     FInWith: Boolean;
     FWithScope: TScope;
     // Registro de símbolos
+    function CompareParameters(Sym: TSymbol; Proc: TProcDecl): Boolean;
     procedure RegisterBuiltinTypes;
     procedure RegisterDeclarations(Decls: TDeclarations);
     procedure RegisterProcDecl(Proc: TProcDecl);
@@ -137,8 +145,8 @@ type
     procedure EnterWithScope(RecordVar: TExpression);
     procedure ExitWithScope;
     // Manejo de errores
-    procedure Error(const Msg: string; const SrcPos: TSrcPos);
-    procedure Warning(const Msg: string; const SrcPos: TSrcPos);
+    procedure Error(const txt: string; const SrcPos: TSrcPos);
+    procedure Warning(const txt: string; const SrcPos: TSrcPos);
     function GetCurrentLocation: TSrcPos;
     // Utilidades
     function IsInFunction: Boolean;
@@ -153,7 +161,7 @@ type
     function Analyze(Unit0: TUnit): Boolean; overload;
     procedure SetUnitManager(AManager: TObject);
   public //Inicialización
-    constructor Create;
+    constructor Create(Amsg: TMessageManager; Alex: TAleLexer);
     destructor Destroy; override;
   end;
 
@@ -319,7 +327,7 @@ begin
     Exit;
   end;
   if TypeDef = nil then begin
-    Error('Tipo desconocido: ' + VarDecl.TypeName, VarDecl.SrcPos);
+    Error('Tipo desconocido: ' + VarDecl.TypeName, VarDecl.TypeSrc);
     Exit;
   end;
   // Crear símbolo
@@ -354,23 +362,65 @@ begin
   Sym.Declaration := ConstDecl;
   FCurrentScope.Declare(Sym);
 end;
+function TSemanticAnalyzer.CompareParameters(Sym: TSymbol; Proc: TProcDecl): Boolean;
+var
+  i: Integer;
+  Param1, Param2: TVarDecl;
+begin
+  // Verificar número de parámetros
+  if Sym.Parameters = nil then begin
+    Result := (Proc.Parameters = nil) or (Proc.Parameters.Count = 0);
+    Exit;
+  end;
+  if (Proc.Parameters = nil) or (Sym.Parameters.Count <> Proc.Parameters.Count) then
+    Exit(False);
+  // Comparar cada parámetro
+  for i := 0 to Sym.Parameters.Count - 1 do begin
+    Param1 := TVarDecl(Sym.Parameters[i]);
+    Param2 := TVarDecl(Proc.Parameters[i]);
+    // Comparar nombres (opcional)
+    if Param1.Name <> Param2.Name then Exit(False);
+    // Comparar tipos
+    if Param1.TypeName <> Param2.TypeName then Exit(False);
+    // Comparar tipo de parámetro (var, const, out)
+    if Param1.ParamType <> Param2.ParamType then
+      Exit(False);
+  end;
+  Result := True;
+end;
 procedure TSemanticAnalyzer.RegisterProcDecl(Proc: TProcDecl);
+{Registra las declaraciones de procedimientos/funciones, pero sin analizar el cuerpo, aún.}
 var
   Sym: TSymbol;
   i: Integer;
   Param: TVarDecl;
 begin
-  // Verificar duplicado
-  if FCurrentScope.Lookup(Proc.Name) <> nil then begin
-    Error('Procedimiento/Función duplicado: ' + Proc.Name, Proc.SrcPos);
-    Exit;
-  end;
+  //Verifica si es una declaración duplicada
+  Sym := FCurrentScope.Lookup(Proc.Name);
+  if Sym <> nil then begin
+    if Sym.IsForward and not Proc.IsForward then begin
+      //Es la implementación de un FORWARD.
+      //Verificamos que los parámetros coincidan.
+      if not CompareParameters(Sym, Proc) then begin
+        Error('La implementación de ' + Proc.Name +
+              ' no coincide con la declaración FORWARD', Proc.SrcPos);
+        Exit;
+      end;
+      //Actualizar el símbolo con la implementación
+      Sym.Declaration := Proc;
+      Sym.IsForward := False;
+      Exit;
+    end else begin
+      //Duplicado real
+      Error('Procedimiento/Función duplicado: ' + Proc.Name, Proc.SrcPos);
+      Exit;
+    end;
+    end;
   // Crear símbolo
   if Proc.IsFunction then
     Sym := TSymbol.Create(Proc.Name, skFunction)
   else
     Sym := TSymbol.Create(Proc.Name, skProcedure);
-
   Sym.Declaration := Proc;
   Sym.IsForward := Proc.IsForward;
   // Registrar parámetros (solo para validación, no se declaran en el ámbito global)
@@ -381,13 +431,12 @@ begin
       Sym.Parameters.Add(Param);
     end;
   end;
-  // Tipo de retorno para funciones
+  //Tipo de retorno para funciones
   if Proc.IsFunction then begin
     if Proc.ReturnTypeName <> '' then
       Sym.ReturnType := ResolveType(Proc.ReturnTypeName)
     else if Proc.ReturnTypeDef <> nil then
       Sym.ReturnType := ResolveTypeDef(Proc.ReturnTypeDef);
-
     if Sym.ReturnType = nil then
       Error('Tipo de retorno desconocido para: ' + Proc.Name, Proc.SrcPos);
   end;
@@ -442,25 +491,23 @@ end;
 function TSemanticAnalyzer.GetTypeOf(Expr: TExpression): TTypeDef;
 var
   Sym: TSymbol;
+  ArrayVarType: TTypeDef;
+  ArrayType: TArrayTypeDef;
 begin
-  if Expr = nil then
-    Exit(nil);
+  if Expr = nil then Exit(nil);
 
   case Expr.NodeType of
-    ntNumberLiteral:
+    ntNumberLiteral: begin
       if TNumberLiteral(Expr).IsInteger then
         Result := ResolveType('INTEGER')
       else
         Result := ResolveType('REAL');
-
+    end;
     ntBooleanLiteral:
       Result := ResolveType('BOOLEAN');
-
     ntStringLiteral:
       Result := ResolveType('STRING');
-
-    ntVariableRef:
-    begin
+    ntVariableRef: begin
       Sym := FCurrentScope.LookupRecursive(TVariableRef(Expr).Name);
       if Sym <> nil then
       begin
@@ -471,19 +518,14 @@ begin
       else
         Result := nil;
     end;
-
-    ntBinaryOp:
-    begin
+    ntBinaryOp: begin
       // El tipo de una operación binaria es el tipo del operando izquierdo
       // (simplificado, debería ser más complejo)
       Result := GetTypeOf(TBinaryOp(Expr).Left);
     end;
-
     ntUnaryOp:
       Result := GetTypeOf(TUnaryOp(Expr).Operand);
-
-    ntFunctionCall:
-    begin
+    ntFunctionCall: begin
       Sym := FCurrentScope.LookupRecursive(TFunctionCall(Expr).Name);
       if Sym <> nil then
       begin
@@ -497,15 +539,23 @@ begin
       else
         Result := nil;
     end;
-
     ntFieldAccess:
       // El tipo de un campo se resuelve durante el análisis
       Result := nil;
-
-    ntArrayRefer:
+    ntArrayRefer: begin
       // El tipo de un arreglo es el tipo de sus elementos
-      Result := nil;
-
+      ArrayVarType := GetTypeOf(TArrayIndex(Expr).ArrayVar);  //Obtiene el tipo del arreglo
+      if ArrayVarType = nil then Exit(nil);      //Valida que exista
+      if ArrayVarType.NodeType <> ntArrayType then Exit(nil);  //Valida que sea arreglo
+      ArrayType := TArrayTypeDef(ArrayVarType);    //Convierte a TArrayTypeDef
+      // Resuelve el tipo de los elementos
+      if ArrayType.ElementTypeName <> '' then
+        Result := ResolveType(ArrayType.ElementTypeName)
+      else if ArrayType.ElementTypeDef <> nil then
+        Result := ResolveTypeDef(ArrayType.ElementTypeDef)
+      else
+        Result := nil;
+    end;
     ntPointerLiteral:
       Result := ResolveType('POINTER');
 
@@ -735,8 +785,7 @@ procedure TSemanticAnalyzer.VisitConstDecl(ConstDecl: TConstDecl);
 begin
   // Ya fue registrada en RegisterConstDecl
   // Verificar que el valor sea constante
-  if ConstDecl.Value <> nil then
-  begin
+  if ConstDecl.Value <> nil then begin
     // Verificar que no haya referencias a variables
     // (implementación simplificada)
   end;
@@ -751,17 +800,13 @@ var
 begin
   if Proc.IsForward then
     Exit;
-
   OldProcedure := FCurrentProcedure;
   FCurrentProcedure := Proc;
-
   EnterScope;
   try
     // Registrar parámetros en el ámbito local
-    if Proc.Parameters <> nil then
-    begin
-      for i := 0 to Proc.Parameters.Count - 1 do
-      begin
+    if Proc.Parameters <> nil then begin
+      for i := 0 to Proc.Parameters.Count - 1 do begin
         Param := TVarDecl(Proc.Parameters[i]);
         // Resolver tipo del parámetro
         if Param.TypeName <> '' then
@@ -1076,13 +1121,11 @@ var
   Sym: TSymbol;
 begin
   Sym := FCurrentScope.LookupRecursive(VarRef.Name);
-  if Sym = nil then
-  begin
+  if Sym = nil then begin
     Error('Variable no declarada: ' + VarRef.Name, VarRef.SrcPos);
     Exit;
   end;
-
-  // Enlazar a la declaración
+  //Enlaza a la declaración
   VarRef.Declaration := TVarDecl(Sym.Declaration);
 end;
 procedure TSemanticAnalyzer.VisitNumberLiteral(NumLit: TNumberLiteral);
@@ -1155,32 +1198,35 @@ var
   ParamType: TTypeDef;
   ArgType: TTypeDef;
   Param: TVarDecl;
+  Parent: TASTNode;
 begin
   // Buscar la función/procedimiento
   Sym := FCurrentScope.LookupRecursive(FuncCall.Name);
-  if Sym = nil then
-  begin
+  if Sym = nil then begin
     Error('Identificador no declarado: ' + FuncCall.Name, FuncCall.SrcPos);
     Exit;
   end;
-
-  if (Sym.Kind <> skFunction) and (Sym.Kind <> skProcedure) then
-  begin
+  if (Sym.Kind <> skFunction) and (Sym.Kind <> skProcedure) then begin
     Error(FuncCall.Name + ' no es una función o procedimiento', FuncCall.SrcPos);
     Exit;
   end;
-
-  // Verificar argumentos
-  if Sym.Parameters <> nil then
-  begin
+  //Enlaza referencia a la declaración
+  if Sym.Declaration is TProcDecl then begin
+    FuncCall.Declaration := TProcDecl(Sym.Declaration);
+    FuncCall.IsProcedure := (Sym.Kind = skProcedure);
+  end else begin
+    Error('Declaración inválida para: ' + FuncCall.Name, FuncCall.SrcPos);
+    Exit;
+  end;
+  //Verifica argumentos
+  if Sym.Parameters <> nil then begin
     if FuncCall.Arguments.Count <> Sym.Parameters.Count then
       Error('Número incorrecto de argumentos para ' + FuncCall.Name + ' (esperaba ' +
             IntToStr(Sym.Parameters.Count) + ', tiene ' +
             IntToStr(FuncCall.Arguments.Count) + ')', FuncCall.SrcPos);
 
-    // Verificar tipos de argumentos
-    for i := 0 to Min(FuncCall.Arguments.Count, Sym.Parameters.Count) - 1 do
-    begin
+    //Verifica tipos de argumentos
+    for i := 0 to Min(FuncCall.Arguments.Count, Sym.Parameters.Count) - 1 do begin
       VisitNode(FuncCall.Arguments[i]);
       ArgType := GetTypeOf(FuncCall.Arguments[i]);
 
@@ -1196,12 +1242,25 @@ begin
         Error('Tipo de argumento incompatible para parámetro ' + IntToStr(i+1) + ' de ' +
               FuncCall.Name, FuncCall.Arguments[i].SrcPos);
     end;
-  end
-  else
-  begin
-    // Sin parámetros declarados, verificar que no haya argumentos
+  end else begin
+    //Sin parámetros declarados, verifica que no haya argumentos
     if FuncCall.Arguments.Count > 0 then
       Error(FuncCall.Name + ' no acepta argumentos', FuncCall.SrcPos);
+  end;
+  //Si es procedimiento, verificar que se use como sentencia
+  if FuncCall.IsProcedure then begin
+    //Verificar contexto: ¿está en una sentencia o en una expresión?
+    Parent := FuncCall.Parent;
+    if Parent = Nil then
+      //No se identifica al padre
+    else if Parent.NodeType = ntBlock then
+      // OK: está en una sentencia
+    else if Parent.NodeType = ntAssignment then
+      Error('El procedimiento ' + FuncCall.Name + ' no puede usarse como expresión', FuncCall.SrcPos)
+    else if Parent.NodeType = ntBinaryOp then
+      Error('El procedimiento ' + FuncCall.Name + ' no puede usarse como expresión', FuncCall.SrcPos)
+    else if Parent.NodeType = ntIfStatement then
+      Error('El procedimiento ' + FuncCall.Name + ' no puede usarse como condición', FuncCall.SrcPos)
   end;
 end;
 procedure TSemanticAnalyzer.VisitFieldAccess(FieldAccess: TFieldAccess);
@@ -1265,15 +1324,13 @@ begin
   VisitNode(ArrayIndex.ArrayVar);
   ArrayType := GetTypeOf(ArrayIndex.ArrayVar);
 
-  if ArrayType = nil then
-  begin
+  if ArrayType = nil then begin
     Error('No se puede determinar el tipo del arreglo', ArrayIndex.ArrayVar.SrcPos);
     Exit;
   end;
 
   // Verificar que sea un arreglo
-  if not (ArrayType is TArrayTypeDef) then
-  begin
+  if not (ArrayType is TArrayTypeDef) then begin
     Error('[] solo puede aplicarse a arreglos', ArrayIndex.SrcPos);
     Exit;
   end;
@@ -1285,8 +1342,7 @@ begin
           IntToStr(ArrayIndex.Indices.Count) + ')', ArrayIndex.SrcPos);
 
   // Analizar índices
-  for i := 0 to ArrayIndex.Indices.Count - 1 do
-  begin
+  for i := 0 to ArrayIndex.Indices.Count - 1 do begin
     VisitNode(ArrayIndex.Indices[i]);
     IdxType := GetTypeOf(ArrayIndex.Indices[i]);
     if not IsOrdinalType(IdxType) then
@@ -1388,15 +1444,15 @@ begin
   end;
 end;
 // Manejo de errores
-procedure TSemanticAnalyzer.Error(const Msg: string; const SrcPos: TSrcPos);
+procedure TSemanticAnalyzer.Error(const txt: string; const SrcPos: TSrcPos);
 begin
   Inc(FErrors);
-  WriteLn('Error semántico en ' + SrcPos.RowColString + ': ' + Msg);
+  msg.error(lex.GetMsgInfoE(txt, srcPos));
 end;
-procedure TSemanticAnalyzer.Warning(const Msg: string; const SrcPos: TSrcPos);
+procedure TSemanticAnalyzer.Warning(const txt: string; const SrcPos: TSrcPos);
 begin
   Inc(FWarnings);
-  WriteLn('Advertencia semántica en ' + SrcPos.RowColString + ': ' + Msg);
+  msg.warn(lex.GetMsgInfo(txt, srcPos));
 end;
 function TSemanticAnalyzer.GetCurrentLocation: TSrcPos;
 begin
@@ -1455,8 +1511,10 @@ begin
   FUnitManager := AManager;
 end;
 //Inicialización
-constructor TSemanticAnalyzer.Create;
+constructor TSemanticAnalyzer.Create(Amsg: TMessageManager; Alex: TAleLexer);
 begin
+  msg := Amsg;
+  lex := ALex;
   FGlobalScope := nil;
   FCurrentScope := nil;
   FCurrentProcedure := nil;

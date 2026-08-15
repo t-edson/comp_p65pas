@@ -16,8 +16,6 @@ type
     addVariab : integer;  //Address where start Variables section.
     addFuncts : integer;  //Address where start function section.
 //    procedure ConstantFoldExpr(eleExp: TAstExpress);
-    procedure AddParam(var pars: TAstParamArray; parName: string;
-      const srcPos: TSrcPos; typ0: TAstTypeDec; adicDec: TAdicDeclar);
     function AddSIFtoUnit(name: string; sfi: TSysFunID; retType: TAstTypeDec;
       const srcPos: TSrcPos; const pars: TAstParamArray): TAstFunDec;
     function AddSNFtoUnit(name: string; retType: TAstTypeDec;
@@ -1127,11 +1125,9 @@ begin
       end;
     end;
   finally
-    StartCountElapsed;
     ejecProg := false;
     //Tareas de finalización
     if OnAfterCompile<>nil then OnAfterCompile;
-    EndCountElapsed('-- OnAfterCompile in: ');
   end;
 end;
 //Inicialización
@@ -1240,22 +1236,6 @@ begin
   lexer.curLocation := tmpLoc;   //Restore current location
   exit(fundec);
 }end;
-procedure TCompiler_PIC16.AddParam(var pars: TAstParamArray; parName: string; const srcPos: TSrcPos;
-                   typ0: TAstTypeDec; adicDec: TAdicDeclar);
-//Create a new parameter to the function.
-var
-  n: Integer;
-begin
-  //Add record to the array
-  n := high(pars)+1;
-  setlength(pars, n+1);
-  pars[n].name := parName;  //Name is not important
-  pars[n].srcPos := srcPos;
-  pars[n].typ  := typ0;  //Agrega referencia
-  pars[n].adicVar.hasAdic := adicDec;
-  pars[n].adicVar.hasInit := nil;
-  pars[n].isLocVar := false;
-end;
 function TCompiler_PIC16.CreateInUOMethod(
                       clsType: TAstTypeDec;   //Base type where the method bellow.
                       opr     : string;      //Opertaor associated to the method

@@ -27,12 +27,13 @@ type
     checker  : TSemanticAnalyzer;//Analizador semántico
     options  : TCompOptions;     //Opciones del compilador.
   public  //Mensajes
+    function HayError: boolean;
     procedure ClearError;
     procedure GenError(txt: string);
     procedure GenError(txt: string; const srcPos: TSrcPos);
   public
     mirRep: TMirList;    //Container for MIR representation
-  protected  //Elements processing
+  protected  //processing
     procedure DoAnalyze;
   public     //Incialización
     constructor Create(msg0: TMessageManager);
@@ -40,7 +41,10 @@ type
   end;
 
 implementation
-
+function TAnalyzer.HayError: boolean;
+begin
+  exit(msg.nErrors>0);
+end;
 procedure TAnalyzer.ClearError;
 {Limpia la bandera de errores. Tomar en cuenta que solo se debe usar para iniciar el
 procesamiento de errores. Limpiar errores en medio de la compilación, podría hacer que
@@ -63,7 +67,7 @@ procedure TAnalyzer.GenError(txt: string; const srcPos: TSrcPos);
 begin
   msg.error(lexer.GetMsgInfoE(txt, srcPos));
 end;
-//Compilación de secciones
+//Procesamiento
 procedure TAnalyzer.DoAnalyze;
 {Performs the Analysis (Lexical, syntactic and semantic).
 Input: The current context.
@@ -79,6 +83,7 @@ begin
   //Análisis sintáctico.
   parser.ParseFile(options.mainFile, astProg, astUnit);   //Puede generar errores
   CompiledUnit := parser.IsUnit;   //Identifica lo que ha compilado
+  if HayError then Exit;    //No continuamos
   //Muestra el orden de las unidades:
   //DebugLn('Orden de creación de las unidades:');
   //for i := 0 to unitmgr.Units.Count - 1 do begin
@@ -87,7 +92,7 @@ begin
   //end;
 
   //Análisis semántico
-  //checker.Analyze(astProg);
+  checker.Analyze(astProg);
 end;
 //Inicialización
 constructor TAnalyzer.Create(msg0: TMessageManager);
@@ -99,7 +104,7 @@ begin
   parserASM := TParserAsm6502.Create(msg, lexer);
   parserDir := TParserDirective.Create(msg, lexer, options);
   unitmgr   := TUnitManager.Create(msg, parser);
-  checker   := TSemanticAnalyzer.Create;
+  checker   := TSemanticAnalyzer.Create(msg, lexer);
   options   := TCompOptions.Create;
   mirRep    := TMirList.Create;
   //Conecta el parser a los otros componentes del compilador.
