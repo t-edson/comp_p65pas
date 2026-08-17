@@ -1,18 +1,8 @@
 program muestra; 
 //uses unit1, unit2;
-var 
-//  b: byte;
-//  w: real;
-//  y: byte;
-//  aaa: array[0..3] of word;
-  i: byte;
-  procedure proc1; forward;
-  
-  procedure proc1;
-  begin
-    i := 5;
-  end; 
 begin
+//  writeln('PROGRAMA');
+
 //  asm clc end;
 //  y := 1;
 //  y := 1 + y*2;

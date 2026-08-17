@@ -1,14 +1,11 @@
+{Unidad que implementa las estructuras de datos que se usan en el Análisis Semántico.}
 unit SemAnalizer;
-
 {$mode objfpc}{$H+}
-
 interface
-
 uses
-  Classes, SysUtils, Math, AstPascal, alexiaLex;
-
+  Classes, SysUtils, Math, AstPascal, LazLogger, alexiaLex;
 type
-  // Tipos de símbolos
+  //Tipos de símbolos
   TSymbolKind = (
     skVariable,
     skConstant,
@@ -22,7 +19,7 @@ type
 
   TScope = class;
 
-  // Símbolo (identificador declarado)
+  //Símbolo (identificador declarado)
   TSymbol = class
   private
     FName: string;
@@ -31,47 +28,54 @@ type
     FDeclaration: TASTNode;
     FScope: TScope;
     FIsForward: Boolean;
+    FIsIntrinsic: Boolean;
     FParameters: TASTNodeList;
     FReturnType: TTypeDef;
+    FIsDataTypeOwner: Boolean;   //Indica si es propietario del objeto FDataType
+    FIsReturnTypeOwner: Boolean; //Indica si es propietario del objeto FReturnType
   public
-    constructor Create(const AName: string; AKind: TSymbolKind);
-    destructor Destroy; override;
-
     property Name: string read FName;
     property Kind: TSymbolKind read FKind;
     property DataType: TTypeDef read FDataType write FDataType;
     property Declaration: TASTNode read FDeclaration write FDeclaration;
     property Scope: TScope read FScope write FScope;
     property IsForward: Boolean read FIsForward write FIsForward;
+    property IsIntrinsic: Boolean read FIsIntrinsic write FIsIntrinsic;
     property Parameters: TASTNodeList read FParameters write FParameters;
     //Tipo de retorno. Usado solo para procedimientos y funciones.
     {Se mantiene separado de "DataType" porque son semánticamente diferentes.}
     property ReturnType: TTypeDef read FReturnType write FReturnType;
+    //Banderas
+    property IsDataTypeOwner: Boolean read FIsDataTypeOwner write FIsDataTypeOwner;
+    property IsReturnTypeOwner: Boolean read FIsReturnTypeOwner write FIsReturnTypeOwner;
+  public //Inicialización
+    constructor Create(const AName: string; AKind: TSymbolKind);
+    destructor Destroy; override;
   end;
 
-  // Ámbito (scope)
+  //Ámbito (scope)
+
+  { TScope }
+
   TScope = class
   private
-    FParent: TScope;
-    FSymbols: TStringList;
+    FParent: TScope;         //Ámbito padre
+    FSymbols: TStringList;   //Lista de símbolos
     FChildScopes: TList;
   public
-    constructor Create(AParent: TScope = nil);
-    destructor Destroy; override;
-
     procedure Declare(Sym: TSymbol);
     function Lookup(const AName: string): TSymbol;
     function LookupRecursive(const AName: string): TSymbol;
     function GetSymbols: TStringList;
     procedure AddChild(Child: TScope);
-
     property Parent: TScope read FParent;
+  public  //Inicialización
+    procedure Clear;
+    constructor Create(AParent: TScope = nil);
+    destructor Destroy; override;
   end;
 
-  // Analizador semántico
-
-  { TSemanticAnalyzer }
-
+  //Analizador semántico
   TSemanticAnalyzer = class
   private
     msg: TMessageManager;    //Referencia al gestor de mensajes
@@ -87,7 +91,6 @@ type
     FWithScope: TScope;
     // Registro de símbolos
     function CompareParameters(Sym: TSymbol; Proc: TProcDecl): Boolean;
-    procedure RegisterBuiltinTypes;
     procedure RegisterDeclarations(Decls: TDeclarations);
     procedure RegisterProcDecl(Proc: TProcDecl);
     procedure RegisterVarDecl(VarDecl: TVarDecl);
@@ -161,6 +164,9 @@ type
     function Analyze(Unit0: TUnit): Boolean; overload;
     procedure SetUnitManager(AManager: TObject);
   public //Inicialización
+    procedure Reset;
+    procedure RegisterBuiltinTypes;
+    procedure RegisterIntrinsicProcedures;
     constructor Create(Amsg: TMessageManager; Alex: TAleLexer);
     destructor Destroy; override;
   end;
@@ -181,30 +187,15 @@ begin
 end;
 destructor TSymbol.Destroy;
 begin
-  FParameters.Free;
+  FParameters.Free;   //Libera por si se ha usado
+  //Libera tipo de datos, si este analizador es el propietario
+  if FIsDataTypeOwner then FDataType.Free;
+  //Libera tipo de retorno, si este analizador es el propietario
+  if FIsReturnTypeOwner then FReturnType.Free;
   inherited;
 end;
 
 { TScope }
-constructor TScope.Create(AParent: TScope = nil);
-begin
-  FParent := AParent;
-  FSymbols := TStringList.Create;
-  FSymbols.Sorted := True;
-  FChildScopes := TList.Create;
-end;
-destructor TScope.Destroy;
-var
-  i: Integer;
-begin
-  for i := 0 to FChildScopes.Count - 1 do
-    TScope(FChildScopes[i]).Free;
-  FChildScopes.Free;
-  for i := 0 to FSymbols.Count - 1 do
-    FSymbols.Objects[i].Free;
-  FSymbols.Free;
-  inherited;
-end;
 procedure TScope.Declare(Sym: TSymbol);
 var
   i: Integer;
@@ -245,47 +236,45 @@ procedure TScope.AddChild(Child: TScope);
 begin
   FChildScopes.Add(Child);
 end;
-
+procedure TScope.Clear;
+var
+  i: Integer;
+  Child: TScope;
+begin
+  //Liberar símbolos
+  for i := 0 to FSymbols.Count - 1 do begin
+    FSymbols.Objects[i].Destroy;
+  end;
+  FSymbols.Clear;
+  //Liberar ámbitos hijos recursivamente
+  for i := 0 to FChildScopes.Count - 1 do begin
+    TScope(FChildScopes[i]).Destroy;
+  end;
+  FChildScopes.Clear;
+end;
+constructor TScope.Create(AParent: TScope = nil);
+begin
+  FParent := AParent;
+  FSymbols := TStringList.Create;
+  FSymbols.Sorted := True;
+  FChildScopes := TList.Create;
+end;
+destructor TScope.Destroy;
+var
+  i: Integer;
+begin
+  for i := 0 to FChildScopes.Count - 1 do begin
+    TScope(FChildScopes[i]).Free;
+  end;
+  FChildScopes.Destroy;
+  for i := 0 to FSymbols.Count - 1 do begin
+    FSymbols.Objects[i].Free;
+  end;
+  FSymbols.Destroy;
+  inherited;
+end;
 { TSemanticAnalyzer }
 // Registro de símbolos
-procedure TSemanticAnalyzer.RegisterBuiltinTypes;
-var
-  Sym: TSymbol;
-  SrcPos: TSrcPos;
-begin
-  SrcPos.idCtx := 0;
-  SrcPos.row := 0;
-  SrcPos.col := 0;
-
-  // Tipos predefinidos
-  Sym := TSymbol.Create('INTEGER', skType);
-  Sym.DataType := TSimpleTypeDef.Create('INTEGER', SrcPos);
-  FGlobalScope.Declare(Sym);
-
-  Sym := TSymbol.Create('BYTE', skType);
-  Sym.DataType := TSimpleTypeDef.Create('BYTE', SrcPos);
-  FGlobalScope.Declare(Sym);
-
-  Sym := TSymbol.Create('WORD', skType);
-  Sym.DataType := TSimpleTypeDef.Create('WORD', SrcPos);
-  FGlobalScope.Declare(Sym);
-
-  Sym := TSymbol.Create('BOOLEAN', skType);
-  Sym.DataType := TSimpleTypeDef.Create('BOOLEAN', SrcPos);
-  FGlobalScope.Declare(Sym);
-
-  Sym := TSymbol.Create('CHAR', skType);
-  Sym.DataType := TSimpleTypeDef.Create('CHAR', SrcPos);
-  FGlobalScope.Declare(Sym);
-
-  Sym := TSymbol.Create('STRING', skType);
-  Sym.DataType := TSimpleTypeDef.Create('STRING', SrcPos);
-  FGlobalScope.Declare(Sym);
-
-  Sym := TSymbol.Create('REAL', skType);
-  Sym.DataType := TSimpleTypeDef.Create('REAL', SrcPos);
-  FGlobalScope.Declare(Sym);
-end;
 procedure TSemanticAnalyzer.RegisterDeclarations(Decls: TDeclarations);
 var
   i: Integer;
@@ -694,43 +683,22 @@ end;
 procedure TSemanticAnalyzer.VisitProgram(Prog: TProgram);
 begin
   if Prog = nil then Exit;
-  // Crear ámbito global
-  FGlobalScope := TScope.Create;
-  FCurrentScope := FGlobalScope;
-  FCurrentProcedure := nil;
-  FErrors := 0;
-  FWarnings := 0;
-  RegisterBuiltinTypes;
   // Registrar declaraciones globales
   RegisterDeclarations(Prog.Declarations);
-
   // Analizar el cuerpo principal
   VisitBlock(Prog.Body);
 end;
 procedure TSemanticAnalyzer.VisitUnit(Unit0: TUnit);
 begin
-  if Unit0 = nil then
-    Exit;
-
+  if Unit0 = nil then Exit;
   FCurrentUnit := Unit0;
-
-  // Crear ámbito global para la unidad
-  FGlobalScope := TScope.Create;
-  FCurrentScope := FGlobalScope;
-  FCurrentProcedure := nil;
-
-  RegisterBuiltinTypes;
-
   // Registrar declaraciones de interface
   RegisterDeclarations(Unit0.InterfaceDecls);
-
   // Registrar declaraciones de implementation
   RegisterDeclarations(Unit0.ImplementationDecls);
-
   // Analizar initialization y finalization
   if Unit0.InitializationBlock <> nil then
     VisitBlock(Unit0.InitializationBlock);
-
   if Unit0.FinalizationBlock <> nil then
     VisitBlock(Unit0.FinalizationBlock);
 end;
@@ -738,9 +706,7 @@ procedure TSemanticAnalyzer.VisitBlock(Block: TBlock);
 var
   i: Integer;
 begin
-  if Block = nil then
-    Exit;
-
+  if Block = nil then Exit;
   EnterScope;
   try
     for i := 0 to Block.Statements.Count - 1 do
@@ -1191,6 +1157,8 @@ begin
   end;
 end;
 procedure TSemanticAnalyzer.VisitFunctionCall(FuncCall: TFunctionCall);
+{Visita la llamada a un procedimiento o función, que se ha identificado como tal en el
+análisis sintáctico.}
 var
   Sym: TSymbol;
   i: Integer;
@@ -1210,43 +1178,60 @@ begin
     Error(FuncCall.Name + ' no es una función o procedimiento', FuncCall.SrcPos);
     Exit;
   end;
-  //Enlaza referencia a la declaración
-  if Sym.Declaration is TProcDecl then begin
-    FuncCall.Declaration := TProcDecl(Sym.Declaration);
-    FuncCall.IsProcedure := (Sym.Kind = skProcedure);
-  end else begin
-    Error('Declaración inválida para: ' + FuncCall.Name, FuncCall.SrcPos);
-    Exit;
+  //Enlaza referencia a la declaración, si existe
+  if not Sym.IsIntrinsic then begin
+    //Debe haber declaración
+    if Sym.Declaration.NodeType = ntProcDecl then begin
+      //Su declaración figura como procedimiento o función
+      FuncCall.Declaration := TProcDecl(Sym.Declaration); //Enlaza a declaración
+    end else begin  //Figura como otra cosa
+      Error('Declaración inválida para: ' + FuncCall.Name, FuncCall.SrcPos);
+      Exit;
+    end;
   end;
+  //Completa atributos
+  FuncCall.IsProcedure := (Sym.Kind = skProcedure);   //Aquí se puede saber si es proc. o función.
+  FuncCall.IsIntrinsic := Sym.IsIntrinsic;            //Y si es del sistema.
   //Verifica argumentos
-  if Sym.Parameters <> nil then begin
-    if FuncCall.Arguments.Count <> Sym.Parameters.Count then
-      Error('Número incorrecto de argumentos para ' + FuncCall.Name + ' (esperaba ' +
-            IntToStr(Sym.Parameters.Count) + ', tiene ' +
-            IntToStr(FuncCall.Arguments.Count) + ')', FuncCall.SrcPos);
-
-    //Verifica tipos de argumentos
-    for i := 0 to Min(FuncCall.Arguments.Count, Sym.Parameters.Count) - 1 do begin
+  if Sym.IsIntrinsic then begin
+    //Verificación flexible: aceptan cualquier número de argumentos
+    //y cualquier tipo (dentro de lo razonable)
+    for i := 0 to FuncCall.Arguments.Count - 1 do begin
       VisitNode(FuncCall.Arguments[i]);
-      ArgType := GetTypeOf(FuncCall.Arguments[i]);
-
-      Param := TVarDecl(Sym.Parameters[i]);
-      if Param.TypeName <> '' then
-        ParamType := ResolveType(Param.TypeName)
-      else if Param.TypeDef <> nil then
-        ParamType := ResolveTypeDef(Param.TypeDef)
-      else
-        ParamType := nil;
-
-      if not AreTypesCompatible(ParamType, ArgType) then
-        Error('Tipo de argumento incompatible para parámetro ' + IntToStr(i+1) + ' de ' +
-              FuncCall.Name, FuncCall.Arguments[i].SrcPos);
+      // No verificamos tipos estrictos
     end;
   end else begin
-    //Sin parámetros declarados, verifica que no haya argumentos
-    if FuncCall.Arguments.Count > 0 then
-      Error(FuncCall.Name + ' no acepta argumentos', FuncCall.SrcPos);
+    //Proc./Funciones normales
+    if Sym.Parameters <> nil then begin
+      if FuncCall.Arguments.Count <> Sym.Parameters.Count then
+        Error('Número incorrecto de argumentos para ' + FuncCall.Name + ' (esperaba ' +
+              IntToStr(Sym.Parameters.Count) + ', tiene ' +
+              IntToStr(FuncCall.Arguments.Count) + ')', FuncCall.SrcPos);
+
+      //Verifica tipos de argumentos
+      for i := 0 to Min(FuncCall.Arguments.Count, Sym.Parameters.Count) - 1 do begin
+        VisitNode(FuncCall.Arguments[i]);
+        ArgType := GetTypeOf(FuncCall.Arguments[i]);
+
+        Param := TVarDecl(Sym.Parameters[i]);
+        if Param.TypeName <> '' then
+          ParamType := ResolveType(Param.TypeName)
+        else if Param.TypeDef <> nil then
+          ParamType := ResolveTypeDef(Param.TypeDef)
+        else
+          ParamType := nil;
+
+        if not AreTypesCompatible(ParamType, ArgType) then
+          Error('Tipo de argumento incompatible para parámetro ' + IntToStr(i+1) + ' de ' +
+                FuncCall.Name, FuncCall.Arguments[i].SrcPos);
+      end;
+    end else begin
+      //Sin parámetros declarados, verifica que no haya argumentos
+      if FuncCall.Arguments.Count > 0 then
+        Error(FuncCall.Name + ' no acepta argumentos', FuncCall.SrcPos);
+    end;
   end;
+
   //Si es procedimiento, verificar que se use como sentencia
   if FuncCall.IsProcedure then begin
     //Verificar contexto: ¿está en una sentencia o en una expresión?
@@ -1377,20 +1362,23 @@ procedure TSemanticAnalyzer.EnterScope;
 var
   NewScope: TScope;
 begin
+  //Crea un nuevo ámbito con el ámbito actual como padre
   NewScope := TScope.Create(FCurrentScope);
+  //Registrar el hijo en el padre.
   if FCurrentScope <> nil then
     FCurrentScope.AddChild(NewScope);
+  //Establece el nuevo ámbito como ámbito actual
   FCurrentScope := NewScope;
 end;
 procedure TSemanticAnalyzer.ExitScope;
-var
-  Parent: TScope;
 begin
-  if FCurrentScope <> nil then
-  begin
-    Parent := FCurrentScope.FParent;
-    FCurrentScope.Free;
-    FCurrentScope := Parent;
+  if FCurrentScope <> nil then begin
+    //La liberación se hace desde el Scope padre
+    //Parent := FCurrentScope.FParent;
+    //FCurrentScope.Free;
+    //FCurrentScope := Parent;
+    //Retornamos a al Scope padre
+    FCurrentScope := FCurrentScope.FParent;
   end;
 end;
 procedure TSemanticAnalyzer.EnterWithScope(RecordVar: TExpression);
@@ -1486,24 +1474,18 @@ end;
 //Métodos principales
 function TSemanticAnalyzer.Analyze(Prog: TProgram): Boolean;
 begin
-  FGlobalScope := nil;
-  FCurrentScope := nil;
-  FErrors := 0;
-  FWarnings := 0;
-
+  Reset;
+  RegisterBuiltinTypes;
+  RegisterIntrinsicProcedures;
   VisitProgram(Prog);
-
   Result := FErrors = 0;
 end;
 function TSemanticAnalyzer.Analyze(Unit0: TUnit): Boolean;
 begin
-  FGlobalScope := nil;
-  FCurrentScope := nil;
-  FErrors := 0;
-  FWarnings := 0;
-
+  Reset;
+  RegisterBuiltinTypes;
+  RegisterIntrinsicProcedures;
   VisitUnit(Unit0);
-
   Result := FErrors = 0;
 end;
 procedure TSemanticAnalyzer.SetUnitManager(AManager: TObject);
@@ -1511,24 +1493,135 @@ begin
   FUnitManager := AManager;
 end;
 //Inicialización
+procedure TSemanticAnalyzer.Reset;
+begin
+  FGlobalScope.Clear;
+  FCurrentScope := FGlobalScope;
+  FErrors := 0;
+  FWarnings := 0;
+  FCurrentProcedure := nil;
+  FCurrentUnit := nil;
+  FInWith := False;
+  FWithScope := nil;
+end;
+procedure TSemanticAnalyzer.RegisterBuiltinTypes;
+var
+  Sym: TSymbol;
+  SrcPos: TSrcPos;
+begin
+  SrcPos.idCtx := 0;
+  SrcPos.row := 0;
+  SrcPos.col := 0;
+
+  // Tipos predefinidos
+  Sym := TSymbol.Create('INTEGER', skType);
+  Sym.DataType := TSimpleTypeDef.Create('INTEGER', SrcPos);
+  Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
+  FGlobalScope.Declare(Sym);
+
+  Sym := TSymbol.Create('BYTE', skType);
+  Sym.DataType := TSimpleTypeDef.Create('BYTE', SrcPos);
+  Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
+  FGlobalScope.Declare(Sym);
+
+  Sym := TSymbol.Create('WORD', skType);
+  Sym.DataType := TSimpleTypeDef.Create('WORD', SrcPos);
+  Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
+  FGlobalScope.Declare(Sym);
+
+  Sym := TSymbol.Create('BOOLEAN', skType);
+  Sym.DataType := TSimpleTypeDef.Create('BOOLEAN', SrcPos);
+  Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
+  FGlobalScope.Declare(Sym);
+
+  Sym := TSymbol.Create('CHAR', skType);
+  Sym.DataType := TSimpleTypeDef.Create('CHAR', SrcPos);
+  Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
+  FGlobalScope.Declare(Sym);
+
+  Sym := TSymbol.Create('STRING', skType);
+  Sym.DataType := TSimpleTypeDef.Create('STRING', SrcPos);
+  Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
+  FGlobalScope.Declare(Sym);
+
+  Sym := TSymbol.Create('REAL', skType);
+  Sym.DataType := TSimpleTypeDef.Create('REAL', SrcPos);
+  Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
+  FGlobalScope.Declare(Sym);
+end;
+procedure TSemanticAnalyzer.RegisterIntrinsicProcedures;
+{Registra Procedimientos intrínsecos (del sistema) en la tabla de símbolos.}
+var
+  Sym: TSymbol;
+  Param: TVarDecl;
+  DummyPos: TSrcPos;
+begin
+  DummyPos.idCtx := 0;
+  DummyPos.row := 0;
+  DummyPos.col := 0;
+  //---------- WRITE
+  Sym := TSymbol.Create('WRITE', skProcedure);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  //Parámetros: argumentos variables (array of const)
+  Param := TVarDecl.Create('Args', DummyPos);
+  Param.TypeName := 'ARRAY_OF_CONST';
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+  //---------- WRITELN
+  Sym := TSymbol.Create('WRITELN', skProcedure);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  //Parámetros: argumentos variables (array of const)
+  Param := TVarDecl.Create('Args', DummyPos);
+  Param.TypeName := 'ARRAY_OF_CONST';
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+  //---------- READ
+  Sym := TSymbol.Create('READ', skProcedure);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  //Parámetros: argumentos variables (array of const)
+  Param := TVarDecl.Create('Args', DummyPos);
+  Param.TypeName := 'ARRAY_OF_CONST';
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+  //---------- READLN
+  Sym := TSymbol.Create('READLN', skProcedure);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  //Parámetros: argumentos variables (array of const)
+  Param := TVarDecl.Create('Args', DummyPos);
+  Param.TypeName := 'ARRAY_OF_CONST';
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+end;
 constructor TSemanticAnalyzer.Create(Amsg: TMessageManager; Alex: TAleLexer);
 begin
   msg := Amsg;
   lex := ALex;
-  FGlobalScope := nil;
-  FCurrentScope := nil;
-  FCurrentProcedure := nil;
-  FErrors := 0;
-  FWarnings := 0;
-  FCurrentUnit := nil;
-  FUnitManager := nil;
-  FInWith := False;
-  FWithScope := nil;
+  FGlobalScope := TScope.Create;
+  //FCurrentScope := FGlobalScope;
+  //FErrors := 0;
+  //FWarnings := 0;
+  //FCurrentProcedure := nil;
+  //FCurrentUnit := nil;
+  //FInWith := False;
+  //FWithScope := nil;
+  //FUnitManager := nil;
 end;
 destructor TSemanticAnalyzer.Destroy;
 begin
   FGlobalScope.Free;
-  FWithScope.Free;
+  FWithScope.Free;      //Elimina si se ha creado.
   inherited;
 end;
 end.

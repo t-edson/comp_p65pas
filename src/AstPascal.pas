@@ -303,12 +303,14 @@ type  //Nodos de expresiones
     FArguments: TExpressionList;
     FDeclaration: TProcDecl;    //Enlace a la declaración
     FIsProcedure: Boolean;      //"True" si es llamada a procedimiento
+    FIsIntrinsic: Boolean;      //Indica si es una llamada a proc/función.
   public
     procedure AddArgument(Arg: TExpression);
     property Name: string read FName;
     property Arguments: TExpressionList read FArguments;
     property Declaration: TProcDecl read FDeclaration write FDeclaration;
     property IsProcedure: Boolean read FIsProcedure write FIsProcedure;
+    property IsIntrinsic: Boolean read FIsIntrinsic write FIsIntrinsic;
   public  //Inicialización y depuración
     constructor Create(const AName: string; const ASrcPos: TSrcPos);
     destructor Destroy; override;
