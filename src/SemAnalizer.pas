@@ -414,7 +414,7 @@ begin
   Sym.IsForward := Proc.IsForward;
   // Registrar parámetros (solo para validación, no se declaran en el ámbito global)
   if Proc.Parameters <> nil then begin
-    Sym.Parameters := TASTNodeList.Create(True);
+    Sym.Parameters := TASTNodeList.Create(False);   //No debe liberar los nodos parámetro, porque ya los hace el AST.
     for i := 0 to Proc.Parameters.Count - 1 do begin
       Param := TVarDecl(Proc.Parameters[i]);
       Sym.Parameters.Add(Param);
@@ -465,8 +465,7 @@ end;
 function TSemanticAnalyzer.ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
 begin
   // Si es un alias, resolver el tipo base
-  if TypeDef is TAliasTypeDef then
-  begin
+  if TypeDef.NodeType = ntAliasType then begin
     if TAliasTypeDef(TypeDef).BaseTypeDef <> nil then
       Result := ResolveTypeDef(TAliasTypeDef(TypeDef).BaseTypeDef)
     else if TAliasTypeDef(TypeDef).BaseTypeName <> '' then
@@ -562,24 +561,22 @@ begin
     Exit(True);
 
   // Tipos simples
-  if (T1 is TSimpleTypeDef) and (T2 is TSimpleTypeDef) then
-  begin
+  if (T1.NodeType = ntSimpleType) and (T2.NodeType = ntSimpleType) then begin
     // Compatibilidad numérica
     if IsNumericType(T1) and IsNumericType(T2) then
       Exit(True);
-
     // String con string
     if (T1.TypeName = 'STRING') and (T2.TypeName = 'STRING') then
       Exit(True);
-
     // Boolean con boolean
     if (T1.TypeName = 'BOOLEAN') and (T2.TypeName = 'BOOLEAN') then
       Exit(True);
   end;
 
   // Subrango con su tipo base
-  if (T1 is TSubrangeTypeDef) then
+  if T1.NodeType = ntSubrangeType then begin
     T1 := TSimpleTypeDef.Create('INTEGER', T1.SrcPos);
+  end;
 
   Result := False;
 end;
@@ -588,8 +585,7 @@ begin
   if TypeDef = nil then
     Exit(False);
 
-  if TypeDef is TSimpleTypeDef then
-  begin
+  if TypeDef.NodeType = ntSimpleType then begin
     Result := (TypeDef.TypeName = 'INTEGER') or
               (TypeDef.TypeName = 'BYTE') or
               (TypeDef.TypeName = 'WORD') or
@@ -597,7 +593,7 @@ begin
     Exit;
   end;
 
-  if TypeDef is TSubrangeTypeDef then
+  if TypeDef.NodeType = ntSubrangeType then
     Exit(True);
 
   Result := False;
@@ -607,8 +603,7 @@ begin
   if TypeDef = nil then
     Exit(False);
 
-  if TypeDef is TSimpleTypeDef then
-  begin
+  if TypeDef.NodeType = ntSimpleType then begin
     Result := (TypeDef.TypeName = 'INTEGER') or
               (TypeDef.TypeName = 'BYTE') or
               (TypeDef.TypeName = 'WORD') or
@@ -617,10 +612,10 @@ begin
     Exit;
   end;
 
-  if TypeDef is TEnumTypeDef then
+  if TypeDef.NodeType = ntEnumType then
     Exit(True);
 
-  if TypeDef is TSubrangeTypeDef then
+  if TypeDef.NodeType = ntSubrangeType then
     Exit(True);
 
   Result := False;
@@ -809,10 +804,8 @@ var
 begin
   // Ya fue registrada en RegisterTypeDef
   // Verificar definiciones recursivas
-  if TypeDef is TAliasTypeDef then
-  begin
-    if TAliasTypeDef(TypeDef).BaseTypeName <> '' then
-    begin
+  if TypeDef.NodeType = ntAliasType then begin
+    if TAliasTypeDef(TypeDef).BaseTypeName <> '' then begin
       BaseType := ResolveType(TAliasTypeDef(TypeDef).BaseTypeName);
       if BaseType = nil then
         Error('Tipo base desconocido: ' + TAliasTypeDef(TypeDef).BaseTypeName, TypeDef.SrcPos);
@@ -851,7 +844,7 @@ begin
   // Analizar campos
   for i := 0 to RecordType.Fields.Count - 1 do
   begin
-    if RecordType.Fields[i] is TVarDecl then
+    if RecordType.Fields[i].NodeType = ntVarDecl then
       VisitVarDecl(TVarDecl(RecordType.Fields[i]));
   end;
 
@@ -867,7 +860,7 @@ begin
       // Analizar campos
       for j := 0 to Branch.Fields.Count - 1 do
       begin
-        if Branch.Fields[j] is TVarDecl then
+        if Branch.Fields[j].NodeType = ntVarDecl then
           VisitVarDecl(TVarDecl(Branch.Fields[j]));
       end;
     end;
@@ -937,7 +930,7 @@ begin
   CondType := GetTypeOf(IfStmt.Condition);
   if CondType = nil then
     Error('No se puede determinar el tipo de la condición', IfStmt.Condition.SrcPos)
-  else if (CondType.TypeName <> 'BOOLEAN') and (not (CondType is TSimpleTypeDef)) then
+  else if (CondType.TypeName <> 'BOOLEAN') and (not (CondType.NodeType = ntSimpleType)) then
     Warning('La condición debería ser booleana', IfStmt.Condition.SrcPos);
 
   // Analizar ramas
@@ -1027,7 +1020,7 @@ begin
   // Verificar que sea un registro
   if RecordType = nil then
     Error('WITH requiere una expresión de tipo RECORD', WithStmt.RecordVar.SrcPos)
-  else if not (RecordType is TRecordTypeDef) then
+  else if not (RecordType.NodeType = ntRecordType) then
     Error('WITH solo puede usarse con RECORDs', WithStmt.RecordVar.SrcPos);
 
   // Entrar en el ámbito del WITH
@@ -1268,11 +1261,11 @@ begin
 
   // Buscar el campo en el registro
   FoundField := False;
-  if RecordType is TRecordTypeDef then
+  if RecordType.NodeType = ntRecordType then
   begin
     for i := 0 to TRecordTypeDef(RecordType).Fields.Count - 1 do
     begin
-      if TRecordTypeDef(RecordType).Fields[i] is TVarDecl then
+      if TRecordTypeDef(RecordType).Fields[i].NodeType = ntVarDecl then
       begin
         FieldDecl := TVarDecl(TRecordTypeDef(RecordType).Fields[i]);
         if FieldDecl.Name = FieldAccess.FieldName then
@@ -1296,7 +1289,7 @@ begin
 
   if PtrType <> nil then
   begin
-    if not (PtrType is TPointerTypeDef) then
+    if not (PtrType.NodeType = ntPointerType) then
       Error('^ solo puede aplicarse a punteros', PointerDeref.SrcPos);
   end;
 end;
@@ -1315,7 +1308,7 @@ begin
   end;
 
   // Verificar que sea un arreglo
-  if not (ArrayType is TArrayTypeDef) then begin
+  if not (ArrayType.NodeType = ntArrayType) then begin
     Error('[] solo puede aplicarse a arreglos', ArrayIndex.SrcPos);
     Exit;
   end;
@@ -1396,7 +1389,7 @@ begin
   if RecordType = nil then
     Exit;
 
-  if not (RecordType is TRecordTypeDef) then
+  if not (RecordType.NodeType = ntRecordType) then
     Exit;
 
   // Crear nuevo ámbito para WITH
@@ -1405,10 +1398,8 @@ begin
     FCurrentScope.AddChild(NewScope);
 
   // Registrar los campos del registro como símbolos
-  for i := 0 to TRecordTypeDef(RecordType).Fields.Count - 1 do
-  begin
-    if TRecordTypeDef(RecordType).Fields[i] is TVarDecl then
-    begin
+  for i := 0 to TRecordTypeDef(RecordType).Fields.Count - 1 do begin
+    if TRecordTypeDef(RecordType).Fields[i].NodeType = ntVarDecl then begin
       FieldDecl := TVarDecl(TRecordTypeDef(RecordType).Fields[i]);
       Sym := TSymbol.Create(FieldDecl.Name, skField);
       Sym.DataType := ResolveType(FieldDecl.TypeName);
