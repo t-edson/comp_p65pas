@@ -10,22 +10,22 @@ type
   { TAnalyzer }
   TAnalyzer = class
   public    //Public attributes of compiler
-    ID        : integer;         //Identificador para el compilador.
+    ID        : integer;          //Identificador para el compilador.
     //Variables públicas del compilador
-    ejecProg  : boolean;         //Indicates the compiler is working
-    stopEjec  : boolean;         //To stop compilation
-    CompiledUnit: boolean;       //Activated when a Unit is compiled
+    ejecProg  : boolean;          //Indicates the compiler is working
+    stopEjec  : boolean;          //To stop compilation
+    CompiledUnit: boolean;        //Activated when a Unit is compiled
   public   //Componentes del compilador
-    msg      : TMessageManager;  //Gestor de mensajes
-    lexer    : TAleLexer;        //Analizador léxico
-    parser   : TParserPas;       //Analizador sintáctico
-    parserASM: TParserAsm6502;   //Parser para ensamblador
-    parserDir: TParserDirective; //Parser para directivas
-    astProg  : TProgram;         //AST al compilar un programa.
-    astUnit  : TUnit;            //AST al compilar una unidad.
-    unitmgr  : TUnitManager;     //Gestor de unidades.
-    checker  : TSemanticAnalyzer;//Analizador semántico
-    options  : TCompOptions;     //Opciones del compilador.
+    msg      : TMessageManager;   //Gestor de mensajes
+    lexer    : TAleLexer;         //Analizador léxico
+    parser   : TParserPas;        //Analizador sintáctico
+    parserASM: TParserAsm6502;    //Parser para ensamblador
+    parserDir: TParserDirective;  //Parser para directivas
+    astProg  : TProgram;          //AST al compilar un programa.
+    astUnit  : TUnit;             //AST al compilar una unidad.
+    unitmgr  : TUnitManager;      //Gestor de unidades.
+    checker  : TSemanticAnalyzer; //Analizador semántico
+    options  : TCompOptions;      //Opciones del compilador.
   public  //Mensajes
     function HayError: boolean;
     procedure ClearError;

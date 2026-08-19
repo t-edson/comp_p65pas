@@ -1,5 +1,5 @@
 program muestra; 
-//uses unit1, unit2;
+uses unit1, unit2;
 begin
 //  writeln('PROGRAMA');
 

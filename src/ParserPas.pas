@@ -53,7 +53,7 @@ public    //Eventos y propiedades
   callUnitAdded: procedure(const untName: string    //Nombre de la unidad en USES:
                            ) of object;
   function curFile: string; inline;
-protected // Métodos auxiliares para el parser
+protected //Métodos auxiliares para el parser
   function tokIdent: TTokenIdent; inline;
   function ConsumeSemicolon: boolean;
   procedure SkipWhites;
@@ -61,7 +61,7 @@ protected // Métodos auxiliares para el parser
   procedure Next;
   function ConsumeTok(tokId: TTokenIdent; const msgErr: string): boolean; inline;
   function ConsumeIdent(out token: string; const msgErr: string): boolean; inline;
-private   // Expresiones
+private   //Expresiones
   function ParseNumberLiteral: TNumberLiteral;
   function ParseIdentifier: TExpression;
   function ParseStringLiteral: TStringLiteral;
@@ -71,7 +71,7 @@ private   // Expresiones
   function ParseTerm: TExpression;
   function ParseSimpleExpression: TExpression;
   function ParseExpression(AllowFormat: Boolean = False): TExpression;
-private   // Métodos auxiliares para las declaraciones
+private   //Métodos auxiliares para las declaraciones
   procedure ParseParameters(var Params: TASTNodeList);
   function ParseSubrangeType: TSubrangeTypeDef;
   function ParseEnumType: TEnumTypeDef;
@@ -80,14 +80,14 @@ private   // Métodos auxiliares para las declaraciones
   function ParsePointerType: TPointerTypeDef;
   function ParseProceduralType: TProceduralType;
   function ParseTypeDefinition: TTypeDef;
-private   // Declaraciones
+private   //Declaraciones
   procedure ParseUsesClause(const unitContainer: TUnitRefList);
   procedure ParseVarDeclaration(declars: TDeclarations);
   procedure ParseConstDeclaration(declars: TDeclarations);
   procedure ParseProcedureDeclaration(declars: TDeclarations;
     location: TElemLocation);
   procedure ParseTypeDeclaration(declars: TDeclarations);
-private   // Instrucciones
+private   //Instrucciones
   procedure ParseAssigOrProcedureCall(var Block: TBlock);
   procedure ParseIfStatement(var Block: TBlock);
   procedure ParseWhileLoop(var Block: TBlock);
@@ -98,7 +98,7 @@ private   // Instrucciones
   procedure ParseCaseStatement(var Block: TBlock);
   procedure ParseWithStatement(var Block: TBlock);
   procedure ParseExitStatement(var Block: TBlock);
-public    // Sentencia, bloque y programa
+public    //Sentencia, bloque y programa
   IsUnit  : boolean;     //Flag to identify a Unit in the main File.
   procedure ParseStatement(Body: TBlock);
   procedure ParseDeclarations(Declars: TDeclarations; location: TElemLocation);
@@ -108,7 +108,7 @@ public    // Sentencia, bloque y programa
   procedure ParseFile(mainFile: String; var astProg: TProgram; var astUnit: TUnit
     );
   procedure ParseUnitFile(mainFile: String; var astUnit: TUnit);
-public    // Inicialización
+public    //Inicialización
   procedure Clear;  // Reinicia el compilador para un nuevo programa
   constructor Create(msg0: TMessageManager; lex0: TAleLexer);
   destructor Destroy; override;

@@ -103,12 +103,6 @@ type
     function AreTypesCompatible(T1, T2: TTypeDef): Boolean;
     function IsNumericType(TypeDef: TTypeDef): Boolean;
     function IsOrdinalType(TypeDef: TTypeDef): Boolean;
-    // Visitantes
-    procedure VisitNode(Node: TASTNode);
-    procedure VisitProgram(Prog: TProgram);
-    procedure VisitUnit(Unit0: TUnit);
-    procedure VisitBlock(Block: TBlock);
-    procedure VisitDeclarations(Decls: TDeclarations);
     procedure VisitVarDecl(VarDecl: TVarDecl);
     procedure VisitConstDecl(ConstDecl: TConstDecl);
     procedure VisitProcDecl(Proc: TProcDecl);
@@ -151,19 +145,25 @@ type
     procedure Error(const txt: string; const SrcPos: TSrcPos);
     procedure Warning(const txt: string; const SrcPos: TSrcPos);
     function GetCurrentLocation: TSrcPos;
-    // Utilidades
+  public  //Utilidades
     function IsInFunction: Boolean;
     function IsInProcedure: Boolean;
     function GetCurrentFunction: TProcDecl;
     function GetCurrentProcedure: TProcDecl;
-  public   //Métodos principales
+  private //Visitantes de nodos principales
+    procedure VisitNode(Node: TASTNode);
+    procedure VisitProgram(Prog: TProgram);
+    procedure VisitUnit(Unit0: TUnit);
+    procedure VisitBlock(Block: TBlock);
+    procedure VisitDeclarations(Decls: TDeclarations);
+  public  //Métodos principales
     property Errors: Integer read FErrors;
     property Warnings: Integer read FWarnings;
     property GlobalScope: TScope read FGlobalScope;
     function Analyze(Prog: TProgram): Boolean; overload;
     function Analyze(Unit0: TUnit): Boolean; overload;
     procedure SetUnitManager(AManager: TObject);
-  public //Inicialización
+  public  //Inicialización
     procedure Reset;
     procedure RegisterBuiltinTypes;
     procedure RegisterIntrinsicProcedures;
@@ -619,106 +619,6 @@ begin
     Exit(True);
 
   Result := False;
-end;
-// Visitantes de nodos principales
-procedure TSemanticAnalyzer.VisitNode(Node: TASTNode);
-begin
-  if Node = nil then
-    Exit;
-
-  case Node.NodeType of
-    // Programas y unidades
-    ntProgram: VisitProgram(TProgram(Node));
-    ntUnit: VisitUnit(TUnit(Node));
-
-    // Bloques y declaraciones
-    ntBlock: VisitBlock(TBlock(Node));
-    ntDeclarations: VisitDeclarations(TDeclarations(Node));
-    ntVarDecl: VisitVarDecl(TVarDecl(Node));
-    ntConstDecl: VisitConstDecl(TConstDecl(Node));
-    ntProcDecl: VisitProcDecl(TProcDecl(Node));
-
-    // Tipos
-    ntSimpleType: VisitTypeDef(TTypeDef(Node));
-    ntSubrangeType: VisitTypeDef(TTypeDef(Node));
-    ntEnumType: VisitTypeDef(TTypeDef(Node));
-    ntArrayType: VisitArrayTypeDef(TArrayTypeDef(Node));
-    ntRecordType: VisitRecordTypeDef(TRecordTypeDef(Node));
-    ntPointerType: VisitPointerTypeDef(TPointerTypeDef(Node));
-    ntAliasType: VisitTypeDef(TTypeDef(Node));
-    ntProceduralType: VisitTypeDef(TTypeDef(Node));
-
-    // Sentencias
-    ntAssignment: VisitAssignment(TAssignment(Node));
-    ntIfStatement: VisitIfStatement(TIfStatement(Node));
-    ntWhileLoop: VisitWhileLoop(TWhileLoop(Node));
-    ntRepeatUntil: VisitRepeatUntil(TRepeatUntil(Node));
-    ntForLoop: VisitForLoop(TForLoop(Node));
-    ntCaseStatement: VisitCaseStatement(TCaseStatement(Node));
-    ntCaseBranch: VisitCaseBranch(TCaseBranch(Node));
-    ntWithStatement: VisitWithStatement(TWithStatement(Node));
-    ntExitStatement: VisitExitStatement(TExitStatement(Node));
-
-    // Expresiones
-    ntVariableRef: VisitVariableRef(TVariableRef(Node));
-    ntNumberLiteral: VisitNumberLiteral(TNumberLiteral(Node));
-    ntBooleanLiteral: VisitBooleanLiteral(TBooleanLiteral(Node));
-    ntStringLiteral: VisitStringLiteral(TStringLiteral(Node));
-    ntBinaryOp: VisitBinaryOp(TBinaryOp(Node));
-    ntUnaryOp: VisitUnaryOp(TUnaryOp(Node));
-    ntFunctionCall: VisitFunctionCall(TFunctionCall(Node));
-    ntFieldAccess: VisitFieldAccess(TFieldAccess(Node));
-    ntPointerDeref: VisitPointerDeref(TPointerDeref(Node));
-    ntArrayRefer: VisitArrayIndex(TArrayIndex(Node));
-    ntArrayLiteral: VisitArrayLiteral(TArrayLiteral(Node));
-    ntRecordLiteral: VisitRecordLiteral(TRecordLiteral(Node));
-    ntPointerLiteral: VisitPointerLiteral(TPointerLiteral(Node));
-  end;
-end;
-procedure TSemanticAnalyzer.VisitProgram(Prog: TProgram);
-begin
-  if Prog = nil then Exit;
-  // Registrar declaraciones globales
-  RegisterDeclarations(Prog.Declarations);
-  // Analizar el cuerpo principal
-  VisitBlock(Prog.Body);
-end;
-procedure TSemanticAnalyzer.VisitUnit(Unit0: TUnit);
-begin
-  if Unit0 = nil then Exit;
-  FCurrentUnit := Unit0;
-  // Registrar declaraciones de interface
-  RegisterDeclarations(Unit0.InterfaceDecls);
-  // Registrar declaraciones de implementation
-  RegisterDeclarations(Unit0.ImplementationDecls);
-  // Analizar initialization y finalization
-  if Unit0.InitializationBlock <> nil then
-    VisitBlock(Unit0.InitializationBlock);
-  if Unit0.FinalizationBlock <> nil then
-    VisitBlock(Unit0.FinalizationBlock);
-end;
-procedure TSemanticAnalyzer.VisitBlock(Block: TBlock);
-var
-  i: Integer;
-begin
-  if Block = nil then Exit;
-  EnterScope;
-  try
-    for i := 0 to Block.Statements.Count - 1 do
-      VisitNode(Block.Statements[i]);
-  finally
-    ExitScope;
-  end;
-end;
-procedure TSemanticAnalyzer.VisitDeclarations(Decls: TDeclarations);
-begin
-  // Las declaraciones ya se registraron en RegisterDeclarations
-  // Aquí solo se analizan los detalles adicionales
-  if Decls = nil then
-    Exit;
-
-  // Analizar declaraciones de tipo
-  RegisterDeclarations(Decls);
 end;
 // Visitantes de declaraciones
 procedure TSemanticAnalyzer.VisitVarDecl(VarDecl: TVarDecl);
@@ -1461,6 +1361,106 @@ begin
     Result := FCurrentProcedure
   else
     Result := nil;
+end;
+//Visitantes de nodos principales
+procedure TSemanticAnalyzer.VisitNode(Node: TASTNode);
+begin
+  if Node = nil then
+    Exit;
+
+  case Node.NodeType of
+    // Programas y unidades
+    ntProgram: VisitProgram(TProgram(Node));
+    ntUnit: VisitUnit(TUnit(Node));
+
+    // Bloques y declaraciones
+    ntBlock: VisitBlock(TBlock(Node));
+    ntDeclarations: VisitDeclarations(TDeclarations(Node));
+    ntVarDecl: VisitVarDecl(TVarDecl(Node));
+    ntConstDecl: VisitConstDecl(TConstDecl(Node));
+    ntProcDecl: VisitProcDecl(TProcDecl(Node));
+
+    // Tipos
+    ntSimpleType: VisitTypeDef(TTypeDef(Node));
+    ntSubrangeType: VisitTypeDef(TTypeDef(Node));
+    ntEnumType: VisitTypeDef(TTypeDef(Node));
+    ntArrayType: VisitArrayTypeDef(TArrayTypeDef(Node));
+    ntRecordType: VisitRecordTypeDef(TRecordTypeDef(Node));
+    ntPointerType: VisitPointerTypeDef(TPointerTypeDef(Node));
+    ntAliasType: VisitTypeDef(TTypeDef(Node));
+    ntProceduralType: VisitTypeDef(TTypeDef(Node));
+
+    // Sentencias
+    ntAssignment: VisitAssignment(TAssignment(Node));
+    ntIfStatement: VisitIfStatement(TIfStatement(Node));
+    ntWhileLoop: VisitWhileLoop(TWhileLoop(Node));
+    ntRepeatUntil: VisitRepeatUntil(TRepeatUntil(Node));
+    ntForLoop: VisitForLoop(TForLoop(Node));
+    ntCaseStatement: VisitCaseStatement(TCaseStatement(Node));
+    ntCaseBranch: VisitCaseBranch(TCaseBranch(Node));
+    ntWithStatement: VisitWithStatement(TWithStatement(Node));
+    ntExitStatement: VisitExitStatement(TExitStatement(Node));
+
+    // Expresiones
+    ntVariableRef: VisitVariableRef(TVariableRef(Node));
+    ntNumberLiteral: VisitNumberLiteral(TNumberLiteral(Node));
+    ntBooleanLiteral: VisitBooleanLiteral(TBooleanLiteral(Node));
+    ntStringLiteral: VisitStringLiteral(TStringLiteral(Node));
+    ntBinaryOp: VisitBinaryOp(TBinaryOp(Node));
+    ntUnaryOp: VisitUnaryOp(TUnaryOp(Node));
+    ntFunctionCall: VisitFunctionCall(TFunctionCall(Node));
+    ntFieldAccess: VisitFieldAccess(TFieldAccess(Node));
+    ntPointerDeref: VisitPointerDeref(TPointerDeref(Node));
+    ntArrayRefer: VisitArrayIndex(TArrayIndex(Node));
+    ntArrayLiteral: VisitArrayLiteral(TArrayLiteral(Node));
+    ntRecordLiteral: VisitRecordLiteral(TRecordLiteral(Node));
+    ntPointerLiteral: VisitPointerLiteral(TPointerLiteral(Node));
+  end;
+end;
+procedure TSemanticAnalyzer.VisitProgram(Prog: TProgram);
+begin
+  if Prog = nil then Exit;
+  // Registrar declaraciones globales
+  RegisterDeclarations(Prog.Declarations);
+  // Analizar el cuerpo principal
+  VisitBlock(Prog.Body);
+end;
+procedure TSemanticAnalyzer.VisitUnit(Unit0: TUnit);
+begin
+  if Unit0 = nil then Exit;
+  FCurrentUnit := Unit0;
+  // Registrar declaraciones de interface
+  RegisterDeclarations(Unit0.InterfaceDecls);
+  // Registrar declaraciones de implementation
+  RegisterDeclarations(Unit0.ImplementationDecls);
+  // Analizar initialization y finalization
+  if Unit0.InitializationBlock <> nil then
+    VisitBlock(Unit0.InitializationBlock);
+  if Unit0.FinalizationBlock <> nil then
+    VisitBlock(Unit0.FinalizationBlock);
+end;
+procedure TSemanticAnalyzer.VisitBlock(Block: TBlock);
+var
+  i: Integer;
+begin
+  if Block = nil then Exit;
+  EnterScope;
+  try
+    for i := 0 to Block.Statements.Count - 1 do
+      VisitNode(Block.Statements[i]);
+  finally
+    ExitScope;
+  end;
+end;
+procedure TSemanticAnalyzer.VisitDeclarations(Decls: TDeclarations);
+begin
+  // Las declaraciones ya se registraron en RegisterDeclarations
+  // Aquí solo se analizan los detalles adicionales
+  if Decls = nil then
+    Exit;
+
+  // Analizar declaraciones de tipo
+  RegisterDeclarations(Decls);
 end;
 //Métodos principales
 function TSemanticAnalyzer.Analyze(Prog: TProgram): Boolean;
