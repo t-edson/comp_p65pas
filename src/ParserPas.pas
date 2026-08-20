@@ -83,11 +83,10 @@ private   //Métodos auxiliares para las declaraciones
   function ParseTypeDefinition: TTypeDef;
 private   //Declaraciones
   procedure ParseUsesClause(const unitContainer: TUnitRefList);
-  procedure ParseVarDeclaration(declars: TDeclarations);
-  procedure ParseConstDeclaration(declars: TDeclarations);
-  procedure ParseProcedureDeclaration(declars: TDeclarations;
-    location: TElemLocation);
-  procedure ParseTypeDeclaration(declars: TDeclarations);
+  procedure ParseVarDeclaration(declars: TASTNodeList);
+  procedure ParseConstDeclaration(declars: TASTNodeList);
+  procedure ParseProcedureDeclaration(declars: TASTNodeList; location: TElemLocation);
+  procedure ParseTypeDeclaration(declars: TASTNodeList);
 private   //Instrucciones
   procedure ParseAssigOrProcedureCall(var Block: TBlock);
   procedure ParseIfStatement(var Block: TBlock);
@@ -102,7 +101,7 @@ private   //Instrucciones
 public    //Sentencia, bloque y programa
   IsUnit  : boolean;     //Flag to identify a Unit in the main File.
   procedure ParseStatement(Body: TBlock);
-  procedure ParseDeclarations(Declars: TDeclarations; location: TElemLocation);
+  procedure ParseDeclarations(Declars: TASTNodeList; location: TElemLocation);
   procedure ParseBody(Body: TBlock);
   procedure ParseProgram(astProg: TProgram);
   procedure ParseUnit(astUnit: TUnit);
@@ -337,7 +336,7 @@ Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve
     FieldName: string;
     idxExpr: TExpression;
     FieldAccess: TFieldAccess;
-    ArrayAccess: TArrayIndex;
+    ArrayAccess: TArrayRef;
     PointerDeref: TPointerDeref;
   begin
     if tokIdent = tiDOT then begin               //"." -> Campo
@@ -356,7 +355,7 @@ Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve
     end else if tokIdent = tiBRACK_OP then begin //"[" -> Arreglo
       Next;  // Consumir '['
       //Crea nodo de arreglo a partir de la expresión base
-      ArrayAccess := TArrayIndex.Create(BaseExpr, BaseExpr.SrcPos);
+      ArrayAccess := TArrayRef.Create(BaseExpr, BaseExpr.SrcPos);
       // Parsear índices
       while not HayError do begin
         idxExpr := ParseSimpleExpression;
@@ -1023,8 +1022,8 @@ begin
         Exit(nil);
       end;
       Break;  //Ya no debe seguir nada después de la parte variante.
-//    end else if tokIdent = tiPROCED then begin   //Es un procedimiento (método).
-//      ParseProcedureDeclaration(RecordType.Fields, locRecord);
+    end else if tokIdent = tiPROCED then begin   //Es un procedimiento (método).
+      ParseProcedureDeclaration(RecordType.Fields, locRecord);
     end else begin
       //Explora y lee un bloque de campos, como: a,b,c: integer;
       ParseVariableBlockDeclar(RecordType.Fields, ptyNone);
@@ -1166,7 +1165,7 @@ begin
   if HayError then Exit;
   ConsumeSemicolon;  //Puede generar error
 end;
-procedure TParserPas.ParseVarDeclaration(declars: TDeclarations);
+procedure TParserPas.ParseVarDeclaration(declars: TASTNodeList);
 {Analiza la sección de declaración de variables. Esta sección puede incluri varios
 bloques de variables:
 VAR
@@ -1179,7 +1178,7 @@ var
 begin
   Next;  //Consume VAR
   repeat
-    nvars := ParseVariableBlockDeclar(declars.Items, ptyNone);
+    nvars := ParseVariableBlockDeclar(declars, ptyNone);
     if HayError then Exit;
     //Puede seguir un modificador de declaración
     if not(tokIdent in [tiSEMIC, tiEQUAL]) then begin
@@ -1188,7 +1187,7 @@ begin
         Exit;
       end;
       //Hay una sola variable declarada
-      varDecl := TVarDecl(declars.Items[declars.Items.Count-1]);  //La variable
+      varDecl := TVarDecl(declars[declars.Count-1]);  //La variable
       //Procesa modificadores ABSOLUTE, REGISTER, ...
       if tokIdent in [tiABSOLUTE, tiADDRESS] then begin
         // Hay especificación de dirección absoluta
@@ -1214,7 +1213,7 @@ begin
         Exit;
       end;
       //Hay una sola variable declarada
-      varDecl := TVarDecl(declars.Items[declars.Items.Count-1]);  //La variable
+      varDecl := TVarDecl(declars[declars.Count-1]);  //La variable
       //Aquí debe seguir el valor inicial constante.
       varDecl.initVal := ParseExpression(False);
       if HayError then Exit;
@@ -1222,7 +1221,7 @@ begin
     if not ConsumeSemicolon then Exit;   //Debe terminar con ";".
   until tokIdent<>tiIDENTIF;     //Sige otra declaración o BEGIN
 end;
-procedure TParserPas.ParseConstDeclaration(declars: TDeclarations);
+procedure TParserPas.ParseConstDeclaration(declars: TASTNodeList);
 var
   ConstName, TypeName: string;
   ConstValue: TExpression;
@@ -1276,7 +1275,8 @@ begin
     ConsumeSemicolon;
   end;
 end;
-procedure TParserPas.ParseProcedureDeclaration(declars: TDeclarations; location: TElemLocation);
+procedure TParserPas.ParseProcedureDeclaration(declars: TASTNodeList;
+  location: TElemLocation);
 {Realiza el análisis de un procedimiento o función.}
 var
   Proc: TProcDecl;
@@ -1365,7 +1365,7 @@ begin
     end;
   end;
 end;
-procedure TParserPas.ParseTypeDeclaration(declars: TDeclarations);
+procedure TParserPas.ParseTypeDeclaration(declars: TASTNodeList);
 var
   TypeName: string;
   TypeDef: TTypeDef;
@@ -1765,7 +1765,7 @@ begin
     Next;
   end;
 end;
-procedure TParserPas.ParseDeclarations(Declars: TDeclarations; location: TElemLocation);
+procedure TParserPas.ParseDeclarations(Declars: TASTNodeList; location: TElemLocation);
 begin
   while not HayError do begin
     if tokIdent = tiVAR then

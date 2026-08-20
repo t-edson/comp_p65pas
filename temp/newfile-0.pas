@@ -3,7 +3,7 @@ program muestra;
 type
   TMyRecord = record
     valor: Integer;
-    procedure TMyRecord.IncrementarValor;
+    procedure IncrementarValor;
     begin
       valor := valor + 1;  // Self implícito
     end;

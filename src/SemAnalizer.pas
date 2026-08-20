@@ -76,6 +76,9 @@ type
   end;
 
   //Analizador semántico
+
+  { TSemanticAnalyzer }
+
   TSemanticAnalyzer = class
   private
     msg: TMessageManager;    //Referencia al gestor de mensajes
@@ -91,7 +94,7 @@ type
     FWithScope: TScope;
     // Registro de símbolos
     function CompareParameters(Sym: TSymbol; Proc: TProcDecl): Boolean;
-    procedure RegisterDeclarations(Decls: TDeclarations);
+    procedure RegisterDeclarations(Decls: TASTNodeList);
     procedure RegisterProcDecl(Proc: TProcDecl);
     procedure RegisterVarDecl(VarDecl: TVarDecl);
     procedure RegisterConstDecl(ConstDecl: TConstDecl);
@@ -132,7 +135,7 @@ type
     procedure VisitFunctionCall(FuncCall: TFunctionCall);
     procedure VisitFieldAccess(FieldAccess: TFieldAccess);
     procedure VisitPointerDeref(PointerDeref: TPointerDeref);
-    procedure VisitArrayIndex(ArrayIndex: TArrayIndex);
+    procedure VisitArrayIndex(ArrayIndex: TArrayRef);
     procedure VisitArrayLiteral(ArrayLit: TArrayLiteral);
     procedure VisitRecordLiteral(RecordLit: TRecordLiteral);
     procedure VisitPointerLiteral(PointerLit: TPointerLiteral);
@@ -155,7 +158,7 @@ type
     procedure VisitProgram(Prog: TProgram);
     procedure VisitUnit(Unit0: TUnit);
     procedure VisitBlock(Block: TBlock);
-    procedure VisitDeclarations(Decls: TDeclarations);
+    procedure VisitDeclarations(Decls: TASTNodeList);
   public  //Métodos principales
     property Errors: Integer read FErrors;
     property Warnings: Integer read FWarnings;
@@ -275,14 +278,14 @@ begin
 end;
 { TSemanticAnalyzer }
 // Registro de símbolos
-procedure TSemanticAnalyzer.RegisterDeclarations(Decls: TDeclarations);
+procedure TSemanticAnalyzer.RegisterDeclarations(Decls: TASTNodeList);
 var
   i: Integer;
   Node: TASTNode;
 begin
   if Decls = nil then Exit;
-  for i := 0 to Decls.Items.Count - 1 do begin
-    Node := Decls.Items[i];
+  for i := 0 to Decls.Count - 1 do begin
+    Node := Decls[i];
     case Node.NodeType of
       ntVarDecl:
         RegisterVarDecl(TVarDecl(Node));
@@ -530,9 +533,9 @@ begin
     ntFieldAccess:
       // El tipo de un campo se resuelve durante el análisis
       Result := nil;
-    ntArrayRefer: begin
+    ntArrayRef: begin
       // El tipo de un arreglo es el tipo de sus elementos
-      ArrayVarType := GetTypeOf(TArrayIndex(Expr).ArrayVar);  //Obtiene el tipo del arreglo
+      ArrayVarType := GetTypeOf(TArrayRef(Expr).ArrayVar);  //Obtiene el tipo del arreglo
       if ArrayVarType = nil then Exit(nil);      //Valida que exista
       if ArrayVarType.NodeType <> ntArrayType then Exit(nil);  //Valida que sea arreglo
       ArrayType := TArrayTypeDef(ArrayVarType);    //Convierte a TArrayTypeDef
@@ -1193,7 +1196,7 @@ begin
       Error('^ solo puede aplicarse a punteros', PointerDeref.SrcPos);
   end;
 end;
-procedure TSemanticAnalyzer.VisitArrayIndex(ArrayIndex: TArrayIndex);
+procedure TSemanticAnalyzer.VisitArrayIndex(ArrayIndex: TArrayRef);
 var
   ArrayType, IdxType: TTypeDef;
   i: Integer;
@@ -1375,7 +1378,7 @@ begin
 
     // Bloques y declaraciones
     ntBlock: VisitBlock(TBlock(Node));
-    ntDeclarations: VisitDeclarations(TDeclarations(Node));
+    //ntDeclarations: VisitDeclarations(TDeclarations(Node));
     ntVarDecl: VisitVarDecl(TVarDecl(Node));
     ntConstDecl: VisitConstDecl(TConstDecl(Node));
     ntProcDecl: VisitProcDecl(TProcDecl(Node));
@@ -1411,7 +1414,7 @@ begin
     ntFunctionCall: VisitFunctionCall(TFunctionCall(Node));
     ntFieldAccess: VisitFieldAccess(TFieldAccess(Node));
     ntPointerDeref: VisitPointerDeref(TPointerDeref(Node));
-    ntArrayRefer: VisitArrayIndex(TArrayIndex(Node));
+    ntArrayRef: VisitArrayIndex(TArrayRef(Node));
     ntArrayLiteral: VisitArrayLiteral(TArrayLiteral(Node));
     ntRecordLiteral: VisitRecordLiteral(TRecordLiteral(Node));
     ntPointerLiteral: VisitPointerLiteral(TPointerLiteral(Node));
@@ -1452,7 +1455,7 @@ begin
     ExitScope;
   end;
 end;
-procedure TSemanticAnalyzer.VisitDeclarations(Decls: TDeclarations);
+procedure TSemanticAnalyzer.VisitDeclarations(Decls: TASTNodeList);
 begin
   // Las declaraciones ya se registraron en RegisterDeclarations
   // Aquí solo se analizan los detalles adicionales

@@ -19,7 +19,7 @@ type  //Tipos de nodos
     ntFunctionCall,  //Llamada a función: max(a, b).
     ntFieldAccess,   //Acceso a campo (persona.nombre).
     ntPointerDeref,  //Acceso a dirección de puntero (p^).
-    ntArrayRefer,    //Acceso a arreglo (variable[index]).
+    ntArrayRef,      //Acceso a arreglo (variable[index]).
     //Nodos de sentencias
     ntAssignment,    //Asignación de valor a variable.
     ntIfStatement,   //Condicional IF-THEN-ELSE.
@@ -56,7 +56,6 @@ type  //Tipos de nodos
     ntUnitRef,       //Referencia a unidades: USES unit1, unit2, ...
     ntProgram,       //Nodo raíz del programa completo: program MiPrograma;
     ntUnit,          //Nodo raiz de una unidad
-    ntDeclarations,  //Sección de declaraciones de variables, tipos, o procedimientos.
     ntBlock          //Bloque de instrucciones (begin...end)
   );
 type  //Declaraciones y clases base para el AST
@@ -80,7 +79,6 @@ type  //Declaraciones y clases base para el AST
   TFunctionCall = class;
   TCaseBranch = class;
   TProcDecl = class;
-  TDeclarations = class;
   TTypeDef = class;
 
   // Listas genéricas especializadas
@@ -126,7 +124,7 @@ type  //Declaraciones y clases base para el AST
   TCodeContainer = class(TASTNode)
   private
     FName: string;
-    FDeclarations: TDeclarations;
+    FDeclarations: TASTNodeList;
     FBody: TBlock;
     FIsForward: Boolean;  //True si es declaración FORWARD
     FIsAssembler: Boolean; //Indica si el procedimiento o función es ASSEMBLER.
@@ -135,7 +133,7 @@ type  //Declaraciones y clases base para el AST
     //"TVarDeclList" pero se usa "TASTNodeList" para reutilizar código.
     Parameters: TASTNodeList;
     property Name: string read FName write FName;
-    property Declarations: TDeclarations read FDeclarations;
+    property Declarations: TASTNodeList read FDeclarations;
     property Body: TBlock read FBody write FBody;
     procedure AddParameter(Param: TVarDecl);
     property IsForward: Boolean read FIsForward;
@@ -342,7 +340,7 @@ type  //Nodos de expresiones
     function ToString: string; override;
   end;
   // Acceso a arreglo: variable[index]
-  TArrayIndex = class(TExpression)
+  TArrayRef = class(TExpression)
   private
     FArrayVar: TExpression;    //La variable arreglo o expresión
     FIndices: TExpressionList;  //Lista de índices (multidimensional)
@@ -833,20 +831,8 @@ type  //Nodos estructurales
     function ToString: string; override;
   end;
   TUnitRefList = specialize TFPGObjectList<TUnitRef>;
-  // Contenedor de declaraciones
-  TDeclarations = class(TASTNode)   //*** ¿NO bastaría con una simple lista en lugar de crear una clase?
-  private
-    FItems: TASTNodeList;  // Mezcla de VarDecl, ProcDecl, FunctionDecl
-  public
-    procedure Add(Decl: TASTNode);
-    property Items: TASTNodeList read FItems;
-  public  //Inicialización y depuración
-    constructor Create;
-    destructor Destroy; override;
-    function ToString: string; override;
-  end;
   // Bloque (lista de instrucciones)
-  TBlock = class(TASTNode)
+  TBlock = class(TASTNode)    //*** Se podría reemplazar por un simple TASTNodeList
   private
     FStatements: TASTNodeList;
   public
@@ -876,8 +862,8 @@ type  //Nodos estructurales
     FUnitName: string;
     FInterfaceUses: TUnitRefList;    // USES en interface
     FImplementationUses: TUnitRefList; // USES en implementation
-    FInterfaceDecls: TDeclarations;   // Declaraciones públicas (interface)
-    FImplementationDecls: TDeclarations; // Declaraciones privadas (implementation)
+    FInterfaceDecls: TASTNodeList;   // Declaraciones públicas (interface)
+    FImplementationDecls: TASTNodeList; // Declaraciones privadas (implementation)
     FInitializationBlock: TBlock;      // Bloque de inicialización
     FFinalizationBlock: TBlock;        // Bloque de finalización
   public
@@ -885,8 +871,8 @@ type  //Nodos estructurales
     property UnitName: string read FUnitName;
     property InterfaceUses: TUnitRefList read FInterfaceUses;
     property ImplementationUses: TUnitRefList read FImplementationUses;
-    property InterfaceDecls: TDeclarations read FInterfaceDecls;
-    property ImplementationDecls: TDeclarations read FImplementationDecls;
+    property InterfaceDecls: TASTNodeList read FInterfaceDecls;
+    property ImplementationDecls: TASTNodeList read FImplementationDecls;
     property InitializationBlock: TBlock read FInitializationBlock write FInitializationBlock;
     property FinalizationBlock: TBlock read FFinalizationBlock write FFinalizationBlock;
   public  //Inicialización y depuración
@@ -964,7 +950,7 @@ llenado}
 begin
   FUsedUnits.Clear;
   //Limpiar declaraciones (eliminar todos los elementos)
-  FDeclarations.Items.Clear;
+  FDeclarations.Clear;
   //Limpiar cuerpo principal (eliminar todas las instrucciones)
   FBody.Statements.Clear;
 end;
@@ -982,7 +968,7 @@ begin
     FDeclarations := Nil;  //Marca para que no intenten destruirla.
     FBody := Nil;          //Marca para que no intenten destruirla.
   end else begin
-    FDeclarations := TDeclarations.Create;
+    FDeclarations := TASTNodeList.Create(True);
     FBody := TBlock.Create;
   end;
   {No creamos la lista de parámetros aquí, por los siguientes motivos:
@@ -1283,25 +1269,25 @@ function TPointerDeref.ToString: string;
 begin
   Result := Format('PointerDeref: %s^', [FPointer.ToString]);
 end;
-// TArrayIndex
-procedure TArrayIndex.AddIndex(Index: TExpression);
+// TArrayRef
+procedure TArrayRef.AddIndex(Index: TExpression);
 begin
   FIndices.Add(Index);
   Index.Parent := Self;
 end;
-constructor TArrayIndex.Create(AArrayVar: TExpression; const ASrcPos: TSrcPos);
+constructor TArrayRef.Create(AArrayVar: TExpression; const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntArrayRefer, ASrcPos);
+  inherited Create(ntArrayRef, ASrcPos);
   FArrayVar := AArrayVar;
   FIndices := TExpressionList.Create(True);
 end;
-destructor TArrayIndex.Destroy;
+destructor TArrayRef.Destroy;
 begin
   FArrayVar.Free;
   FIndices.Free;
   inherited Destroy;
 end;
-function TArrayIndex.ToString: string;
+function TArrayRef.ToString: string;
 begin
   Result := Format('ArrayIndex: %s (%d indices)',
                    [FArrayVar.ToString, FIndices.Count]);
@@ -1330,8 +1316,8 @@ begin
   case FTarget.NodeType of
     ntVariableRef:
       TargetStr := TVariableRef(FTarget).Name;
-    ntArrayRefer:
-      TargetStr := TArrayIndex(FTarget).ArrayVar.ToString + '[...]';
+    ntArrayRef:
+      TargetStr := TArrayRef(FTarget).ArrayVar.ToString + '[...]';
     ntFieldAccess:
       TargetStr := TFieldAccess(FTarget).RecordVar.ToString + '.' +
                    TFieldAccess(FTarget).FieldName;
@@ -1656,7 +1642,7 @@ end;
 function TProcDecl.ToString: string;
 begin
   Result := Format('Procedure: %s (%d params, %d locals)',
-                   [FName, Parameters.Count, FDeclarations.Items.Count]);
+                   [FName, Parameters.Count, FDeclarations.Count]);
 end;
 constructor TProcDecl.Create(const AName: string; const ASrcPos: TSrcPos; AIsForward: Boolean);
 begin
@@ -1899,25 +1885,6 @@ begin
   if FUnitPath <> '' then
     Result := Result + Format(' -> %s', [FUnitPath]);
 end;
-// TDeclarations
-constructor TDeclarations.Create;
-begin
-  FNodeType := ntDeclarations;
-  FItems := TASTNodeList.Create(True);
-end;
-destructor TDeclarations.Destroy;
-begin
-  FItems.Free;
-  inherited;
-end;
-procedure TDeclarations.Add(Decl: TASTNode);
-begin
-  FItems.Add(Decl);
-end;
-function TDeclarations.ToString: string;
-begin
-  Result := Format('Declarations (%d items)', [FItems.Count]);
-end;
 // TBlock
 procedure TBlock.AddStatement(Statement: TASTNode);
 begin
@@ -1962,15 +1929,15 @@ begin
   if FUsedUnits.Count > 0 then
     Result := Result + Format(' (uses %d units)', [FUsedUnits.Count]);
   if FDeclarations <> nil then
-    Result := Result + Format(' (%d decls)', [FDeclarations.Items.Count]);
+    Result := Result + Format(' (%d decls)', [FDeclarations.Count]);
 end;
 // TUnit
 procedure TUnit.Clear;
 begin
   FInterfaceUses.Clear;
   FImplementationUses.Clear;
-  FInterfaceDecls.Items.Clear;
-  FImplementationDecls.Items.Clear;
+  FInterfaceDecls.Clear;
+  FImplementationDecls.Clear;
   if FInitializationBlock <> Nil then FInitializationBlock.Statements.Clear;
   if FFinalizationBlock <> Nil then FFinalizationBlock.Statements.Clear;
 end;
@@ -1979,8 +1946,8 @@ begin
   FNodeType := ntUnit;
   FInterfaceUses := TUnitRefList.Create(True);
   FImplementationUses := TUnitRefList.Create(True);
-  FInterfaceDecls := TDeclarations.Create;
-  FImplementationDecls := TDeclarations.Create;
+  FInterfaceDecls := TASTNodeList.Create;
+  FImplementationDecls := TASTNodeList.Create;
   FInitializationBlock := nil;
   FFinalizationBlock := nil;
 end;
@@ -2001,10 +1968,10 @@ begin
     Result := Result + Format(' (interface uses %d units)', [FInterfaceUses.Count]);
   if FImplementationUses.Count > 0 then
     Result := Result + Format(' (impl uses %d units)', [FImplementationUses.Count]);
-  if FInterfaceDecls.Items.Count > 0 then
-    Result := Result + Format(' (interface %d decls)', [FInterfaceDecls.Items.Count]);
-  if FImplementationDecls.Items.Count > 0 then
-    Result := Result + Format(' (impl %d decls)', [FImplementationDecls.Items.Count]);
+  if FInterfaceDecls.Count > 0 then
+    Result := Result + Format(' (interface %d decls)', [FInterfaceDecls.Count]);
+  if FImplementationDecls.Count > 0 then
+    Result := Result + Format(' (impl %d decls)', [FImplementationDecls.Count]);
 end;
 {$endregion}
 end.
