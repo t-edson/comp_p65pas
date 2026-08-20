@@ -14,6 +14,7 @@ type  //Tipos generales
 some declarations have to be interpreted in different ways according to the location.}
 TElemLocation = (
               locMain,       //En el programa principal.
+              locRecord,     //Dentro de un RECORD.
               locInterface,  //En INTERFACE de una unidad.
               locImplement   //En IMPLEMENTATION de una unidad.
 );
@@ -1022,7 +1023,10 @@ begin
         Exit(nil);
       end;
       Break;  //Ya no debe seguir nada después de la parte variante.
+//    end else if tokIdent = tiPROCED then begin   //Es un procedimiento (método).
+//      ParseProcedureDeclaration(RecordType.Fields, locRecord);
     end else begin
+      //Explora y lee un bloque de campos, como: a,b,c: integer;
       ParseVariableBlockDeclar(RecordType.Fields, ptyNone);
     end;
     if tokIdent = tiSEMIC then begin  //Es ";"

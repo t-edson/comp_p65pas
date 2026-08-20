@@ -1,7 +1,15 @@
 program muestra; 
-uses unit1, unit2;
+//uses unit1, unit2;
+type
+  TMyRecord = record
+    valor: Integer;
+    procedure TMyRecord.IncrementarValor;
+    begin
+      valor := valor + 1;  // Self implícito
+    end;
+  end;  
 begin
-//  writeln('PROGRAMA');
+  writeln('PROGRAMA');
 
 //  asm clc end;
 //  y := 1;
