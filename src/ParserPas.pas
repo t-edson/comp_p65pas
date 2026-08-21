@@ -1401,6 +1401,7 @@ end;
 procedure TParserPas.ParseAssigOrProcedureCall(var Block: TBlock);
 var
   Operand1, Value: TExpression;
+  posAssig: TSrcPos;
 begin
   Operand1 := ParseIdentifier;
   if HayError then begin
@@ -1408,6 +1409,7 @@ begin
     Exit;
   end;
   if tokIdent = tiASSIGN then begin
+    posAssig := lex.GetSrcPos;   //Guarda posición para la asignación
     //Se trata de una asignación.
     Next;  //Pasamos el ":="
     Value := ParseExpression;
@@ -1416,7 +1418,7 @@ begin
       if Value<>nil then Value.Destroy;
     end else begin
       //Target := TVariableRef.Create(token, SrcPos);
-      Block.AddStatement(TAssignment.Create(Operand1, Value, Operand1.SrcPos));
+      Block.AddStatement(TAssignment.Create(Operand1, Value, posAssig));
     end;
   end else if tokIdent in [tiSEMIC, tiELSE, tiEND] then begin
     //Sigue un delimitador de instrucción ";", "else" o "end". Debe ser una llamada a

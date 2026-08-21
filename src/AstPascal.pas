@@ -16,14 +16,13 @@ type  //Tipos de nodos
     ntPointerLiteral,//Literal de puntero: Nil o $100
     ntBinaryOp,      //Operación binaria. Ej. En "a+b", la operación binaria es el "+".
     ntUnaryOp,       //Operación unaria (un operando). Ej. -x, not a.
-    ntFunctionCall,  //Llamada a función: max(a, b).
+    ntProcFunctCall, //Llamada a procedimiento o función: max(a, b).
     ntFieldAccess,   //Acceso a campo (persona.nombre).
     ntPointerDeref,  //Acceso a dirección de puntero (p^).
     ntArrayRef,      //Acceso a arreglo (variable[index]).
     //Nodos de sentencias
     ntAssignment,    //Asignación de valor a variable.
     ntIfStatement,   //Condicional IF-THEN-ELSE.
-    //ntProcedureCall, //No se usan Llamada a un procedimiento. Se maneja como llamada a función.
     ntWhileLoop,     //Bucle WHILE-DO.
     ntRepeatUntil,   //Bucle REPEAT-UNTIL.
     ntForLoop,       //Bucle FOR-TO/DOWNTO-DO.
@@ -592,23 +591,23 @@ type  //Nodos de declaraciones
     FIsParameter: Boolean;
     FParamType: TParamType;
   public
-    Name      : string;
+    Name      : string;       //Nombre de la variable
     hasAdic   : Byte;         {Valor que define el tipo de parámetro adicional. Por
-                               defecto toma el valor DEC_NONE. Se maneja como número en
+                               defecto, toma el valor DEC_NONE. Se maneja como número en
                                lugar de un enumerado fijo porque es dependiente del
                                hardware}
-    initVal   : TExpression;   //La expresión que define el valor inicial
-    absAddr   : TExpression;   {Reference to the AST expression that returns the absolute
+    initVal   : TExpression;  //La expresión que define el valor inicial
+    absAddr   : TExpression;  {Reference to the AST expression that returns the absolute
                                address where the variable should be located.}
   public   //Campos para el tipo
     //Indentificador del tipo, cuando es un tipo identificador. Algo como "byte", "word"
     //o "mi_tipo".
     TypeName : string;
+    //Ubicación del tipo, cuando se usa TypeName.
+    TypeSrc  : TSrcPos;
     //Referencia al tipo cuando el tipo es estructurado y definido en la misma declaración
     //de la variable. Algo como: var1: ARRAY[1..3] OF Byte;
     TypeDef  : TTypeDef;
-    //Ubicación del tipo, cuando se usa TypeName.
-    TypeSrc  : TSrcPos;
     //Bandera para indicar que este nodo es propietario del tipo y, en consecuencia, debe
     //responsabilizarse de destruirlo. Esta variable es necesaria porque las declaraciones
     //de la forma:
@@ -886,7 +885,6 @@ type  //Nodos estructurales
 
   // Funciones auxiliares
 function ForDirectionToString(Direction: TForDirection): string;
-function FindNodeAtPosition(Node: TASTNode; Row, Col: Integer): TASTNode;
 implementation
 function ForDirectionToString(Direction: TForDirection): string;
 begin
@@ -895,175 +893,6 @@ begin
     fdDownTo:  Result := 'downto';
     else       Result := 'unknown';
   end;
-end;
-function FindNodeAtPosition(Node: TASTNode; Row, Col: Integer): TASTNode;
-{Utilidad para encontrar un Nodo del AST a partir de una posición en el código fuente}
-var
-  i: Integer;
-  Child: TASTNode;
-  Prog: TProgram;
-  Block: TBlock;
-  Assignm: TAssignment;
-  BinOp: TBinaryOp;
-  UnaryOp: TUnaryOp;
-  FuncCall: TFunctionCall;
-  IfStmt: TIfStatement;
-  WhileLoop: TWhileLoop;
-  ForLoop: TForLoop;
-  CaseStmt: TCaseStatement;
-  CaseBranch: TCaseBranch;
-  WithStmt: TWithStatement;
-  ArrayRef: TArrayRef;
-  FieldAccess: TFieldAccess;
-  PointerDeref: TPointerDeref;
-  RecordLit: TRecordLiteral;
-  Init, fInit: TFieldInitializer;
-begin
-  //Validación
-  if Node = nil then Exit(nil);
-  //Verificar si es la posición del nodo
-  if (Node.SrcPos.row = Row) and (Node.SrcPos.col = Col) then
-    Exit(Node);
-  //Si el nodo tiene hijos, buscar recursivamente
-  case Node.NodeType of
-    ntProgram: begin
-      Prog := TProgram(Node);
-      //Buscar en declaraciones
-      for i := 0 to Prog.Declarations.Count - 1 do begin
-        Result := FindNodeAtPosition(Prog.Declarations[i], Row, Col);
-        if Result <> nil then Exit;
-      end;
-      //Buscar en el cuerpo
-      Result := FindNodeAtPosition(Prog.Body, Row, Col);
-      if Result <> nil then Exit;
-    end;
-    ntBlock: begin
-      Block := TBlock(Node);
-      for i := 0 to Block.Statements.Count - 1 do begin
-        Result := FindNodeAtPosition(Block.Statements[i], Row, Col);
-        if Result <> nil then Exit;
-      end;
-    end;
-    ntAssignment: begin
-      Assignm := TAssignment(Node);
-      // Buscar en el destino
-      Result := FindNodeAtPosition(Assignm.Target, Row, Col);
-      if Result <> nil then Exit;
-      // Buscar en el valor
-      Result := FindNodeAtPosition(Assignm.Value, Row, Col);
-      if Result <> nil then Exit;
-    end;
-    ntBinaryOp: begin
-      BinOp := TBinaryOp(Node);
-      Result := FindNodeAtPosition(BinOp.Left, Row, Col);
-      if Result <> nil then Exit;
-      Result := FindNodeAtPosition(BinOp.Right, Row, Col);
-      if Result <> nil then Exit;
-    end;
-    ntUnaryOp: begin
-      UnaryOp := TUnaryOp(Node);
-      Result := FindNodeAtPosition(UnaryOp.Operand, Row, Col);
-      if Result <> nil then Exit;
-    end;
-    ntFunctionCall: begin
-      FuncCall := TFunctionCall(Node);
-      for i := 0 to FuncCall.Arguments.Count - 1 do begin
-        Result := FindNodeAtPosition(FuncCall.Arguments[i], Row, Col);
-        if Result <> nil then Exit;
-      end;
-    end;
-    ntIfStatement: begin
-      IfStmt := TIfStatement(Node);
-      Result := FindNodeAtPosition(IfStmt.Condition, Row, Col);
-      if Result <> nil then Exit;
-      Result := FindNodeAtPosition(IfStmt.ThenBranch, Row, Col);
-      if Result <> nil then Exit;
-      if IfStmt.ElseBranch <> nil then
-        Result := FindNodeAtPosition(IfStmt.ElseBranch, Row, Col);
-      if Result <> nil then Exit;
-    end;
-    ntWhileLoop: begin
-      WhileLoop := TWhileLoop(Node);
-      Result := FindNodeAtPosition(WhileLoop.Condition, Row, Col);
-      if Result <> nil then Exit;
-      Result := FindNodeAtPosition(WhileLoop.Body, Row, Col);
-      if Result <> nil then Exit;
-    end;
-    ntForLoop: begin
-      ForLoop := TForLoop(Node);
-      Result := FindNodeAtPosition(ForLoop.ControlVar, Row, Col);
-      if Result <> nil then Exit;
-      Result := FindNodeAtPosition(ForLoop.StartExpr, Row, Col);
-      if Result <> nil then Exit;
-      Result := FindNodeAtPosition(ForLoop.EndExpr, Row, Col);
-      if Result <> nil then Exit;
-      Result := FindNodeAtPosition(ForLoop.Body, Row, Col);
-      if Result <> nil then Exit;
-    end;
-    ntCaseStatement: begin
-      CaseStmt := TCaseStatement(Node);
-      Result := FindNodeAtPosition(CaseStmt.Selector, Row, Col);
-      if Result <> nil then Exit;
-      for i := 0 to CaseStmt.Branches.Count - 1 do
-      begin
-        Result := FindNodeAtPosition(CaseStmt.Branches[i], Row, Col);
-        if Result <> nil then Exit;
-      end;
-      if CaseStmt.ElseBranch <> nil then
-        Result := FindNodeAtPosition(CaseStmt.ElseBranch, Row, Col);
-      if Result <> nil then Exit;
-    end;
-    ntCaseBranch: begin
-      CaseBranch := TCaseBranch(Node);
-      for i := 0 to CaseBranch.Constants.Count - 1 do begin
-        Result := FindNodeAtPosition(CaseBranch.Constants[i], Row, Col);
-        if Result <> nil then Exit;
-      end;
-      Result := FindNodeAtPosition(CaseBranch.Statement, Row, Col);
-      if Result <> nil then Exit;
-    end;
-    ntWithStatement: begin
-      WithStmt := TWithStatement(Node);
-      Result := FindNodeAtPosition(WithStmt.RecordVar, Row, Col);
-      if Result <> nil then Exit;
-      Result := FindNodeAtPosition(WithStmt.Body, Row, Col);
-      if Result <> nil then Exit;
-    end;
-    ntArrayRef: begin
-      ArrayRef := TArrayRef(Node);
-      Result := FindNodeAtPosition(ArrayRef.ArrayVar, Row, Col);
-      if Result <> nil then Exit;
-      for i := 0 to ArrayRef.Indices.Count - 1 do begin
-        Result := FindNodeAtPosition(ArrayRef.Indices[i], Row, Col);
-        if Result <> nil then Exit;
-      end;
-    end;
-    ntFieldAccess: begin
-      FieldAccess := TFieldAccess(Node);
-      Result := FindNodeAtPosition(FieldAccess.RecordVar, Row, Col);
-      if Result <> nil then Exit;
-    end;
-    ntPointerDeref: begin
-      PointerDeref := TPointerDeref(Node);
-      Result := FindNodeAtPosition(PointerDeref.Pointer, Row, Col);
-      if Result <> nil then Exit;
-    end;
-    ntRecordLiteral: begin
-      RecordLit := TRecordLiteral(Node);
-      for i := 0 to RecordLit.FieldInitializers.Count - 1 do begin
-        Init := RecordLit.FieldInitializers[i];
-        Result := FindNodeAtPosition(Init, Row, Col);
-        if Result <> nil then Exit;
-      end;
-    end;
-    ntFieldInitializer: begin
-      fInit := TFieldInitializer(Node);
-      Result := FindNodeAtPosition(fInit.Value, Row, Col);
-      if Result <> nil then Exit;
-    end;
-  end;
-  //Otro nodo
-  Result := nil;
 end;
 {$region "Clases base para el AST"}
 // TASTNode
@@ -1387,7 +1216,7 @@ end;
 // TFunctionCall
 constructor TFunctionCall.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntFunctionCall, ASrcPos);
+  inherited Create(ntProcFunctCall, ASrcPos);
   FName := AName;
   FArguments := TExpressionList.Create(True);
   FDeclaration := nil;
@@ -1759,7 +1588,9 @@ begin
 end;
 function TVarDecl.ToString: string;
 begin
-  Result := Format('VarDecl: %s: %s', [Name, TypeName]);
+  Result := 'VarDecl: Name=' + Name +
+  ', TypeName=' + TypeName + ', TypeDef=' ;
+  if TypeDef=Nil then Result += '<Nil>' else Result += TypeDef.TypeName;
   if FIsParameter then begin
     Result := Result + ' (parameter';
     if FParamType = ptyVar then

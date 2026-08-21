@@ -17,6 +17,7 @@ type
     skEnumValue
   );
 
+  //Clase TScope
   TScope = class;
 
   //Símbolo (identificador declarado)
@@ -56,9 +57,6 @@ type
   end;
 
   //Ámbito (scope)
-
-  { TScope }
-
   TScope = class
   private
     FParent: TScope;         //Ámbito padre
@@ -78,9 +76,6 @@ type
   end;
 
   //Analizador semántico
-
-  { TSemanticAnalyzer }
-
   TSemanticAnalyzer = class
   private
     msg: TMessageManager;    //Referencia al gestor de mensajes
@@ -91,7 +86,6 @@ type
     FErrors: Integer;
     FWarnings: Integer;
     FCurrentUnit: TUnit;
-    FUnitManager: TObject; // Referencia al UnitManager (opcional)
     FInWith: Boolean;
     FWithScope: TScope;
     // Registro de símbolos
@@ -128,7 +122,7 @@ type
     procedure VisitCaseBranch(CaseBranch: TCaseBranch);
     procedure VisitWithStatement(WithStmt: TWithStatement);
     procedure VisitExitStatement(ExitStmt: TExitStatement);
-    // Visitantes de expresiones
+    //Visitantes de expresiones
     procedure VisitVariableRef(VarRef: TVariableRef);
     procedure VisitNumberLiteral(NumLit: TNumberLiteral);
     procedure VisitBooleanLiteral(BoolLit: TBooleanLiteral);
@@ -168,7 +162,6 @@ type
     property GlobalScope: TScope read FGlobalScope;
     function Analyze(Prog: TProgram): Boolean; overload;
     function Analyze(Unit0: TUnit): Boolean; overload;
-    procedure SetUnitManager(AManager: TObject);
   public  //Inicialización
     procedure Reset;
     procedure RegisterBuiltinTypes;
@@ -304,6 +297,7 @@ begin
     Error('Tipo desconocido: ' + VarDecl.TypeName, VarDecl.TypeSrc);
     Exit;
   end;
+//  VarDecl.TypeDef := ;
   // Crear símbolo
   Sym := TSymbol.Create(VarDecl.Name, skVariable);
   Sym.DataType := TypeDef;
@@ -523,7 +517,7 @@ begin
     ntUnaryOp: begin
       Result := GetTypeOf(TUnaryOp(Expr).Operand);
     end;
-    ntFunctionCall: begin
+    ntProcFunctCall: begin
       Sym := FCurrentScope.LookupRecursive(TFunctionCall(Expr).Name);
       if Sym <> nil then
       begin
@@ -872,7 +866,7 @@ begin
       Error('Tipo apuntado desconocido: ' + PointerType.TargetTypeName, PointerType.SrcPos);
   end;
 end;
-// Visitantes de sentencias
+{$region "Visitantes de sentencias"}
 procedure TSemanticAnalyzer.VisitAssignment(Assign: TAssignment);
 var
   TargetType, ValueType: TTypeDef;
@@ -1046,7 +1040,8 @@ begin
       Warning('EXIT sin valor en función', ExitStmt.SrcPos);
   end;
 end;
-// Visitantes de expresiones
+{$endregion}
+{$region "Visitantes de expresiones"}
 procedure TSemanticAnalyzer.VisitVariableRef(VarRef: TVariableRef);
 var
   Sym: TSymbol;
@@ -1322,6 +1317,7 @@ begin
   // nil es válido para cualquier puntero
   // Las direcciones literales se verifican en el contexto
 end;
+{$endregion}
 // Manejo de ámbitos
 procedure TSemanticAnalyzer.EnterScope;
 var
@@ -1480,7 +1476,7 @@ begin
     ntStringLiteral: VisitStringLiteral(TStringLiteral(Node));
     ntBinaryOp: VisitBinaryOp(TBinaryOp(Node));
     ntUnaryOp: VisitUnaryOp(TUnaryOp(Node));
-    ntFunctionCall: VisitFunctionCall(TFunctionCall(Node));
+    ntProcFunctCall: VisitFunctionCall(TFunctionCall(Node));
     ntFieldAccess: VisitFieldAccess(TFieldAccess(Node));
     ntPointerDeref: VisitPointerDeref(TPointerDeref(Node));
     ntArrayRef: VisitArrayIndex(TArrayRef(Node));
@@ -1595,11 +1591,7 @@ begin
   VisitUnit(Unit0);
   Result := FErrors = 0;
 end;
-procedure TSemanticAnalyzer.SetUnitManager(AManager: TObject);
-begin
-  FUnitManager := AManager;
-end;
-//Inicialización
+{$region "Inicialización"}
 procedure TSemanticAnalyzer.Reset;
 begin
   FGlobalScope.Clear;
@@ -1731,4 +1723,5 @@ begin
   FWithScope.Free;      //Elimina si se ha creado.
   inherited;
 end;
+{$endregion}
 end.
