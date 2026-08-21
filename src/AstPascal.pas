@@ -37,7 +37,6 @@ type  //Tipos de nodos
     ntVarDecl,       //Declaración de variable: var x: byte;
     ntConstDecl,     //Declaración de constantes: const PI=3;
     ntProcDecl,      //Declaración de procedimiento o función.
-    ntParamDecl,     //Parámetro de procedimiento/función: var x: byte
     ntForwardDecl,   //Declaración FORWARD
     //Nodos auxiliares para declaraciones de tipos
     ntArrayRange,    //Rango de arreglo (1..10)
@@ -80,6 +79,7 @@ type  //Declaraciones y clases base para el AST
   TCaseBranch = class;
   TProcDecl = class;
   TTypeDef = class;
+  TRecordTypeDef = class;
 
   // Listas genéricas especializadas
   TASTNodeList = specialize TFPGObjectList<TASTNode>;
@@ -645,17 +645,18 @@ type  //Nodos de declaraciones
     function ToString: string; override;
   end;
   // Declaración de procedimiento
-
-  { TProcDecl }
-
   TProcDecl = class(TCodeContainer)
   private
-    FReturnTypeName: string;
-    FReturnTypeDef: TTypeDef;    // Resuelto en análisis semántico
+    FReturnTypeName: string;     //Nombre del tipo de retorno.
+    FReturnTypeDef: TTypeDef;    //Tipo de retorno. Resuelto en análisis semántico.
+    FIsMethod  : Boolean;        //Bandera para indicar que es método.
+    FRecordType: TRecordTypeDef; //Referencia al tipo RECORD, cuando es un método.
   public
     property ReturnTypeName: string read FReturnTypeName write FReturnTypeName;
     property ReturnTypeDef: TTypeDef read FReturnTypeDef;
     function IsFunction: Boolean; inline;
+    property IsMethod: Boolean read FIsMethod write FIsMethod;
+    property RecordType: TRecordTypeDef read FRecordType write FRecordType;
   public  //Inicialización y depuración
     function ToString: string; override;
     constructor Create(const AName: string; const ASrcPos: TSrcPos;
@@ -832,7 +833,7 @@ type  //Nodos estructurales
   end;
   TUnitRefList = specialize TFPGObjectList<TUnitRef>;
   // Bloque (lista de instrucciones)
-  TBlock = class(TASTNode)    //*** Se podría reemplazar por un simple TASTNodeList
+  TBlock = class(TASTNode)
   private
     FStatements: TASTNodeList;
   public
@@ -860,12 +861,12 @@ type  //Nodos estructurales
   TUnit = class(TASTNode)
   private
     FUnitName: string;
-    FInterfaceUses: TUnitRefList;    // USES en interface
-    FImplementationUses: TUnitRefList; // USES en implementation
-    FInterfaceDecls: TASTNodeList;   // Declaraciones públicas (interface)
-    FImplementationDecls: TASTNodeList; // Declaraciones privadas (implementation)
-    FInitializationBlock: TBlock;      // Bloque de inicialización
-    FFinalizationBlock: TBlock;        // Bloque de finalización
+    FInterfaceUses: TUnitRefList;       //USES en interface
+    FImplementationUses: TUnitRefList;  //USES en implementation
+    FInterfaceDecls: TASTNodeList;      //Declaraciones públicas (interface)
+    FImplementationDecls: TASTNodeList; //Declaraciones privadas (implementation)
+    FInitializationBlock: TBlock;       //Bloque de inicialización
+    FFinalizationBlock: TBlock;         //Bloque de finalización
   public
     Name: String;
     property UnitName: string read FUnitName;
@@ -885,7 +886,7 @@ type  //Nodos estructurales
 
   // Funciones auxiliares
 function ForDirectionToString(Direction: TForDirection): string;
-
+function FindNodeAtPosition(Node: TASTNode; Row, Col: Integer): TASTNode;
 implementation
 function ForDirectionToString(Direction: TForDirection): string;
 begin
@@ -894,6 +895,175 @@ begin
     fdDownTo:  Result := 'downto';
     else       Result := 'unknown';
   end;
+end;
+function FindNodeAtPosition(Node: TASTNode; Row, Col: Integer): TASTNode;
+{Utilidad para encontrar un Nodo del AST a partir de una posición en el código fuente}
+var
+  i: Integer;
+  Child: TASTNode;
+  Prog: TProgram;
+  Block: TBlock;
+  Assignm: TAssignment;
+  BinOp: TBinaryOp;
+  UnaryOp: TUnaryOp;
+  FuncCall: TFunctionCall;
+  IfStmt: TIfStatement;
+  WhileLoop: TWhileLoop;
+  ForLoop: TForLoop;
+  CaseStmt: TCaseStatement;
+  CaseBranch: TCaseBranch;
+  WithStmt: TWithStatement;
+  ArrayRef: TArrayRef;
+  FieldAccess: TFieldAccess;
+  PointerDeref: TPointerDeref;
+  RecordLit: TRecordLiteral;
+  Init, fInit: TFieldInitializer;
+begin
+  //Validación
+  if Node = nil then Exit(nil);
+  //Verificar si es la posición del nodo
+  if (Node.SrcPos.row = Row) and (Node.SrcPos.col = Col) then
+    Exit(Node);
+  //Si el nodo tiene hijos, buscar recursivamente
+  case Node.NodeType of
+    ntProgram: begin
+      Prog := TProgram(Node);
+      //Buscar en declaraciones
+      for i := 0 to Prog.Declarations.Count - 1 do begin
+        Result := FindNodeAtPosition(Prog.Declarations[i], Row, Col);
+        if Result <> nil then Exit;
+      end;
+      //Buscar en el cuerpo
+      Result := FindNodeAtPosition(Prog.Body, Row, Col);
+      if Result <> nil then Exit;
+    end;
+    ntBlock: begin
+      Block := TBlock(Node);
+      for i := 0 to Block.Statements.Count - 1 do begin
+        Result := FindNodeAtPosition(Block.Statements[i], Row, Col);
+        if Result <> nil then Exit;
+      end;
+    end;
+    ntAssignment: begin
+      Assignm := TAssignment(Node);
+      // Buscar en el destino
+      Result := FindNodeAtPosition(Assignm.Target, Row, Col);
+      if Result <> nil then Exit;
+      // Buscar en el valor
+      Result := FindNodeAtPosition(Assignm.Value, Row, Col);
+      if Result <> nil then Exit;
+    end;
+    ntBinaryOp: begin
+      BinOp := TBinaryOp(Node);
+      Result := FindNodeAtPosition(BinOp.Left, Row, Col);
+      if Result <> nil then Exit;
+      Result := FindNodeAtPosition(BinOp.Right, Row, Col);
+      if Result <> nil then Exit;
+    end;
+    ntUnaryOp: begin
+      UnaryOp := TUnaryOp(Node);
+      Result := FindNodeAtPosition(UnaryOp.Operand, Row, Col);
+      if Result <> nil then Exit;
+    end;
+    ntFunctionCall: begin
+      FuncCall := TFunctionCall(Node);
+      for i := 0 to FuncCall.Arguments.Count - 1 do begin
+        Result := FindNodeAtPosition(FuncCall.Arguments[i], Row, Col);
+        if Result <> nil then Exit;
+      end;
+    end;
+    ntIfStatement: begin
+      IfStmt := TIfStatement(Node);
+      Result := FindNodeAtPosition(IfStmt.Condition, Row, Col);
+      if Result <> nil then Exit;
+      Result := FindNodeAtPosition(IfStmt.ThenBranch, Row, Col);
+      if Result <> nil then Exit;
+      if IfStmt.ElseBranch <> nil then
+        Result := FindNodeAtPosition(IfStmt.ElseBranch, Row, Col);
+      if Result <> nil then Exit;
+    end;
+    ntWhileLoop: begin
+      WhileLoop := TWhileLoop(Node);
+      Result := FindNodeAtPosition(WhileLoop.Condition, Row, Col);
+      if Result <> nil then Exit;
+      Result := FindNodeAtPosition(WhileLoop.Body, Row, Col);
+      if Result <> nil then Exit;
+    end;
+    ntForLoop: begin
+      ForLoop := TForLoop(Node);
+      Result := FindNodeAtPosition(ForLoop.ControlVar, Row, Col);
+      if Result <> nil then Exit;
+      Result := FindNodeAtPosition(ForLoop.StartExpr, Row, Col);
+      if Result <> nil then Exit;
+      Result := FindNodeAtPosition(ForLoop.EndExpr, Row, Col);
+      if Result <> nil then Exit;
+      Result := FindNodeAtPosition(ForLoop.Body, Row, Col);
+      if Result <> nil then Exit;
+    end;
+    ntCaseStatement: begin
+      CaseStmt := TCaseStatement(Node);
+      Result := FindNodeAtPosition(CaseStmt.Selector, Row, Col);
+      if Result <> nil then Exit;
+      for i := 0 to CaseStmt.Branches.Count - 1 do
+      begin
+        Result := FindNodeAtPosition(CaseStmt.Branches[i], Row, Col);
+        if Result <> nil then Exit;
+      end;
+      if CaseStmt.ElseBranch <> nil then
+        Result := FindNodeAtPosition(CaseStmt.ElseBranch, Row, Col);
+      if Result <> nil then Exit;
+    end;
+    ntCaseBranch: begin
+      CaseBranch := TCaseBranch(Node);
+      for i := 0 to CaseBranch.Constants.Count - 1 do begin
+        Result := FindNodeAtPosition(CaseBranch.Constants[i], Row, Col);
+        if Result <> nil then Exit;
+      end;
+      Result := FindNodeAtPosition(CaseBranch.Statement, Row, Col);
+      if Result <> nil then Exit;
+    end;
+    ntWithStatement: begin
+      WithStmt := TWithStatement(Node);
+      Result := FindNodeAtPosition(WithStmt.RecordVar, Row, Col);
+      if Result <> nil then Exit;
+      Result := FindNodeAtPosition(WithStmt.Body, Row, Col);
+      if Result <> nil then Exit;
+    end;
+    ntArrayRef: begin
+      ArrayRef := TArrayRef(Node);
+      Result := FindNodeAtPosition(ArrayRef.ArrayVar, Row, Col);
+      if Result <> nil then Exit;
+      for i := 0 to ArrayRef.Indices.Count - 1 do begin
+        Result := FindNodeAtPosition(ArrayRef.Indices[i], Row, Col);
+        if Result <> nil then Exit;
+      end;
+    end;
+    ntFieldAccess: begin
+      FieldAccess := TFieldAccess(Node);
+      Result := FindNodeAtPosition(FieldAccess.RecordVar, Row, Col);
+      if Result <> nil then Exit;
+    end;
+    ntPointerDeref: begin
+      PointerDeref := TPointerDeref(Node);
+      Result := FindNodeAtPosition(PointerDeref.Pointer, Row, Col);
+      if Result <> nil then Exit;
+    end;
+    ntRecordLiteral: begin
+      RecordLit := TRecordLiteral(Node);
+      for i := 0 to RecordLit.FieldInitializers.Count - 1 do begin
+        Init := RecordLit.FieldInitializers[i];
+        Result := FindNodeAtPosition(Init, Row, Col);
+        if Result <> nil then Exit;
+      end;
+    end;
+    ntFieldInitializer: begin
+      fInit := TFieldInitializer(Node);
+      Result := FindNodeAtPosition(fInit.Value, Row, Col);
+      if Result <> nil then Exit;
+    end;
+  end;
+  //Otro nodo
+  Result := nil;
 end;
 {$region "Clases base para el AST"}
 // TASTNode
@@ -1279,6 +1449,7 @@ constructor TArrayRef.Create(AArrayVar: TExpression; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntArrayRef, ASrcPos);
   FArrayVar := AArrayVar;
+  FArrayVar.Parent := Self;
   FIndices := TExpressionList.Create(True);
 end;
 destructor TArrayRef.Destroy;
@@ -1946,8 +2117,8 @@ begin
   FNodeType := ntUnit;
   FInterfaceUses := TUnitRefList.Create(True);
   FImplementationUses := TUnitRefList.Create(True);
-  FInterfaceDecls := TASTNodeList.Create;
-  FImplementationDecls := TASTNodeList.Create;
+  FInterfaceDecls := TASTNodeList.Create(True);
+  FImplementationDecls := TASTNodeList.Create(True);
   FInitializationBlock := nil;
   FFinalizationBlock := nil;
 end;

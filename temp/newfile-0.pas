@@ -1,16 +1,19 @@
 program muestra; 
 //uses unit1, unit2;
 type
-  TMyRecord = record
-    valor: Integer;
-    procedure IncrementarValor;
-    begin
-      valor := valor + 1;  // Self implícito
-    end;
-  end;  
+  TColor = (Rojo, Verde, Azul);
+//  TMyRecord = record
+//    valor: Integer;
+////    procedure IncrementarValor; 
+////    begin
+////      valor := valor + 1;  // Self implícito
+////    end;
+//  end;  
+var 
+  col: TColor;
 begin
-  writeln('PROGRAMA');
-
+  col := Rojo;
+//  writeln('PROGRAMA');
 //  asm clc end;
 //  y := 1;
 //  y := 1 + y*2;

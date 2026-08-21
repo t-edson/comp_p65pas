@@ -1311,7 +1311,8 @@ begin
     end;
     IsAssembler := True;
   end;
-  if (tokIdent = tiFORWARD) or (location = locInterface) then begin      //Es declaración FORWARD
+  if (location <> locRecord) and
+    ((tokIdent = tiFORWARD) or (location = locInterface)) then begin      //Es declaración FORWARD
     if tokIdent = tiFORWARD then begin
       Next;   //Consume "FORWARD"
       if not ConsumeTok(tiSEMIC, ER_SEMICOL_EXP) then begin
@@ -1329,6 +1330,7 @@ begin
     Proc := TProcDecl.Create(procName, SrcPos, False);
     Proc.Parameters := Params;  //Puede ser NIL.
     Proc.ReturnTypeName := returnType;
+    Proc.IsMethod := (location = locRecord);
     if IsAssembler or (tokIdent=tiASM) then begin
        //Es proc/función ASSEMBLER.
       if tokIdent <> tiASM then begin
