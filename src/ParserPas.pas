@@ -831,6 +831,7 @@ end;
 function TParserPas.ParseSubrangeType: TSubrangeTypeDef;
 var
   LowExpr, HighExpr: TExpression;
+  BaseTypeName: String;
 begin
   LowExpr := ParseFactor;
   if HayError then begin

@@ -172,6 +172,23 @@ type
 
 implementation
 
+function CompareExpressions(Expr1, Expr2: TExpression): Integer;
+var
+  Val1, Val2: Int64;
+begin
+  // Simplificado: asumimos que son literales numéricos o de caracteres
+  // En una implementación real, necesitarías evaluar las expresiones
+  if (Expr1.NodeType = ntNumberLiteral) and (Expr2.NodeType = ntNumberLiteral) then begin
+    Val1 := TNumberLiteral(Expr1).IntValue;
+    Val2 := TNumberLiteral(Expr2).IntValue;
+    if Val1 < Val2 then Result := -1
+    else if Val1 > Val2 then Result := 1
+    else Result := 0;
+  end else begin
+    Result := 0;  // No se puede comparar
+  end;
+end;
+
 { TSymbol }
 constructor TSymbol.Create(const AName: string; AKind: TSymbolKind);
 begin
@@ -486,7 +503,6 @@ var
   FieldDecl: TVarDecl;
 begin
   if Expr = nil then Exit(nil);
-
   case Expr.NodeType of
     ntNumberLiteral: begin
       if TNumberLiteral(Expr).IsInteger then
@@ -587,31 +603,72 @@ begin
   end;
 end;
 function TSemanticAnalyzer.AreTypesCompatible(T1, T2: TTypeDef): Boolean;
+  function GetBaseType(TypeDef: TTypeDef): TTypeDef;
+  begin
+    if TypeDef.NodeType = ntSubrangeType then begin
+      Result := TSubrangeTypeDef(TypeDef).BaseType;
+    end else begin
+      Result := TypeDef;
+    end;
+  end;
+var
+  Base1, Base2: TTypeDef;
 begin
   if (T1 = nil) or (T2 = nil) then
     Exit(False);
 
-  // Mismo tipo
   if T1 = T2 then
     Exit(True);
 
-  // Tipos simples
-  if (T1.NodeType = ntSimpleType) and (T2.NodeType = ntSimpleType) then begin
-    // Compatibilidad numérica
-    if IsNumericType(T1) and IsNumericType(T2) then
+  // Obtener tipos base
+  Base1 := GetBaseType(T1);
+  Base2 := GetBaseType(T2);
+  if (Base1 = nil) or (Base2 = nil) then
+    Exit(False);
+
+  // === TIPOS SIMPLES ===
+  if (Base1.NodeType = ntSimpleType) and (Base2.NodeType = ntSimpleType) then begin
+    // Numéricos: todos compatibles entre sí
+    if IsNumericType(Base1) and IsNumericType(Base2) then
       Exit(True);
-    // String con string
-    if (T1.TypeName = 'STRING') and (T2.TypeName = 'STRING') then
+    // Strings
+    if (Base1.TypeName = 'STRING') and (Base2.TypeName = 'STRING') then
       Exit(True);
-    // Boolean con boolean
-    if (T1.TypeName = 'BOOLEAN') and (T2.TypeName = 'BOOLEAN') then
+    // Booleanos
+    if (Base1.TypeName = 'BOOLEAN') and (Base2.TypeName = 'BOOLEAN') then
+      Exit(True);
+    // Char
+    if (Base1.TypeName = 'CHAR') and (Base2.TypeName = 'CHAR') then
       Exit(True);
   end;
 
-  // Subrango con su tipo base
-  if T1.NodeType = ntSubrangeType then begin
-    T1 := TSimpleTypeDef.Create('INTEGER', T1.SrcPos);
-  end;
+  // === ENUMERADOS ===
+  if (Base1.NodeType = ntEnumType) and (Base2.NodeType = ntEnumType) then
+    Exit(Base1 = Base2);
+
+  // === ARREGLOS ===
+  //if (Base1.NodeType = ntArrayType) and (Base2.NodeType = ntArrayType) then begin
+  //  Arr1 := TArrayTypeDef(Base1);
+  //  Arr2 := TArrayTypeDef(Base2);
+  //  // Compatibles si tienen el mismo número de dimensiones y el mismo tipo de elementos
+  //  if (Arr1.IndexRanges.Count = Arr2.IndexRanges.Count) then
+  //    Exit(AreTypesCompatible(GetElementType(Arr1), GetElementType(Arr2)));
+  //end;
+
+  // === RECORDS ===
+  if (Base1.NodeType = ntRecordType) and (Base2.NodeType = ntRecordType) then
+    Exit(Base1 = Base2);
+
+  // === PUNTEROS ===
+  //if (Base1.NodeType = ntPointerType) and (Base2.NodeType = ntPointerType) then begin
+  //  Ptr1 := TPointerTypeDef(Base1);
+  //  Ptr2 := TPointerTypeDef(Base2);
+  //  Exit(AreTypesCompatible(GetTargetType(Ptr1), GetTargetType(Ptr2)));
+  //end;
+
+  // === SUBRANGOS ===
+  if (Base1.NodeType = ntSubrangeType) and (Base2.NodeType = ntSubrangeType) then
+    Exit(True);  // Todos los subrangos son compatibles entre sí
 
   Result := False;
 end;
@@ -847,12 +904,54 @@ begin
   end;
 end;
 procedure TSemanticAnalyzer.VisitSubrangeTypeDef(SubrangeType: TSubrangeTypeDef);
+var
+  LowType, HighType: TTypeDef;
 begin
-  // Analizar límites
-  if SubrangeType.LowExpr <> nil then
-    VisitNode(SubrangeType.LowExpr);
-  if SubrangeType.HighExpr <> nil then
-    VisitNode(SubrangeType.HighExpr);
+  //Analizar límites
+  VisitNode(SubrangeType.LowExpr);
+  VisitNode(SubrangeType.HighExpr);
+  //Detectar el tipo base del subrango
+  if (SubrangeType.LowExpr.NodeType = ntNumberLiteral) and
+     (SubrangeType.HighExpr.NodeType = ntNumberLiteral) then begin
+    //Los límites son números, el tipo base es INTEGER.
+    SubrangeType.BaseType := ResolveType('INTEGER');
+    SubrangeType.BaseTypeName := 'INTEGER';
+  end else if (SubrangeType.LowExpr.NodeType = ntStringLiteral) and
+              (SubrangeType.HighExpr.NodeType = ntStringLiteral) then begin
+    //Los límites son caracteres ('a'..'z'), el tipo base es CHAR.
+    SubrangeType.BaseType := ResolveType('CHAR');
+    SubrangeType.BaseTypeName := 'CHAR';
+  end else begin
+    //Valida consistencia de tipos del rango
+    LowType := GetTypeOf(SubrangeType.LowExpr);
+    if LowType = nil then begin
+      Error('No se puede determinar el tipo de límite inferior', SubrangeType.SrcPos);
+      Exit;
+    end;
+    HighType := GetTypeOf(SubrangeType.HighExpr);
+    if HighType = nil then begin
+      Error('No se puede determinar el tipo del límite superior', SubrangeType.SrcPos);
+      Exit;
+    end;
+    if LowType <> HighType then begin
+      Error('Los límites del subrango deben ser del mismo tipo', SubrangeType.SrcPos);
+      Exit;
+    end;
+    //Verifica que el tipo sea ordinal (integer, char, enum, etc.)
+    if not IsOrdinalType(LowType) then begin
+      Error('El tipo del subrango debe ser ordinal',
+            SubrangeType.SrcPos);
+      Exit;
+    end;
+    //Se usa el mismo tipo de los límites para el tipo base
+    SubrangeType.BaseType := LowType;
+    SubrangeType.BaseTypeName := LowType.TypeName;
+  end;
+  //Valida el orden
+  if CompareExpressions(SubrangeType.LowExpr, SubrangeType.HighExpr) > 0 then begin
+    Error('El límite inferior debe ser menor o igual al límite superior',
+          SubrangeType.SrcPos);
+  end
 end;
 procedure TSemanticAnalyzer.VisitPointerTypeDef(PointerType: TPointerTypeDef);
 var

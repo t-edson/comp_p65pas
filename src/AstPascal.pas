@@ -38,8 +38,8 @@ type  //Tipos de nodos
     ntProcDecl,      //Declaración de procedimiento o función.
     ntForwardDecl,   //Declaración FORWARD
     //Nodos auxiliares para declaraciones de tipos
+    ntTypeRef,       //Referencia a un tipo
     ntArrayRange,    //Rango de arreglo (1..10)
-    //ntFieldDecl,     //Campo dentro de un RECORD. *** No se usa.
     ntVariantBranch, //Una rama de los casos RECORD con variantes.
     //Nodos de declaraciones de tipos
     ntSimpleType,    //Tipo simple, ya predefinido por el sistema.
@@ -79,6 +79,7 @@ type  //Declaraciones y clases base para el AST
   TProcDecl = class;
   TTypeDef = class;
   TRecordTypeDef = class;
+  TTypeRef = class;
 
   // Listas genéricas especializadas
   TASTNodeList = specialize TFPGObjectList<TASTNode>;
@@ -590,6 +591,7 @@ type  //Nodos de declaraciones
   private
     FIsParameter: Boolean;
     FParamType: TParamType;
+    FTypeRef  : TTypeRef;     //Referencia al tipo de la variable declarada.
   public
     Name      : string;       //Nombre de la variable
     hasAdic   : Byte;         {Valor que define el tipo de parámetro adicional. Por
@@ -608,12 +610,12 @@ type  //Nodos de declaraciones
     //Referencia al tipo cuando el tipo es estructurado y definido en la misma declaración
     //de la variable. Algo como: var1: ARRAY[1..3] OF Byte;
     TypeDef  : TTypeDef;
-    //Bandera para indicar que este nodo es propietario del tipo y, en consecuencia, debe
-    //responsabilizarse de destruirlo. Esta variable es necesaria porque las declaraciones
-    //de la forma:
-    // VAR a,b,c: <tipo estructurado>
-    //comparten un mismo objeto "TTypeDef".
+    {Bandera para indicar que este nodo es propietario del tipo "TypeDef" y, en
+    consecuencia, debe responsabilizarse de destruirlo. Esta variable es necesaria porque
+    las declaraciones de la forma: VAR a,b,c: <tipo estructurado>
+    comparten un mismo objeto "TTypeDef".}
     TypeOwner: boolean;
+    property TypeRef: TTypeRef read FTypeRef write FTypeRef;
   public  //Manejo de parámetros
     property IsParameter: Boolean read FIsParameter write FIsParameter;
     property ParamType: TParamType read FParamType write FParamType;
@@ -662,10 +664,34 @@ type  //Nodos de declaraciones
       AIsForward: Boolean);
   end;
 type  //Definiciones previas para declaraciones de tipos
+  {Clase para representar a las referencias a tipos. Normalmente, en el código fuente, las
+  referencias a tipos son identificadores, como "integer" o "TMitipo", o pueden ser
+  también declaraciones anónimas como "ARRAY[0..5] OF byte". Este nodo permite representar
+  ambos casos.}
+  TTypeRef = class(TASTNode)
+  private
+    //Nombre del tipo, cuando es un tipo con identificador. Algo como "byte", "word"
+    //o "mi_tipo". Se usa para "tipos con nombre".
+    FTypeName: string;
+    FTypeDef: TTypeDef;     //Definición inline (para tipos sin nombre).
+    FDeclaration: TTypeDef; //Enlace a la declaración (Resuelto en análisis semántico).
+  public
+    property TypeName: string read FTypeName write FTypeName;
+    property TypeDef: TTypeDef read FTypeDef;
+    property Declaration: TTypeDef read FDeclaration write FDeclaration;
+    function IsInline: Boolean; inline;
+    function IsNamed: Boolean; inline;
+//    function Resolve(SymbolTable: TScope): TTypeDef;
+  public  //Inicialización
+    constructor Create;
+    destructor Destroy; override;
+    function ToString: string; override;
+  end;
+
   //Clase base para las declaraciones de tipo
   TTypeDef = class(TASTnode)
     private
-      FTypeName: string;  // Nombre del tipo (para tipos simples o alias)
+      FTypeName: string;  //Nombre del tipo (para tipos simples o alias)
     public
       property TypeName: string read FTypeName write FTypeName;
     public  //Inicialización y depuración
@@ -724,15 +750,19 @@ type  //Nodos de declaraciones de tipos
   // Subrango (1..10, 'a'..'z')
   TSubrangeTypeDef = class(TTypeDef)
   private
-    FLowExpr: TExpression;
-    FHighExpr: TExpression;
+    FLowExpr: TExpression;    //Límite inferior del rango
+    FHighExpr: TExpression;   //Límite superior del rango
+    FBaseType: TTypeDef;      //Tipo base (integer, char, etc.)
+    FBaseTypeName: string;    //Nombre del tipo base
   public
     property LowExpr: TExpression read FLowExpr;
     property HighExpr: TExpression read FHighExpr;
+    property BaseType: TTypeDef read FBaseType write FBaseType;
+    property BaseTypeName: string read FBaseTypeName write FBaseTypeName;
   public  //Inicialización y depuración
-    function ToString: string; override;
     constructor Create(ALowExpr, AHighExpr: TExpression; const ASrcPos: TSrcPos);
     destructor Destroy; override;
+    function ToString: string; override;
   end;
   // Enumerado (Rojo, Verde, Azul)
   TEnumTypeDef = class(TTypeDef)
@@ -1566,9 +1596,10 @@ constructor TVarDecl.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntVarDecl, ASrcPos);
   Name       := AName;
+  FTypeRef   := TTypeRef.Create;  //Mantiene creado el nodo de referencia al tipo.
   hasAdic    := DEC_NONE;  //Indica que no hay parñametros adicionales en la declaración
-  FIsParameter := False;
   FParamType := ptyNone;
+  //FIsParameter := False;  //No es necesario
   //initVal = Nil;    //No es necesario
   //absAddr = Nil;    //No es necesario
   //La información de tipo debe completarse después
@@ -1584,6 +1615,7 @@ begin
   end;
   absAddr.Free;     //Destruye si se ha usado
   initVal.Free;     //Destruye si se ha usado
+  FTypeRef.Destroy;
   inherited Destroy;
 end;
 function TVarDecl.ToString: string;
@@ -1660,6 +1692,48 @@ begin
 end;
 {$endregion}
 {$region "Definiciones previas para declaraciones de tipos"}
+// TTypeRef
+constructor TTypeRef.Create;
+begin
+  FNodeType := ntTypeRef;         //FIja tipo de nodo
+  //La posición se fijará después.
+end;
+destructor TTypeRef.Destroy;
+begin
+  if FTypeDef <> nil then
+    FTypeDef.Destroy;
+  inherited;
+end;
+function TTypeRef.IsInline: Boolean;
+{Indica que no es una referencia al tipo, sino una declaración anónima de tipo.}
+begin
+  Result := FTypeDef <> nil;
+end;
+function TTypeRef.IsNamed: Boolean;
+{Indica es una referencia a tipo con un identificador.}
+begin
+  Result := FTypeName <> '';
+end;
+function TTypeRef.ToString: string;
+begin
+  if IsInline then
+    Result := 'TypeRef: inline (' + FTypeDef.ToString + ')'
+  else if IsNamed then
+    Result := Format('TypeRef: %s', [FTypeName])
+  else
+    Result := 'TypeRef: (unknown)';
+end;
+// TTypeDef
+constructor TTypeDef.Create(ANodeType: TASTNodeType; const ATypeName: string;
+                            const ASrcPos: TSrcPos);
+begin
+  inherited Create(ANodeType, ASrcPos);
+  FTypeName := ATypeName;
+end;
+function TTypeDef.ToString: string;
+begin
+  Result := Format('TypeDef(%d): %s', [Ord(NodeType), FTypeName]);
+end;
 // TArrayRange
 constructor TArrayRange.Create(ALowExpr, AHighExpr: TExpression;
   const ASrcPos: TSrcPos);
@@ -1704,17 +1778,6 @@ begin
   Result := Format('VariantBranch: %d selectors, %d fields',
                    [FSelectorValues.Count, FFields.Count]);
 end;
-// TTypeDef
-constructor TTypeDef.Create(ANodeType: TASTNodeType; const ATypeName: string;
-                            const ASrcPos: TSrcPos);
-begin
-  inherited Create(ANodeType, ASrcPos);
-  FTypeName := ATypeName;
-end;
-function TTypeDef.ToString: string;
-begin
-  Result := Format('TypeDef(%d): %s', [Ord(NodeType), FTypeName]);
-end;
 {$endregion}
 {$region "Nodos de declaraciones de tipos"}
 // TSimpleTypeDef
@@ -1744,6 +1807,10 @@ function TSubrangeTypeDef.ToString: string;
 begin
   Result := Format('Subrange: %s..%s',
                    [FLowExpr.ToString, FHighExpr.ToString]);
+  if FBaseTypeName <> '' then
+    Result := Result + Format(' base %s', [FBaseTypeName])
+  else if FBaseType <> nil then
+    Result := Result + Format(' base %s', [FBaseType.TypeName]);
 end;
 // TEnumTypeDef
 procedure TEnumTypeDef.AddValue(const Value: string);
