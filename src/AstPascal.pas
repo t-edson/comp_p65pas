@@ -602,11 +602,6 @@ type  //Nodos de declaraciones
     absAddr   : TExpression;  {Reference to the AST expression that returns the absolute
                                address where the variable should be located.}
   public   //Campos para el tipo
-    //Indentificador del tipo, cuando es un tipo identificador. Algo como "byte", "word"
-    //o "mi_tipo".
-    TypeName : string;
-    //Ubicación del tipo, cuando se usa TypeName.
-    TypeSrc  : TSrcPos;
     //Referencia al tipo cuando el tipo es estructurado y definido en la misma declaración
     //de la variable. Algo como: var1: ARRAY[1..3] OF Byte;
     TypeDef  : TTypeDef;
@@ -672,12 +667,12 @@ type  //Definiciones previas para declaraciones de tipos
   private
     //Nombre del tipo, cuando es un tipo con identificador. Algo como "byte", "word"
     //o "mi_tipo". Se usa para "tipos con nombre".
-    FTypeName: string;
+    FName: string;
     FTypeDef: TTypeDef;     //Definición inline (para tipos sin nombre).
     FDeclaration: TTypeDef; //Enlace a la declaración (Resuelto en análisis semántico).
   public
-    property TypeName: string read FTypeName write FTypeName;
-    property TypeDef: TTypeDef read FTypeDef;
+    property Name: string read FName write FName;
+    property TypeDef: TTypeDef read FTypeDef write FTypeDef;
     property Declaration: TTypeDef read FDeclaration write FDeclaration;
     function IsInline: Boolean; inline;
     function IsNamed: Boolean; inline;
@@ -1603,8 +1598,8 @@ begin
   //initVal = Nil;    //No es necesario
   //absAddr = Nil;    //No es necesario
   //La información de tipo debe completarse después
-  TypeName := '';
-  //TypeDef := nil;   //No es necesario
+  //FTypeRef.Name := '';   //No es necesario
+  //FTypeRef.TypeDef := nil;   //No es necesario
   TypeOwner := False;
 end;
 destructor TVarDecl.Destroy;
@@ -1621,7 +1616,7 @@ end;
 function TVarDecl.ToString: string;
 begin
   Result := 'VarDecl: Name=' + Name +
-  ', TypeName=' + TypeName + ', TypeDef=' ;
+  ', TypeName=' + FTypeRef.Name + ', TypeDef=' ;
   if TypeDef=Nil then Result += '<Nil>' else Result += TypeDef.TypeName;
   if FIsParameter then begin
     Result := Result + ' (parameter';
@@ -1700,8 +1695,6 @@ begin
 end;
 destructor TTypeRef.Destroy;
 begin
-  if FTypeDef <> nil then
-    FTypeDef.Destroy;
   inherited;
 end;
 function TTypeRef.IsInline: Boolean;
@@ -1712,14 +1705,14 @@ end;
 function TTypeRef.IsNamed: Boolean;
 {Indica es una referencia a tipo con un identificador.}
 begin
-  Result := FTypeName <> '';
+  Result := FName <> '';
 end;
 function TTypeRef.ToString: string;
 begin
   if IsInline then
     Result := 'TypeRef: inline (' + FTypeDef.ToString + ')'
   else if IsNamed then
-    Result := Format('TypeRef: %s', [FTypeName])
+    Result := Format('TypeRef: %s', [FName])
   else
     Result := 'TypeRef: (unknown)';
 end;

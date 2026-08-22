@@ -302,8 +302,8 @@ begin
     Exit;
   end;
   // Resolver tipo
-  if VarDecl.TypeName <> '' then
-    TypeDef := ResolveType(VarDecl.TypeName)
+  if VarDecl.TypeRef.Name <> '' then
+    TypeDef := ResolveType(VarDecl.TypeRef.Name)
   else if VarDecl.TypeDef <> nil then
     TypeDef := ResolveTypeDef(VarDecl.TypeDef)
   else begin
@@ -311,10 +311,11 @@ begin
     Exit;
   end;
   if TypeDef = nil then begin
-    Error('Tipo desconocido: ' + VarDecl.TypeName, VarDecl.TypeSrc);
+    Error('Tipo desconocido: ' + VarDecl.TypeRef.Name, VarDecl.TypeRef.SrcPos);
     Exit;
   end;
-//  VarDecl.TypeDef := ;
+  //Actualiza la referencia a la definición
+  VarDecl.TypeRef.TypeDef := TypeDef;
   // Crear símbolo
   Sym := TSymbol.Create(VarDecl.Name, skVariable);
   Sym.DataType := TypeDef;
@@ -366,7 +367,7 @@ begin
     // Comparar nombres (opcional)
     if Param1.Name <> Param2.Name then Exit(False);
     // Comparar tipos
-    if Param1.TypeName <> Param2.TypeName then Exit(False);
+    if Param1.TypeRef.Name <> Param2.TypeRef.Name then Exit(False);
     // Comparar tipo de parámetro (var, const, out)
     if Param1.ParamType <> Param2.ParamType then
       Exit(False);
@@ -569,8 +570,8 @@ begin
           FieldDecl := TVarDecl(Fields[i]);
           if FieldDecl.Name = FieldAccess.FieldName then begin
             // Encontró el campo
-            if FieldDecl.TypeName <> '' then
-              Result := ResolveType(FieldDecl.TypeName)
+            if FieldDecl.TypeRef.Name <> '' then
+              Result := ResolveType(FieldDecl.TypeRef.Name)
             else if FieldDecl.TypeDef <> nil then
               Result := ResolveTypeDef(FieldDecl.TypeDef)
             else
@@ -721,7 +722,7 @@ begin
   // Verificar inicialización
   if VarDecl.initVal <> nil then begin
     InitType := GetTypeOf(VarDecl.initVal);
-    VarType := ResolveType(VarDecl.TypeName);
+    VarType := ResolveType(VarDecl.TypeRef.Name);
     if not AreTypesCompatible(VarType, InitType) then
       Error('Tipo de inicialización incompatible para: ' + VarDecl.Name, VarDecl.SrcPos);
   end;
@@ -760,8 +761,8 @@ begin
       for i := 0 to Proc.Parameters.Count - 1 do begin
         Param := TVarDecl(Proc.Parameters[i]);
         // Resolver tipo del parámetro
-        if Param.TypeName <> '' then
-          ParamType := ResolveType(Param.TypeName)
+        if Param.TypeRef.Name <> '' then
+          ParamType := ResolveType(Param.TypeRef.Name)
         else if Param.TypeDef <> nil then
           ParamType := ResolveTypeDef(Param.TypeDef);
         if ParamType = nil then
@@ -785,7 +786,7 @@ begin
       for Field in Proc.RecordType.Fields do begin
         if Field is TVarDecl then begin
           FieldSym := TSymbol.Create(TVarDecl(Field).Name, skField);
-          FieldSym.DataType := ResolveType(TVarDecl(Field).TypeName);
+          FieldSym.DataType := ResolveType(TVarDecl(Field).TypeRef.Name);
           FieldSym.Declaration := Field;
           FCurrentScope.Declare(FieldSym);
         end;
@@ -1273,8 +1274,8 @@ begin
         ArgType := GetTypeOf(FuncCall.Arguments[i]);
 
         Param := TVarDecl(Sym.Parameters[i]);
-        if Param.TypeName <> '' then
-          ParamType := ResolveType(Param.TypeName)
+        if Param.TypeRef.Name <> '' then
+          ParamType := ResolveType(Param.TypeRef.Name)
         else if Param.TypeDef <> nil then
           ParamType := ResolveTypeDef(Param.TypeDef)
         else
@@ -1469,7 +1470,7 @@ begin
     if TRecordTypeDef(RecordType).Fields[i].NodeType = ntVarDecl then begin
       FieldDecl := TVarDecl(TRecordTypeDef(RecordType).Fields[i]);
       Sym := TSymbol.Create(FieldDecl.Name, skField);
-      Sym.DataType := ResolveType(FieldDecl.TypeName);
+      Sym.DataType := ResolveType(FieldDecl.TypeRef.Name);
       Sym.Declaration := FieldDecl;
       NewScope.Declare(Sym);
     end;
@@ -1764,7 +1765,7 @@ begin
   Sym.Parameters := TASTNodeList.Create(True);
   //Parámetros: argumentos variables (array of const)
   Param := TVarDecl.Create('Args', DummyPos);
-  Param.TypeName := 'ARRAY_OF_CONST';
+  Param.TypeRef.Name := 'ARRAY_OF_CONST';
   Param.IsParameter := True;
   Sym.Parameters.Add(Param);
   FGlobalScope.Declare(Sym);
@@ -1775,7 +1776,7 @@ begin
   Sym.Parameters := TASTNodeList.Create(True);
   //Parámetros: argumentos variables (array of const)
   Param := TVarDecl.Create('Args', DummyPos);
-  Param.TypeName := 'ARRAY_OF_CONST';
+  Param.TypeRef.Name := 'ARRAY_OF_CONST';
   Param.IsParameter := True;
   Sym.Parameters.Add(Param);
   FGlobalScope.Declare(Sym);
@@ -1786,7 +1787,7 @@ begin
   Sym.Parameters := TASTNodeList.Create(True);
   //Parámetros: argumentos variables (array of const)
   Param := TVarDecl.Create('Args', DummyPos);
-  Param.TypeName := 'ARRAY_OF_CONST';
+  Param.TypeRef.Name := 'ARRAY_OF_CONST';
   Param.IsParameter := True;
   Sym.Parameters.Add(Param);
   FGlobalScope.Declare(Sym);
@@ -1797,7 +1798,7 @@ begin
   Sym.Parameters := TASTNodeList.Create(True);
   //Parámetros: argumentos variables (array of const)
   Param := TVarDecl.Create('Args', DummyPos);
-  Param.TypeName := 'ARRAY_OF_CONST';
+  Param.TypeRef.Name := 'ARRAY_OF_CONST';
   Param.IsParameter := True;
   Sym.Parameters.Add(Param);
   FGlobalScope.Declare(Sym);
