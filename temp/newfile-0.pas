@@ -1,7 +1,7 @@
 program muestra; 
 //uses unit1, unit2;
 type
-  TColor = (Rojo, Verde, Azul);
+//  TColor = (Rojo, Verde, Azul);
 //  TMyRecord = record
 //    valor: Integer;
 ////    procedure IncrementarValor; 
@@ -10,19 +10,19 @@ type
 ////    end;
 //  end;  
   TAlumno = record
-    nombre: stringa;
+    nombre: string;
     apellido: string;
-    notas: TNota;
+//    notas: TNota;
     promedio: real;
     aprobado: boolean;
   end;
 var 
-  col: TColor;
+//  col: TColor;
 alumno: TAlumno; 
 begin
-  col := Rojo;
+//  col := Rojo;
 //  alumno.notas[i] := 0;
-  
+  alumno.nombre := 'hola';  
 //  writeln('PROGRAMA');
 //  asm clc end;
 //  y := 1;

@@ -317,16 +317,15 @@ type  //Nodos de expresiones
   // Acceso a campo: persona.edad
   TFieldAccess = class(TExpression)
   private
-    FRecordVar: TExpression;   // La variable registro (puede ser simple o acceso a campo)
-    FFieldName: string;        // Nombre del campo
+    FFieldName: string;        //Nombre del campo (después del punto)
+    FRecordVar: TExpression;   //Variable registro (antes del punto)
   public
+    property FieldName: string read FFieldName;
+    property RecordVar: TExpression read FRecordVar;
+  public  //Inicialización y depuración
     constructor Create(ARecordVar: TExpression; const AFieldName: string;
                        const ASrcPos: TSrcPos);
     destructor Destroy; override;
-
-    property RecordVar: TExpression read FRecordVar;
-    property FieldName: string read FFieldName;
-
     function ToString: string; override;
   end;
   // Dereferencia de puntero: p^
@@ -589,8 +588,8 @@ type  //Nodos de declaraciones
   // Declaraciones de variables
   TVarDecl = class(TASTNode)
   private
-    FIsParameter: Boolean;
-    FParamType: TParamType;
+    FIsParameter: Boolean;    //Indica que esta declaración es de un parámetro.
+    FParamType: TParamType;   //Tipo del parámetro.
     FTypeRef  : TTypeRef;     //Referencia al tipo de la variable declarada.
   public
     Name      : string;       //Nombre de la variable

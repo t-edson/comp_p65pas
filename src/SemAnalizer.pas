@@ -7,14 +7,14 @@ uses
 type
   //Tipos de símbolos
   TSymbolKind = (
-    skVariable,
-    skConstant,
-    skType,
-    skProcedure,
-    skFunction,
-    skParameter,
-    skField,
-    skEnumValue
+    skVariable,      //Variable
+    skConstant,      //Constante
+    skType,          //Tipo
+    skProcedure,     //Procedimiento
+    skFunction,      //Función
+    skParameter,     //Parámetro
+    skField,         //Campo
+    skEnumValue      //Valor de enumerado
   );
 
   //Clase TScope
@@ -88,21 +88,41 @@ type
     FCurrentUnit: TUnit;
     FInWith: Boolean;
     FWithScope: TScope;
-    // Registro de símbolos
+  public   //Atributos publicos
+    property Errors: Integer read FErrors;
+    property Warnings: Integer read FWarnings;
+    property GlobalScope: TScope read FGlobalScope;
+  private  //Utilidades y ámbitos
+    //Utilidades
+    function IsInFunction: Boolean;
+    function IsInProcedure: Boolean;
+    function GetCurrentFunction: TProcDecl;
+    function GetCurrentProcedure: TProcDecl;
     procedure CheckForwardDeclarations;
     function CompareParameters(Sym: TSymbol; Proc: TProcDecl): Boolean;
-    procedure RegisterDeclarations(Decls: TASTNodeList);
-    procedure RegisterProcDecl(Proc: TProcDecl);
-    procedure RegisterVarDecl(VarDecl: TVarDecl);
-    procedure RegisterConstDecl(ConstDecl: TConstDecl);
-    procedure RegisterTypeDef(TypeDef: TTypeDef);
-    // Resolución de tipos
+    //Mensajes
+    procedure Error(const txt: string; const SrcPos: TSrcPos);
+    procedure Warning(const txt: string; const SrcPos: TSrcPos);
+    // Manejo de ámbitos
+    procedure EnterScope;
+    procedure ExitScope;
+    procedure EnterWithScope(RecordVar: TExpression);
+    procedure ExitWithScope;
+  private  //Resolución de tipos
     function ResolveType(const TypeName: string): TTypeDef;
+    function ResolveTypeRef(TypeRef: TTypeRef): TTypeDef;
     function ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
     function GetTypeOf(Expr: TExpression): TTypeDef;
     function AreTypesCompatible(T1, T2: TTypeDef): Boolean;
     function IsNumericType(TypeDef: TTypeDef): Boolean;
     function IsOrdinalType(TypeDef: TTypeDef): Boolean;
+  private  //Registro de símbolos
+    procedure RegisterDeclarations(Decls: TASTNodeList);
+    procedure RegisterProcDecl(Proc: TProcDecl);
+    procedure RegisterVarDecl(VarDecl: TVarDecl);
+    procedure RegisterConstDecl(ConstDecl: TConstDecl);
+    procedure RegisterTypeDef(TypeDef: TTypeDef);
+  private  //Visitantes de declaraciones
     procedure VisitVarDecl(VarDecl: TVarDecl);
     procedure VisitConstDecl(ConstDecl: TConstDecl);
     procedure VisitProcDecl(Proc: TProcDecl);
@@ -112,7 +132,7 @@ type
     procedure VisitEnumTypeDef(EnumType: TEnumTypeDef);
     procedure VisitSubrangeTypeDef(SubrangeType: TSubrangeTypeDef);
     procedure VisitPointerTypeDef(PointerType: TPointerTypeDef);
-    // Visitantes de sentencias
+  private  //Visitantes de sentencias
     procedure VisitAssignment(Assign: TAssignment);
     procedure VisitIfStatement(IfStmt: TIfStatement);
     procedure VisitWhileLoop(WhileLoop: TWhileLoop);
@@ -122,7 +142,7 @@ type
     procedure VisitCaseBranch(CaseBranch: TCaseBranch);
     procedure VisitWithStatement(WithStmt: TWithStatement);
     procedure VisitExitStatement(ExitStmt: TExitStatement);
-    //Visitantes de expresiones
+  private  //Visitantes de expresiones
     procedure VisitVariableRef(VarRef: TVariableRef);
     procedure VisitNumberLiteral(NumLit: TNumberLiteral);
     procedure VisitBooleanLiteral(BoolLit: TBooleanLiteral);
@@ -136,33 +156,15 @@ type
     procedure VisitArrayLiteral(ArrayLit: TArrayLiteral);
     procedure VisitRecordLiteral(RecordLit: TRecordLiteral);
     procedure VisitPointerLiteral(PointerLit: TPointerLiteral);
-    // Manejo de ámbitos
-    procedure EnterScope;
-    procedure ExitScope;
-    procedure EnterWithScope(RecordVar: TExpression);
-    procedure ExitWithScope;
-    // Manejo de errores
-    procedure Error(const txt: string; const SrcPos: TSrcPos);
-    procedure Warning(const txt: string; const SrcPos: TSrcPos);
-    function GetCurrentLocation: TSrcPos;
-  public  //Utilidades
-    function IsInFunction: Boolean;
-    function IsInProcedure: Boolean;
-    function GetCurrentFunction: TProcDecl;
-    function GetCurrentProcedure: TProcDecl;
-  private //Visitantes de nodos principales
+  private  //Visitantes de nodos principales
     procedure VisitNode(Node: TASTNode);
+    procedure VisitDeclarations(Decls: TASTNodeList);
+    procedure VisitBlock(Block: TBlock);
     procedure VisitProgram(Prog: TProgram);
     procedure VisitUnit(Unit0: TUnit);
-    procedure VisitBlock(Block: TBlock);
-    procedure VisitDeclarations(Decls: TASTNodeList);
-  public  //Métodos principales
-    property Errors: Integer read FErrors;
-    property Warnings: Integer read FWarnings;
-    property GlobalScope: TScope read FGlobalScope;
+  public   //Análisis e Inicialización
     function Analyze(Prog: TProgram): Boolean; overload;
     function Analyze(Unit0: TUnit): Boolean; overload;
-  public  //Inicialización
     procedure Reset;
     procedure RegisterBuiltinTypes;
     procedure RegisterIntrinsicProcedures;
@@ -188,7 +190,7 @@ begin
     Result := 0;  // No se puede comparar
   end;
 end;
-
+{$region "TSymbol y TScope"}
 { TSymbol }
 constructor TSymbol.Create(const AName: string; AKind: TSymbolKind);
 begin
@@ -210,7 +212,6 @@ begin
   if FIsReturnTypeOwner then FReturnType.Free;
   inherited;
 end;
-
 { TScope }
 procedure TScope.Declare(Sym: TSymbol);
 var
@@ -288,64 +289,46 @@ begin
   FSymbols.Destroy;
   inherited;
 end;
+{$endregion}
 { TSemanticAnalyzer }
-// Registro de símbolos
-procedure TSemanticAnalyzer.RegisterVarDecl(VarDecl: TVarDecl);
-var
-  Sym: TSymbol;
-  TypeDef: TTypeDef;
+{$region "Utilidades y ámbitos"}
+// Utilidades
+function TSemanticAnalyzer.IsInFunction: Boolean;
 begin
-  // Verificar duplicado
-  if FCurrentScope.Lookup(VarDecl.Name) <> nil then begin
-    Error('Variable duplicada: ' + VarDecl.Name, VarDecl.SrcPos);
-    Exit;
-  end;
-  // Resolver tipo
-  if VarDecl.TypeRef.Name <> '' then
-    TypeDef := ResolveType(VarDecl.TypeRef.Name)
-  else if VarDecl.TypeRef.TypeDef <> nil then
-    TypeDef := ResolveTypeDef(VarDecl.TypeRef.TypeDef)
-  else begin
-    Error('Tipo no especificado para: ' + VarDecl.Name, VarDecl.SrcPos);
-    Exit;
-  end;
-  if TypeDef = nil then begin
-    Error('Tipo desconocido: ' + VarDecl.TypeRef.Name, VarDecl.TypeRef.SrcPos);
-    Exit;
-  end;
-  //Actualiza la referencia a la definición
-  VarDecl.TypeRef.Declaration := TypeDef;
-  // Crear símbolo
-  Sym := TSymbol.Create(VarDecl.Name, skVariable);
-  Sym.DataType := TypeDef;
-  Sym.Declaration := VarDecl;
-  FCurrentScope.Declare(Sym);
+  Result := (FCurrentProcedure <> nil) and FCurrentProcedure.IsFunction;
 end;
-procedure TSemanticAnalyzer.RegisterConstDecl(ConstDecl: TConstDecl);
-var
-  Sym: TSymbol;
-  TypeDef: TTypeDef;
+function TSemanticAnalyzer.IsInProcedure: Boolean;
 begin
-  // Verificar duplicado
-  if FCurrentScope.Lookup(ConstDecl.Name) <> nil then begin
-    Error('Constante duplicada: ' + ConstDecl.Name, ConstDecl.SrcPos);
-    Exit;
+  Result := (FCurrentProcedure <> nil) and not FCurrentProcedure.IsFunction;
+end;
+function TSemanticAnalyzer.GetCurrentFunction: TProcDecl;
+begin
+  if IsInFunction then
+    Result := FCurrentProcedure
+  else
+    Result := nil;
+end;
+function TSemanticAnalyzer.GetCurrentProcedure: TProcDecl;
+begin
+  if IsInProcedure then
+    Result := FCurrentProcedure
+  else
+    Result := nil;
+end;
+procedure TSemanticAnalyzer.CheckForwardDeclarations;
+var
+  i: Integer;
+  Sym: TSymbol;
+  Symbols: TStringList;
+begin
+  //Recorrer todos los símbolos del ámbito global
+  Symbols := FGlobalScope.GetSymbols;
+  for i := 0 to Symbols.Count - 1 do begin
+    Sym := TSymbol(Symbols.Objects[i]);
+    if Sym.IsForward then
+      Error('Declaración FORWARD sin implementación: ' + Sym.Name,
+            Sym.Declaration.SrcPos);
   end;
-  // Resolver tipo
-  if ConstDecl.HasType then begin
-    TypeDef := ResolveType(ConstDecl.TypeName)
-  end else begin
-    // Inferir tipo del valor
-    if ConstDecl.Value <> nil then
-      TypeDef := GetTypeOf(ConstDecl.Value)
-    else
-      TypeDef := nil;
-  end;
-  // Crear símbolo
-  Sym := TSymbol.Create(ConstDecl.Name, skConstant);
-  Sym.DataType := TypeDef;
-  Sym.Declaration := ConstDecl;
-  FCurrentScope.Declare(Sym);
 end;
 function TSemanticAnalyzer.CompareParameters(Sym: TSymbol; Proc: TProcDecl): Boolean;
 var
@@ -373,100 +356,93 @@ begin
   end;
   Result := True;
 end;
-procedure TSemanticAnalyzer.RegisterProcDecl(Proc: TProcDecl);
-{Registra las declaraciones de procedimientos/funciones, pero sin analizar el cuerpo, aún.}
-var
-  Sym: TSymbol;
-  i: Integer;
-  Param: TVarDecl;
+//Mensajes
+procedure TSemanticAnalyzer.Error(const txt: string; const SrcPos: TSrcPos);
 begin
-  //Verifica si es una declaración duplicada
-  Sym := FCurrentScope.Lookup(Proc.Name);
-  if Sym <> nil then begin
-    if Sym.IsForward and not Proc.IsForward then begin
-      //Es la implementación de un FORWARD.
-      //Verificamos que los parámetros coincidan.
-      if not CompareParameters(Sym, Proc) then begin
-        Error('La implementación de ' + Proc.Name +
-              ' no coincide con la declaración FORWARD', Proc.SrcPos);
-        Exit;
-      end;
-      //Actualizar el símbolo con la implementación
-      Sym.Declaration := Proc;
-      Sym.IsForward := False;
-      Exit;
-    end else begin
-      //Duplicado real
-      Error('Procedimiento/Función duplicado: ' + Proc.Name, Proc.SrcPos);
-      Exit;
-    end;
-    end;
-  // Crear símbolo
-  if Proc.IsFunction then
-    Sym := TSymbol.Create(Proc.Name, skFunction)
-  else
-    Sym := TSymbol.Create(Proc.Name, skProcedure);
-  Sym.Declaration := Proc;
-  Sym.IsForward := Proc.IsForward;
-  // Registrar parámetros (solo para validación, no se declaran en el ámbito global)
-  if Proc.Parameters <> nil then begin
-    Sym.Parameters := TASTNodeList.Create(False);   //No debe liberar los nodos parámetro, porque ya los hace el AST.
-    for i := 0 to Proc.Parameters.Count - 1 do begin
-      Param := TVarDecl(Proc.Parameters[i]);
-      Sym.Parameters.Add(Param);
-    end;
-  end;
-  //Tipo de retorno para funciones
-  if Proc.IsFunction then begin
-    if Proc.ReturnTypeName <> '' then
-      Sym.ReturnType := ResolveType(Proc.ReturnTypeName)
-    else if Proc.ReturnTypeDef <> nil then
-      Sym.ReturnType := ResolveTypeDef(Proc.ReturnTypeDef);
-    if Sym.ReturnType = nil then
-      Error('Tipo de retorno desconocido para: ' + Proc.Name, Proc.SrcPos);
-  end;
-  FCurrentScope.Declare(Sym);
+  Inc(FErrors);
+  msg.error(lex.GetMsgInfoE(txt, srcPos));
 end;
-procedure TSemanticAnalyzer.RegisterTypeDef(TypeDef: TTypeDef);
-var
-  Sym: TSymbol;
+procedure TSemanticAnalyzer.Warning(const txt: string; const SrcPos: TSrcPos);
 begin
-  if TypeDef.TypeName = '' then
-    Exit; // Tipo anónimo (inline)
-  // Verificar duplicado
-  if FCurrentScope.Lookup(TypeDef.TypeName) <> nil then begin
-    Error('Tipo duplicado: ' + TypeDef.TypeName, TypeDef.SrcPos);
+  Inc(FWarnings);
+  msg.warn(lex.GetMsgInfo(txt, srcPos));
+end;
+//Manejo de ámbitos
+procedure TSemanticAnalyzer.EnterScope;
+var
+  NewScope: TScope;
+begin
+  //Crea un nuevo ámbito con el ámbito actual como padre
+  NewScope := TScope.Create(FCurrentScope);
+  //Registrar el hijo en el padre.
+  if FCurrentScope <> nil then
+    FCurrentScope.AddChild(NewScope);
+  //Establece el nuevo ámbito como ámbito actual
+  FCurrentScope := NewScope;
+end;
+procedure TSemanticAnalyzer.ExitScope;
+begin
+  if FCurrentScope <> nil then begin
+    //La liberación se hace desde el Scope padre
+    //Parent := FCurrentScope.FParent;
+    //FCurrentScope.Free;
+    //FCurrentScope := Parent;
+    //Retornamos a al Scope padre
+    FCurrentScope := FCurrentScope.FParent;
+  end;
+end;
+procedure TSemanticAnalyzer.EnterWithScope(RecordVar: TExpression);
+{Usado para entrar dentro del cuerpo de una senetencia WITH.}
+var
+  RecordType: TTypeDef;
+  Sym: TSymbol;
+  NewScope: TScope;
+  i: Integer;
+  FieldDecl: TVarDecl;
+begin
+  if RecordVar = nil then
     Exit;
-  end;
-  //Reggistra e nombre del tipo
-  Sym := TSymbol.Create(TypeDef.TypeName, skType);
-  Sym.DataType := TypeDef;
-  Sym.Declaration := TypeDef;
-  FCurrentScope.Declare(Sym);
-end;
-procedure TSemanticAnalyzer.RegisterDeclarations(Decls: TASTNodeList);
-var
-  i: Integer;
-  Node: TASTNode;
-begin
-  if Decls = nil then Exit;
-  for i := 0 to Decls.Count - 1 do begin
-    Node := Decls[i];
-    case Node.NodeType of
-      ntVarDecl:
-        RegisterVarDecl(TVarDecl(Node));
-      ntConstDecl:
-        RegisterConstDecl(TConstDecl(Node));
-      ntProcDecl:
-        RegisterProcDecl(TProcDecl(Node));
-      ntSimpleType, ntSubrangeType, ntArrayType, ntEnumType,
-      ntRecordType, ntPointerType, ntAliasType, ntProceduralType:
-        RegisterTypeDef(TTypeDef(Node));
+
+  RecordType := GetTypeOf(RecordVar);
+  if RecordType = nil then
+    Exit;
+
+  if not (RecordType.NodeType = ntRecordType) then
+    Exit;
+
+  // Crear nuevo ámbito para WITH
+  NewScope := TScope.Create(FCurrentScope);
+  if FCurrentScope <> nil then
+    FCurrentScope.AddChild(NewScope);
+
+  // Registrar los campos del registro como símbolos
+  for i := 0 to TRecordTypeDef(RecordType).Fields.Count - 1 do begin
+    if TRecordTypeDef(RecordType).Fields[i].NodeType = ntVarDecl then begin
+      FieldDecl := TVarDecl(TRecordTypeDef(RecordType).Fields[i]);
+      Sym := TSymbol.Create(FieldDecl.Name, skField);
+      Sym.DataType := ResolveType(FieldDecl.TypeRef.Name);
+      Sym.Declaration := FieldDecl;
+      NewScope.Declare(Sym);
     end;
   end;
+
+  FWithScope := NewScope;
+  FCurrentScope := NewScope;
+  FInWith := True;
 end;
-// Resolución de tipos
+procedure TSemanticAnalyzer.ExitWithScope;
+begin
+  if FInWith and (FWithScope <> nil) then begin
+    FCurrentScope := FWithScope.FParent;
+    FWithScope.Free;
+    FWithScope := nil;
+    FInWith := False;
+  end;
+end;
+{$endregion}
+{$region "Resolución de tipos"}
 function TSemanticAnalyzer.ResolveType(const TypeName: string): TTypeDef;
+{Resuelve un tipo por su nombre en la tabla de símbolos}
 var
   Sym: TSymbol;
 begin
@@ -478,9 +454,34 @@ begin
   else                 //Es otra cosa
     Result := nil;
 end;
-function TSemanticAnalyzer.ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
+function TSemanticAnalyzer.ResolveTypeRef(TypeRef: TTypeRef): TTypeDef;
+{Resuelve el tipo de un objeto TTypeRef en la tabla de símbolos. Si no logra
+resolverlo, devuelve NIL.}
+var
+  Sym, SymType: TSymbol;
 begin
-  // Si es un alias, resolver el tipo base
+  if TypeRef.Name <> '' then begin
+    //Busca el tipo por nombre
+    SymType := FCurrentScope.LookupRecursive(UpperCase(TypeRef.Name));
+    if (SymType <> nil) and (SymType.Kind = skType) then begin
+      Exit(SymType.DataType);
+    end else begin
+      //Error('Tipo desconocido: ' + TypeRef.Name, TypeRef.SrcPos);
+      Exit(Nil)
+    end;
+  end else if TypeRef.TypeDef <> nil then begin
+    //El tipo es INLINE. Está creado en TypeRef.TypeDef
+    Exit(TypeRef.TypeDef);  //*** No considera si es un alias
+  end else begin   //No debería pasar
+    //Error('Tipo no especificado.', TypeRef.SrcPos);
+    Exit(Nil);
+  end;
+end;
+function TSemanticAnalyzer.ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
+{Resuelve el tipo de una definición de tipo, considerando que puede ser un alias.
+}
+begin
+  //Si es un alias, resolver el tipo base
   if TypeDef.NodeType = ntAliasType then begin
     if TAliasTypeDef(TypeDef).BaseTypeDef <> nil then
       Result := ResolveTypeDef(TAliasTypeDef(TypeDef).BaseTypeDef)
@@ -488,9 +489,9 @@ begin
       Result := ResolveType(TAliasTypeDef(TypeDef).BaseTypeName)
     else
       Result := TypeDef;
-  end
-  else
+  end else begin
     Result := TypeDef;
+  end;
 end;
 function TSemanticAnalyzer.GetTypeOf(Expr: TExpression): TTypeDef;
 {Devuelve el tipo de una expresión.}
@@ -566,14 +567,9 @@ begin
       for i := 0 to Fields.Count - 1 do begin
         if Fields[i].NodeType = ntVarDecl then begin
           FieldDecl := TVarDecl(Fields[i]);
-          if FieldDecl.Name = FieldAccess.FieldName then begin
-            // Encontró el campo
-            if FieldDecl.TypeRef.Name <> '' then
-              Result := ResolveType(FieldDecl.TypeRef.Name)
-            else if FieldDecl.TypeRef.TypeDef <> nil then
-              Result := ResolveTypeDef(FieldDecl.TypeRef.TypeDef)
-            else
-              Result := nil;
+          if CompareText(FieldDecl.Name, FieldAccess.FieldName)=0 then begin
+            //Encontró el campo, lee su tipo
+            Result := FieldDecl.TypeRef.Declaration;  //Ya debe estar actualizado
             Break;
           end;
         end;
@@ -711,8 +707,152 @@ begin
 
   Result := False;
 end;
-// Visitantes de declaraciones
+{$endregion}
+{$region "Registro de símbolos"}
+procedure TSemanticAnalyzer.RegisterVarDecl(VarDecl: TVarDecl);
+var
+  Sym: TSymbol;
+  TypeDef: TTypeDef;
+begin
+  // Verificar duplicado
+  if FCurrentScope.Lookup(VarDecl.Name) <> nil then begin
+    Error('Variable duplicada: ' + VarDecl.Name, VarDecl.SrcPos);
+    Exit;
+  end;
+  //Resuelve tipo
+  TypeDef := ResolveTypeRef(VarDecl.TypeRef);
+  if TypeDef = Nil then
+     Error('Tipo desconocido: ' + VarDecl.TypeRef.Name, VarDecl.TypeRef.SrcPos);
+  //Actualiza la referencia a la definición
+  VarDecl.TypeRef.Declaration := TypeDef;
+  //Crea símbolo
+  Sym := TSymbol.Create(VarDecl.Name, skVariable);
+  Sym.DataType := TypeDef;
+  Sym.Declaration := VarDecl;
+  FCurrentScope.Declare(Sym);
+end;
+procedure TSemanticAnalyzer.RegisterConstDecl(ConstDecl: TConstDecl);
+var
+  Sym: TSymbol;
+  TypeDef: TTypeDef;
+begin
+  // Verificar duplicado
+  if FCurrentScope.Lookup(ConstDecl.Name) <> nil then begin
+    Error('Constante duplicada: ' + ConstDecl.Name, ConstDecl.SrcPos);
+    Exit;
+  end;
+  // Resolver tipo
+  if ConstDecl.HasType then begin
+    TypeDef := ResolveType(ConstDecl.TypeName)
+  end else begin
+    // Inferir tipo del valor
+    if ConstDecl.Value <> nil then
+      TypeDef := GetTypeOf(ConstDecl.Value)
+    else
+      TypeDef := nil;
+  end;
+  // Crear símbolo
+  Sym := TSymbol.Create(ConstDecl.Name, skConstant);
+  Sym.DataType := TypeDef;
+  Sym.Declaration := ConstDecl;
+  FCurrentScope.Declare(Sym);
+end;
+procedure TSemanticAnalyzer.RegisterProcDecl(Proc: TProcDecl);
+{Registra las declaraciones de procedimientos/funciones, pero sin analizar el cuerpo, aún.}
+var
+  Sym: TSymbol;
+  i: Integer;
+  Param: TVarDecl;
+begin
+  //Verifica si es una declaración duplicada
+  Sym := FCurrentScope.Lookup(Proc.Name);
+  if Sym <> nil then begin
+    if Sym.IsForward and not Proc.IsForward then begin
+      //Es la implementación de un FORWARD.
+      //Verificamos que los parámetros coincidan.
+      if not CompareParameters(Sym, Proc) then begin
+        Error('La implementación de ' + Proc.Name +
+              ' no coincide con la declaración FORWARD', Proc.SrcPos);
+        Exit;
+      end;
+      //Actualizar el símbolo con la implementación
+      Sym.Declaration := Proc;
+      Sym.IsForward := False;
+      Exit;
+    end else begin
+      //Duplicado real
+      Error('Procedimiento/Función duplicado: ' + Proc.Name, Proc.SrcPos);
+      Exit;
+    end;
+    end;
+  // Crear símbolo
+  if Proc.IsFunction then
+    Sym := TSymbol.Create(Proc.Name, skFunction)
+  else
+    Sym := TSymbol.Create(Proc.Name, skProcedure);
+  Sym.Declaration := Proc;
+  Sym.IsForward := Proc.IsForward;
+  // Registrar parámetros (solo para validación, no se declaran en el ámbito global)
+  if Proc.Parameters <> nil then begin
+    Sym.Parameters := TASTNodeList.Create(False);   //No debe liberar los nodos parámetro, porque ya los hace el AST.
+    for i := 0 to Proc.Parameters.Count - 1 do begin
+      Param := TVarDecl(Proc.Parameters[i]);
+      Sym.Parameters.Add(Param);
+    end;
+  end;
+  //Tipo de retorno para funciones
+  if Proc.IsFunction then begin
+    if Proc.ReturnTypeName <> '' then
+      Sym.ReturnType := ResolveType(Proc.ReturnTypeName)
+    else if Proc.ReturnTypeDef <> nil then
+      Sym.ReturnType := ResolveTypeDef(Proc.ReturnTypeDef);
+    if Sym.ReturnType = nil then
+      Error('Tipo de retorno desconocido para: ' + Proc.Name, Proc.SrcPos);
+  end;
+  FCurrentScope.Declare(Sym);
+end;
+procedure TSemanticAnalyzer.RegisterTypeDef(TypeDef: TTypeDef);
+var
+  Sym: TSymbol;
+begin
+  if TypeDef.TypeName = '' then
+    Exit; // Tipo anónimo (inline)
+  // Verificar duplicado
+  if FCurrentScope.Lookup(TypeDef.TypeName) <> nil then begin
+    Error('Tipo duplicado: ' + TypeDef.TypeName, TypeDef.SrcPos);
+    Exit;
+  end;
+  //Reggistra e nombre del tipo
+  Sym := TSymbol.Create(TypeDef.TypeName, skType);
+  Sym.DataType := TypeDef;
+  Sym.Declaration := TypeDef;
+  FCurrentScope.Declare(Sym);
+end;
+procedure TSemanticAnalyzer.RegisterDeclarations(Decls: TASTNodeList);
+var
+  i: Integer;
+  Node: TASTNode;
+begin
+  if Decls = nil then Exit;
+  for i := 0 to Decls.Count - 1 do begin
+    Node := Decls[i];
+    case Node.NodeType of
+      ntVarDecl:
+        RegisterVarDecl(TVarDecl(Node));
+      ntConstDecl:
+        RegisterConstDecl(TConstDecl(Node));
+      ntProcDecl:
+        RegisterProcDecl(TProcDecl(Node));
+      ntSimpleType, ntSubrangeType, ntArrayType, ntEnumType,
+      ntRecordType, ntPointerType, ntAliasType, ntProceduralType:
+        RegisterTypeDef(TTypeDef(Node));
+    end;
+  end;
+end;
+{$endregion}
+{$region "Visitantes de declaraciones"}
 procedure TSemanticAnalyzer.VisitVarDecl(VarDecl: TVarDecl);
+{Visita a una variable para validar la asignación inicial y el caso ABSOLUTE.}
 var
   InitType, VarType: TTypeDef;
 begin
@@ -720,7 +860,8 @@ begin
   // Verificar inicialización
   if VarDecl.initVal <> nil then begin
     InitType := GetTypeOf(VarDecl.initVal);
-    VarType := ResolveType(VarDecl.TypeRef.Name);
+    //VarType := ResolveType(VarDecl.TypeRef.Name);  //**** ¿NO está ya resuelto el tipo en VarDecl.TypeRef.Declaration?
+    VarType := VarDecl.TypeRef.Declaration;
     if not AreTypesCompatible(VarType, InitType) then
       Error('Tipo de inicialización incompatible para: ' + VarDecl.Name, VarDecl.SrcPos);
   end;
@@ -759,12 +900,10 @@ begin
       for i := 0 to Proc.Parameters.Count - 1 do begin
         Param := TVarDecl(Proc.Parameters[i]);
         // Resolver tipo del parámetro
-        if Param.TypeRef.Name <> '' then
-          ParamType := ResolveType(Param.TypeRef.Name)
-        else if Param.TypeRef.TypeDef <> nil then
-          ParamType := ResolveTypeDef(Param.TypeRef.TypeDef);
+        ParamType := ResolveTypeRef(Param.TypeRef);
         if ParamType = nil then
           Error('Tipo desconocido para parámetro: ' + Param.Name, Param.SrcPos);
+        Param.TypeRef.Declaration := ParamType;
 
         // Registrar parámetro
         Sym := TSymbol.Create(Param.Name, skParameter);
@@ -846,28 +985,37 @@ procedure TSemanticAnalyzer.VisitRecordTypeDef(RecordType: TRecordTypeDef);
 var
   i, j: Integer;
   Branch: TVariantBranch;
+  astNode: TASTNode;
+  Field : TVarDecl;
+  TypeDef: TTypeDef;
 begin
-  // Analizar campos
-  for i := 0 to RecordType.Fields.Count - 1 do
-  begin
-    if RecordType.Fields[i].NodeType = ntVarDecl then
-      VisitVarDecl(TVarDecl(RecordType.Fields[i]));
+  //Analiza los campos del registro
+  for astNode in RecordType.Fields do begin
+    if astNode.NodeType = ntVarDecl then begin
+      Field := TVarDecl(astNode);
+      TypeDef := ResolveTypeRef(Field.TypeRef);
+      if TypeDef = nil then
+          Error('Tipo desconocido para el campo: ' + Field.Name, Field.SrcPos);
+      Field.TypeRef.Declaration := TypeDef;  //Actualiza declaración
+    end;
   end;
-
-  // Analizar variantes
-  if RecordType.Branches <> nil then
-  begin
-    for i := 0 to RecordType.Branches.Count - 1 do
-    begin
+  //Analiza variantes
+  if RecordType.Branches <> nil then begin
+    for i := 0 to RecordType.Branches.Count - 1 do begin
       Branch := RecordType.Branches[i];
       // Analizar selectores
-      for j := 0 to Branch.SelectorValues.Count - 1 do
+      for j := 0 to Branch.SelectorValues.Count - 1 do begin
         VisitNode(Branch.SelectorValues[j]);
+      end;
       // Analizar campos
-      for j := 0 to Branch.Fields.Count - 1 do
-      begin
-        if Branch.Fields[j].NodeType = ntVarDecl then
-          VisitVarDecl(TVarDecl(Branch.Fields[j]));
+      for astNode in Branch.Fields do begin
+        if astNode.NodeType = ntVarDecl then begin
+          Field := TVarDecl(astNode);
+          TypeDef := ResolveTypeRef(Field.TypeRef);
+          if TypeDef = nil then
+              Error('Tipo desconocido para el campo: ' + Field.Name, Field.SrcPos);
+          Field.TypeRef.Declaration := TypeDef;  //Actualiza declaración
+        end;
       end;
     end;
   end;
@@ -964,6 +1112,7 @@ begin
       Error('Tipo apuntado desconocido: ' + PointerType.TargetTypeName, PointerType.SrcPos);
   end;
 end;
+{$endregion}
 {$region "Visitantes de sentencias"}
 procedure TSemanticAnalyzer.VisitAssignment(Assign: TAssignment);
 var
@@ -1270,15 +1419,9 @@ begin
       for i := 0 to Min(FuncCall.Arguments.Count, Sym.Parameters.Count) - 1 do begin
         VisitNode(FuncCall.Arguments[i]);
         ArgType := GetTypeOf(FuncCall.Arguments[i]);
-
         Param := TVarDecl(Sym.Parameters[i]);
-        if Param.TypeRef.Name <> '' then
-          ParamType := ResolveType(Param.TypeRef.Name)
-        else if Param.TypeRef.TypeDef <> nil then
-          ParamType := ResolveTypeDef(Param.TypeRef.TypeDef)
-        else
-          ParamType := nil;
-
+        ParamType := ResolveTypeRef(Param.TypeRef);
+        Param.TypeRef.Declaration := ParamType;
         if not AreTypesCompatible(ParamType, ArgType) then
           Error('Tipo de argumento incompatible para parámetro ' + IntToStr(i+1) + ' de ' +
                 FuncCall.Name, FuncCall.Arguments[i].SrcPos);
@@ -1324,17 +1467,13 @@ begin
     Exit;
   end;
 
-  // Buscar el campo en el registro
+  //Busca el campo en el registro
   FoundField := False;
-  if RecordType.NodeType = ntRecordType then
-  begin
-    for i := 0 to TRecordTypeDef(RecordType).Fields.Count - 1 do
-    begin
-      if TRecordTypeDef(RecordType).Fields[i].NodeType = ntVarDecl then
-      begin
+  if RecordType.NodeType = ntRecordType then begin
+    for i := 0 to TRecordTypeDef(RecordType).Fields.Count - 1 do begin
+      if TRecordTypeDef(RecordType).Fields[i].NodeType = ntVarDecl then begin
         FieldDecl := TVarDecl(TRecordTypeDef(RecordType).Fields[i]);
-        if FieldDecl.Name = FieldAccess.FieldName then
-        begin
+        if FieldDecl.Name = FieldAccess.FieldName then begin
           FoundField := True;
           Break;
         end;
@@ -1416,119 +1555,7 @@ begin
   // Las direcciones literales se verifican en el contexto
 end;
 {$endregion}
-// Manejo de ámbitos
-procedure TSemanticAnalyzer.EnterScope;
-var
-  NewScope: TScope;
-begin
-  //Crea un nuevo ámbito con el ámbito actual como padre
-  NewScope := TScope.Create(FCurrentScope);
-  //Registrar el hijo en el padre.
-  if FCurrentScope <> nil then
-    FCurrentScope.AddChild(NewScope);
-  //Establece el nuevo ámbito como ámbito actual
-  FCurrentScope := NewScope;
-end;
-procedure TSemanticAnalyzer.ExitScope;
-begin
-  if FCurrentScope <> nil then begin
-    //La liberación se hace desde el Scope padre
-    //Parent := FCurrentScope.FParent;
-    //FCurrentScope.Free;
-    //FCurrentScope := Parent;
-    //Retornamos a al Scope padre
-    FCurrentScope := FCurrentScope.FParent;
-  end;
-end;
-procedure TSemanticAnalyzer.EnterWithScope(RecordVar: TExpression);
-var
-  RecordType: TTypeDef;
-  Sym: TSymbol;
-  NewScope: TScope;
-  i: Integer;
-  FieldDecl: TVarDecl;
-begin
-  if RecordVar = nil then
-    Exit;
-
-  RecordType := GetTypeOf(RecordVar);
-  if RecordType = nil then
-    Exit;
-
-  if not (RecordType.NodeType = ntRecordType) then
-    Exit;
-
-  // Crear nuevo ámbito para WITH
-  NewScope := TScope.Create(FCurrentScope);
-  if FCurrentScope <> nil then
-    FCurrentScope.AddChild(NewScope);
-
-  // Registrar los campos del registro como símbolos
-  for i := 0 to TRecordTypeDef(RecordType).Fields.Count - 1 do begin
-    if TRecordTypeDef(RecordType).Fields[i].NodeType = ntVarDecl then begin
-      FieldDecl := TVarDecl(TRecordTypeDef(RecordType).Fields[i]);
-      Sym := TSymbol.Create(FieldDecl.Name, skField);
-      Sym.DataType := ResolveType(FieldDecl.TypeRef.Name);
-      Sym.Declaration := FieldDecl;
-      NewScope.Declare(Sym);
-    end;
-  end;
-
-  FWithScope := NewScope;
-  FCurrentScope := NewScope;
-  FInWith := True;
-end;
-procedure TSemanticAnalyzer.ExitWithScope;
-begin
-  if FInWith and (FWithScope <> nil) then
-  begin
-    FCurrentScope := FWithScope.FParent;
-    FWithScope.Free;
-    FWithScope := nil;
-    FInWith := False;
-  end;
-end;
-// Manejo de errores
-procedure TSemanticAnalyzer.Error(const txt: string; const SrcPos: TSrcPos);
-begin
-  Inc(FErrors);
-  msg.error(lex.GetMsgInfoE(txt, srcPos));
-end;
-procedure TSemanticAnalyzer.Warning(const txt: string; const SrcPos: TSrcPos);
-begin
-  Inc(FWarnings);
-  msg.warn(lex.GetMsgInfo(txt, srcPos));
-end;
-function TSemanticAnalyzer.GetCurrentLocation: TSrcPos;
-begin
-  Result.idCtx := 0;
-  Result.row := 0;
-  Result.col := 0;
-end;
-// Utilidades
-function TSemanticAnalyzer.IsInFunction: Boolean;
-begin
-  Result := (FCurrentProcedure <> nil) and FCurrentProcedure.IsFunction;
-end;
-function TSemanticAnalyzer.IsInProcedure: Boolean;
-begin
-  Result := (FCurrentProcedure <> nil) and not FCurrentProcedure.IsFunction;
-end;
-function TSemanticAnalyzer.GetCurrentFunction: TProcDecl;
-begin
-  if IsInFunction then
-    Result := FCurrentProcedure
-  else
-    Result := nil;
-end;
-function TSemanticAnalyzer.GetCurrentProcedure: TProcDecl;
-begin
-  if IsInProcedure then
-    Result := FCurrentProcedure
-  else
-    Result := nil;
-end;
-//Visitantes de nodos principales
+{$region "Visitantes de nodos principales}
 procedure TSemanticAnalyzer.VisitNode(Node: TASTNode);
 begin
   if Node = nil then
@@ -1583,19 +1610,27 @@ begin
     ntPointerLiteral: VisitPointerLiteral(TPointerLiteral(Node));
   end;
 end;
-procedure TSemanticAnalyzer.CheckForwardDeclarations;
+procedure TSemanticAnalyzer.VisitDeclarations(Decls: TASTNodeList);
+begin
+  // Las declaraciones ya se registraron en RegisterDeclarations
+  // Aquí solo se analizan los detalles adicionales
+  if Decls = nil then
+    Exit;
+
+  // Analizar declaraciones de tipo
+  RegisterDeclarations(Decls);
+end;
+procedure TSemanticAnalyzer.VisitBlock(Block: TBlock);
 var
   i: Integer;
-  Sym: TSymbol;
-  Symbols: TStringList;
 begin
-  //Recorrer todos los símbolos del ámbito global
-  Symbols := FGlobalScope.GetSymbols;
-  for i := 0 to Symbols.Count - 1 do begin
-    Sym := TSymbol(Symbols.Objects[i]);
-    if Sym.IsForward then
-      Error('Declaración FORWARD sin implementación: ' + Sym.Name,
-            Sym.Declaration.SrcPos);
+  if Block = nil then Exit;
+  EnterScope;
+  try
+    for i := 0 to Block.Statements.Count - 1 do
+      VisitNode(Block.Statements[i]);
+  finally
+    ExitScope;
   end;
 end;
 procedure TSemanticAnalyzer.VisitProgram(Prog: TProgram);
@@ -1649,30 +1684,8 @@ begin
   if Unit0.FinalizationBlock <> nil then
     VisitBlock(Unit0.FinalizationBlock);
 end;
-procedure TSemanticAnalyzer.VisitBlock(Block: TBlock);
-var
-  i: Integer;
-begin
-  if Block = nil then Exit;
-  EnterScope;
-  try
-    for i := 0 to Block.Statements.Count - 1 do
-      VisitNode(Block.Statements[i]);
-  finally
-    ExitScope;
-  end;
-end;
-procedure TSemanticAnalyzer.VisitDeclarations(Decls: TASTNodeList);
-begin
-  // Las declaraciones ya se registraron en RegisterDeclarations
-  // Aquí solo se analizan los detalles adicionales
-  if Decls = nil then
-    Exit;
-
-  // Analizar declaraciones de tipo
-  RegisterDeclarations(Decls);
-end;
-//Métodos principales
+{$endregion}
+{$region "Análisis e Inicialización"}
 function TSemanticAnalyzer.Analyze(Prog: TProgram): Boolean;
 begin
   Reset;
@@ -1689,7 +1702,6 @@ begin
   VisitUnit(Unit0);
   Result := FErrors = 0;
 end;
-{$region "Inicialización"}
 procedure TSemanticAnalyzer.Reset;
 begin
   FGlobalScope.Clear;
