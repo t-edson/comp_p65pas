@@ -754,11 +754,11 @@ begin
       //Todos estos ítems deben ser los que hemos agregados
       varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
       //varDecl.TypeName := '';   //No es necesario actualizar
-      varDecl.TypeDef := typeDef;  //No es tipo estructurado o anónimo.
+      varDecl.TypeRef.TypeDef := typeDef;  //No es tipo estructurado o anónimo.
       if i = idxVarIni then begin
         //Ponemos, como propietario del tipo, solo a la primera declaración, para evitar
         //que varios objetos intenten destruirlo.
-        varDecl.TypeOwner := true
+        varDecl.TypeRef.TypeOwner := true
       end;
     end;
   end;
@@ -976,8 +976,8 @@ Si se encuentra algún error, se devuelve NIL.}
         Exit;
       end;
       varDecl := TVarDecl.Create(selectorName, SrcPos);
-      varDecl.TypeDef := typeDef;  //No es tipo estructurado o anónimo.
-      varDecl.TypeOwner := true;   //Es el propietario del tipo
+      varDecl.TypeRef.TypeDef := typeDef;  //No es tipo estructurado o anónimo.
+      varDecl.TypeRef.TypeOwner := true;   //Es el propietario del tipo
     end;
     if not ConsumeTok(tiOf, 'Se esperaba "of".') then Exit;
     RecordType.VarSelector := varDecl;  //De la detrucción de "varDecl" se encargará RecordType.

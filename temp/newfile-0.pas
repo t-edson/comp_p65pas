@@ -9,10 +9,20 @@ type
 ////      valor := valor + 1;  // Self implícito
 ////    end;
 //  end;  
+  TAlumno = record
+    nombre: stringa;
+    apellido: string;
+    notas: TNota;
+    promedio: real;
+    aprobado: boolean;
+  end;
 var 
   col: TColor;
+alumno: TAlumno; 
 begin
   col := Rojo;
+//  alumno.notas[i] := 0;
+  
 //  writeln('PROGRAMA');
 //  asm clc end;
 //  y := 1;

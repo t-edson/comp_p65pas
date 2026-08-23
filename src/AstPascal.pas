@@ -16,7 +16,7 @@ type  //Tipos de nodos
     ntPointerLiteral,//Literal de puntero: Nil o $100
     ntBinaryOp,      //Operación binaria. Ej. En "a+b", la operación binaria es el "+".
     ntUnaryOp,       //Operación unaria (un operando). Ej. -x, not a.
-    ntProcFunctCall, //Llamada a procedimiento o función: max(a, b).
+    ntProcFunctCall, //Llamada a procedimiento o función: max(a, b). Cuando es un procedimiento, sería un nodo de sentencia.
     ntFieldAccess,   //Acceso a campo (persona.nombre).
     ntPointerDeref,  //Acceso a dirección de puntero (p^).
     ntArrayRef,      //Acceso a arreglo (variable[index]).
@@ -602,14 +602,6 @@ type  //Nodos de declaraciones
     absAddr   : TExpression;  {Reference to the AST expression that returns the absolute
                                address where the variable should be located.}
   public   //Campos para el tipo
-    //Referencia al tipo cuando el tipo es estructurado y definido en la misma declaración
-    //de la variable. Algo como: var1: ARRAY[1..3] OF Byte;
-    TypeDef  : TTypeDef;
-    {Bandera para indicar que este nodo es propietario del tipo "TypeDef" y, en
-    consecuencia, debe responsabilizarse de destruirlo. Esta variable es necesaria porque
-    las declaraciones de la forma: VAR a,b,c: <tipo estructurado>
-    comparten un mismo objeto "TTypeDef".}
-    TypeOwner: boolean;
     property TypeRef: TTypeRef read FTypeRef write FTypeRef;
   public  //Manejo de parámetros
     property IsParameter: Boolean read FIsParameter write FIsParameter;
@@ -668,15 +660,23 @@ type  //Definiciones previas para declaraciones de tipos
     //Nombre del tipo, cuando es un tipo con identificador. Algo como "byte", "word"
     //o "mi_tipo". Se usa para "tipos con nombre".
     FName: string;
-    FTypeDef: TTypeDef;     //Definición inline (para tipos sin nombre).
-    FDeclaration: TTypeDef; //Enlace a la declaración (Resuelto en análisis semántico).
+    //Referencia al tipo cuando el tipo es INLINE y definido en la misma declaración
+    //de la variable. Algo como: var1: ARRAY[1..3] OF Byte;
+    FTypeDef  : TTypeDef;
+    {Bandera para indicar que este nodo es propietario del tipo "FTypeDef" y, en
+    consecuencia, debe responsabilizarse de destruirlo. Esta variable es necesaria porque
+    las declaraciones de la forma: VAR a,b,c: <tipo estructurado>
+    comparten un mismo objeto "TTypeDef" y solo uno debe destruirlo.}
+    FTypeOwner: boolean;
+    //Enlace a la declaración (Resuelto en análisis semántico).
+    FDeclaration: TTypeDef;
   public
     property Name: string read FName write FName;
     property TypeDef: TTypeDef read FTypeDef write FTypeDef;
+    property TypeOwner: boolean read FTypeOwner write FTypeOwner;
     property Declaration: TTypeDef read FDeclaration write FDeclaration;
     function IsInline: Boolean; inline;
     function IsNamed: Boolean; inline;
-//    function Resolve(SymbolTable: TScope): TTypeDef;
   public  //Inicialización
     constructor Create;
     destructor Destroy; override;
@@ -1600,14 +1600,10 @@ begin
   //La información de tipo debe completarse después
   //FTypeRef.Name := '';   //No es necesario
   //FTypeRef.TypeDef := nil;   //No es necesario
-  TypeOwner := False;
+  //TypeOwner := False;
 end;
 destructor TVarDecl.Destroy;
 begin
-  if TypeOwner then begin
-    //Este nodo es el propietario del tipo. Lo destruimos.
-    TypeDef.Destroy;
-  end;
   absAddr.Free;     //Destruye si se ha usado
   initVal.Free;     //Destruye si se ha usado
   FTypeRef.Destroy;
@@ -1617,7 +1613,7 @@ function TVarDecl.ToString: string;
 begin
   Result := 'VarDecl: Name=' + Name +
   ', TypeName=' + FTypeRef.Name + ', TypeDef=' ;
-  if TypeDef=Nil then Result += '<Nil>' else Result += TypeDef.TypeName;
+  if TypeRef.TypeDef=Nil then Result += '<Nil>' else Result += TypeRef.TypeDef.TypeName;
   if FIsParameter then begin
     Result := Result + ' (parameter';
     if FParamType = ptyVar then
@@ -1695,6 +1691,10 @@ begin
 end;
 destructor TTypeRef.Destroy;
 begin
+  if TypeOwner then begin
+    //Este nodo es el propietario del tipo. Lo destruimos.
+    TypeDef.Destroy;
+  end;
   inherited;
 end;
 function TTypeRef.IsInline: Boolean;

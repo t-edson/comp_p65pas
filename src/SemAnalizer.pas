@@ -235,8 +235,7 @@ var
   Scope: TScope;
 begin
   Scope := Self;
-  while Scope <> nil do
-  begin
+  while Scope <> nil do begin
     Result := Scope.Lookup(AName);
     if Result <> nil then
       Exit;
@@ -304,8 +303,8 @@ begin
   // Resolver tipo
   if VarDecl.TypeRef.Name <> '' then
     TypeDef := ResolveType(VarDecl.TypeRef.Name)
-  else if VarDecl.TypeDef <> nil then
-    TypeDef := ResolveTypeDef(VarDecl.TypeDef)
+  else if VarDecl.TypeRef.TypeDef <> nil then
+    TypeDef := ResolveTypeDef(VarDecl.TypeRef.TypeDef)
   else begin
     Error('Tipo no especificado para: ' + VarDecl.Name, VarDecl.SrcPos);
     Exit;
@@ -315,7 +314,7 @@ begin
     Exit;
   end;
   //Actualiza la referencia a la definición
-  VarDecl.TypeRef.TypeDef := TypeDef;
+  VarDecl.TypeRef.Declaration := TypeDef;
   // Crear símbolo
   Sym := TSymbol.Create(VarDecl.Name, skVariable);
   Sym.DataType := TypeDef;
@@ -472,11 +471,11 @@ var
   Sym: TSymbol;
 begin
   Sym := FCurrentScope.LookupRecursive(UpperCase(TypeName));
-  if Sym = nil then
+  if Sym = nil then    //No existe
     Result := nil
-  else if Sym.Kind = skType then
+  else if Sym.Kind = skType then  //Es un tipo
     Result := Sym.DataType
-  else
+  else                 //Es otra cosa
     Result := nil;
 end;
 function TSemanticAnalyzer.ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
@@ -494,6 +493,7 @@ begin
     Result := TypeDef;
 end;
 function TSemanticAnalyzer.GetTypeOf(Expr: TExpression): TTypeDef;
+{Devuelve el tipo de una expresión.}
 var
   Sym: TSymbol;
   ArrayVarType, RecordVarType: TTypeDef;
@@ -517,18 +517,17 @@ begin
       Result := ResolveType('STRING');
     ntVariableRef: begin
       Sym := FCurrentScope.LookupRecursive(TVariableRef(Expr).Name);
-      if Sym <> nil then
-      begin
+      if Sym <> nil then begin
         Result := Sym.DataType;
         // Enlazar la referencia a su declaración
         TVariableRef(Expr).Declaration := TVarDecl(Sym.Declaration);
-      end
-      else
+      end else begin
         Result := nil;
+      end;
     end;
     ntBinaryOp: begin
-      // El tipo de una operación binaria es el tipo del operando izquierdo
-      // (simplificado, debería ser más complejo)
+      //Por ahora, se usará el tipo del operando izquierdo, pero, formalmente, debe haber
+      //un análisis más complejo.
       Result := GetTypeOf(TBinaryOp(Expr).Left);
     end;
     ntUnaryOp: begin
@@ -536,8 +535,7 @@ begin
     end;
     ntProcFunctCall: begin
       Sym := FCurrentScope.LookupRecursive(TFunctionCall(Expr).Name);
-      if Sym <> nil then
-      begin
+      if Sym <> nil then begin
         if Sym.Kind = skFunction then
           Result := Sym.ReturnType
         else if Sym.Kind = skProcedure then
@@ -572,8 +570,8 @@ begin
             // Encontró el campo
             if FieldDecl.TypeRef.Name <> '' then
               Result := ResolveType(FieldDecl.TypeRef.Name)
-            else if FieldDecl.TypeDef <> nil then
-              Result := ResolveTypeDef(FieldDecl.TypeDef)
+            else if FieldDecl.TypeRef.TypeDef <> nil then
+              Result := ResolveTypeDef(FieldDecl.TypeRef.TypeDef)
             else
               Result := nil;
             Break;
@@ -763,8 +761,8 @@ begin
         // Resolver tipo del parámetro
         if Param.TypeRef.Name <> '' then
           ParamType := ResolveType(Param.TypeRef.Name)
-        else if Param.TypeDef <> nil then
-          ParamType := ResolveTypeDef(Param.TypeDef);
+        else if Param.TypeRef.TypeDef <> nil then
+          ParamType := ResolveTypeDef(Param.TypeRef.TypeDef);
         if ParamType = nil then
           Error('Tipo desconocido para parámetro: ' + Param.Name, Param.SrcPos);
 
@@ -1276,8 +1274,8 @@ begin
         Param := TVarDecl(Sym.Parameters[i]);
         if Param.TypeRef.Name <> '' then
           ParamType := ResolveType(Param.TypeRef.Name)
-        else if Param.TypeDef <> nil then
-          ParamType := ResolveTypeDef(Param.TypeDef)
+        else if Param.TypeRef.TypeDef <> nil then
+          ParamType := ResolveTypeDef(Param.TypeRef.TypeDef)
         else
           ParamType := nil;
 
