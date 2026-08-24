@@ -737,6 +737,7 @@ begin
     for i := idxVarIni to varContainer.Count-1 do begin
       //Todos estos ítems deben ser los que hemos agregados
       varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
+      varDecl.TypeRef := TTypeRef.Create;
       varDecl.TypeRef.Name := lex.token;  //Es tipo simple
       varDecl.TypeRef.SrcPos := lex.GetSrcPos;  //Guarda la ubicación
       //varDecl.TypeDef := Nil;  //No es necesario actualizar
@@ -753,6 +754,7 @@ begin
     for i := idxVarIni to varContainer.Count-1 do begin
       //Todos estos ítems deben ser los que hemos agregados
       varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
+      varDecl.TypeRef := TTypeRef.Create;
       //varDecl.TypeName := '';   //No es necesario actualizar
       varDecl.TypeRef.TypeDef := typeDef;  //No es tipo estructurado o anónimo.
       if i = idxVarIni then begin
@@ -971,6 +973,7 @@ Si se encuentra algún error, se devuelve NIL.}
     if tokIdent = tiIDENTIF then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
       //Creamos la variable selector con su tipo.
       varDecl := TVarDecl.Create(selectorName, SrcPos);
+      varDecl.TypeRef := TTypeRef.Create;
       varDecl.TypeRef.Name := lex.token;  //No pemitiremos tipos complejos aquí
       varDecl.TypeRef.SrcPos := lex.GetSrcPos;  //Guarda la ubicación
       Next;

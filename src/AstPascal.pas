@@ -613,7 +613,7 @@ type  //Nodos de declaraciones
   // Declaraciones de constantes
   TConstDecl = class(TASTNode)
   private
-    FName: string;
+    FName: string;            //Nombre de la constante
     FTypeName: string;        //Tipo opcional ('' si no se especifica).
     FTypeDef: TTypeDef;       //Tipo, cuando se declaran constantes con tipo.
     FValue: TExpression;      //La expresión que define el valor
@@ -650,9 +650,9 @@ type  //Nodos de declaraciones
   end;
 type  //Definiciones previas para declaraciones de tipos
   {Clase para representar a las referencias a tipos. Normalmente, en el código fuente, las
-  referencias a tipos son identificadores, como "integer" o "TMitipo", o pueden ser
-  también declaraciones anónimas como "ARRAY[0..5] OF byte". Este nodo permite representar
-  ambos casos.}
+  referencias a tipos son identificadores, como "integer" o "TMitipo", pero pueden ser
+  también declaraciones INLINE de tipos estructurados como "ARRAY[0..5] OF byte". Este
+  nodo permite representar ambos casos.}
   TTypeRef = class(TASTNode)
   private
     //Nombre del tipo, cuando es un tipo con identificador. Algo como "byte", "word"
@@ -1587,22 +1587,21 @@ constructor TVarDecl.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntVarDecl, ASrcPos);
   Name       := AName;
-  FTypeRef   := TTypeRef.Create;  //Mantiene creado el nodo de referencia al tipo.
+  {El campo FTypeRef se creará e inicializará en el Parser}
+  //FTypeRef := nil;
   hasAdic    := DEC_NONE;  //Indica que no hay parñametros adicionales en la declaración
   FParamType := ptyNone;
   //FIsParameter := False;  //No es necesario
   //initVal = Nil;    //No es necesario
   //absAddr = Nil;    //No es necesario
   //La información de tipo debe completarse después
-  //FTypeRef.Name := '';   //No es necesario
-  //FTypeRef.TypeDef := nil;   //No es necesario
   //TypeOwner := False;
 end;
 destructor TVarDecl.Destroy;
 begin
   absAddr.Free;     //Destruye si se ha usado
   initVal.Free;     //Destruye si se ha usado
-  FTypeRef.Destroy;
+  FTypeRef.Free;    //Debería estar creado siempre o podría usarse como bandera.
   inherited Destroy;
 end;
 function TVarDecl.ToString: string;
