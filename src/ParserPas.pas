@@ -929,17 +929,22 @@ begin
   //  Exit(nil);
   //end;
   if tokIdent = tiOF then Next;   //Es opcional en P65Pas
-  //Lee tipo de los elementos (puede ser cualquier tipo)
+  //Lee tipo de los elementos (puede ser cualquier tipo).
   if tokIdent = tiIDENTIF then begin
-    ArrayType.ElementTypeName := lex.token;
+    ArrayType.ElemTypeRef := TTypeRef.Create;
+    ArrayType.ElemTypeRef.Name := lex.token;
+    ArrayType.ElemTypeRef.SrcPos := lex.GetSrcPos;
     Next;
   end else begin
     // Definición Inline: array[1..10] of record ... end)
-    ArrayType.ElementTypeDef := ParseTypeDefinition;  //Llamada recursiva
+    ArrayType.ElemTypeRef := TTypeRef.Create;
+    ArrayType.ElemTypeRef.TypeDef := ParseTypeDefinition;  //Llamada recursiva
     if HayError then begin
-      ArrayType.Free;
+      ArrayType.Destroy;
       Exit(nil);
     end;
+    ArrayType.ElemTypeRef.TypeOwner := True;
+    ArrayType.ElemTypeRef.SrcPos := lex.GetSrcPos;
   end;
   Result := ArrayType;
 end;

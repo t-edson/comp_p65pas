@@ -468,7 +468,7 @@ begin
       Result := SymType.DataType;
       //Si es un alias, resolvemos el tipo base
       if Result.NodeType = ntAliasType then begin
-        Result := ResolveTypeDef(Result);  //*** Debería optimizarse
+        Result := ResolveTypeDef(Result);  //*** Podría optimizarse
       end;
       TypeRef.Declaration := Result;
     end else begin
@@ -587,22 +587,16 @@ begin
       //Si no se encontró el campo, "Result" queda en NIL.
     end;
     ntArrayRef: begin
-      // El tipo de un arreglo es el tipo de sus elementos
+      //El tipo de un arreglo es el tipo de sus elementos
       ArrayVarType := GetTypeOf(TArrayRef(Expr).ArrayVar);  //Obtiene el tipo del arreglo
       if ArrayVarType = nil then Exit(nil);      //Valida que exista
       if ArrayVarType.NodeType <> ntArrayType then Exit(nil);  //Valida que sea arreglo
       ArrayType := TArrayTypeDef(ArrayVarType);    //Convierte a TArrayTypeDef
       // Resuelve el tipo de los elementos
-      if ArrayType.ElementTypeName <> '' then
-        Result := ResolveType(ArrayType.ElementTypeName)
-      else if ArrayType.ElementTypeDef <> nil then
-        Result := ResolveTypeDef(ArrayType.ElementTypeDef)
-      else
-        Result := nil;
+      Result := ArrayType.ElemTypeRef.Declaration;
     end;
     ntPointerLiteral:
       Result := ResolveType('POINTER');
-
     else
       Result := nil;
   end;
@@ -965,17 +959,12 @@ var
   i: Integer;
   Range: TArrayRange;
 begin
-  // Verificar tipo de elementos
-  if ArrayType.ElementTypeName <> '' then
-  begin
-    ElemType := ResolveType(ArrayType.ElementTypeName);
-    if ElemType = nil then
-      Error('Tipo de elemento desconocido: ' + ArrayType.ElementTypeName, ArrayType.SrcPos);
-  end;
-
-  // Verificar rangos de índices
-  for i := 0 to ArrayType.IndexRanges.Count - 1 do
-  begin
+  //Verifica tipo de elementos
+  ElemType := ResolveTypeRef(ArrayType.ElemTypeRef);
+  if ElemType = nil then
+    Error('Tipo de elemento desconocido: ' + ArrayType.ElemTypeRef.Name, ArrayType.ElemTypeRef.SrcPos);
+  //Verifica rangos de índices
+  for i := 0 to ArrayType.IndexRanges.Count - 1 do begin
     Range := ArrayType.IndexRanges[i];
     if Range.LowExpr <> nil then
       VisitNode(Range.LowExpr);

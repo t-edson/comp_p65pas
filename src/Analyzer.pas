@@ -99,13 +99,13 @@ constructor TAnalyzer.Create(msg0: TMessageManager);
 begin
   //Crea componentes del compilador
   msg       := msg0;
+  options   := TCompOptions.Create;   //Es necesario crear las opciones antes.
   lexer     := TAleLexer.Create(msg);
   parser    := TParserPas.Create(msg, lexer);
   parserASM := TParserAsm6502.Create(msg, lexer);
   parserDir := TParserDirective.Create(msg, lexer, options);
   unitmgr   := TUnitManager.Create(msg, parser);
   checker   := TSemanticAnalyzer.Create(msg, lexer);
-  options   := TCompOptions.Create;
   mirRep    := TMirList.Create;
   //Conecta el parser a los otros componentes del compilador.
   parser.callProcDIRline     := @parserDir.ProcDIRline;
@@ -118,7 +118,6 @@ end;
 destructor TAnalyzer.Destroy;
 begin
   mirRep.Destroy;
-  options.Destroy;
   checker.Destroy;
   unitmgr.Destroy;
   parserDir.Destroy;
@@ -127,6 +126,7 @@ begin
   astProg.Free;       //Destruye si se creó
   parser.Destroy;
   lexer.Destroy;
+  options.Destroy;
   inherited Destroy;
 end;
 end.

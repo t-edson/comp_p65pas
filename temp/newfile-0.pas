@@ -18,13 +18,16 @@ type
   end;
   TAlumno2 = TAlumno;
   TAlumno3 = TAlumno2;
+  Tarr3 = array[0..2] of byte;
 var 
 //  col: TColor;
 alumno: TAlumno2; 
+arr3: Tarr3;
 begin
 //  col := Rojo;
+arr3[0]:=3;
 //  alumno.notas[i] := 0;
-  alumno.nombre := 'hola';  
+//  alumno.nombre := 'hola';  
 //  writeln('PROGRAMA');
 //  asm clc end;
 //  y := 1;

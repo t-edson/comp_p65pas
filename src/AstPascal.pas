@@ -631,10 +631,7 @@ type  //Nodos de declaraciones
     destructor Destroy; override;
     function ToString: string; override;
   end;
-  // Declaración de procedimiento
-
-  { TProcFunctDecl }
-
+  // Declaración de procedimientos o funciones
   TProcFunctDecl = class(TCodeContainer)
   private
     FReturnTypeRef: TTypeRef;       //Referencia al tipo de retorno. También se usa como
@@ -735,7 +732,7 @@ type  //Definiciones previas para declaraciones de tipos
   end;
   TVariantBranchList = specialize TFPGObjectList<TVariantBranch>;
 type  //Nodos de declaraciones de tipos
-  // Declaración de tipos pedefinidos (integer, byte, boolean, etc.)
+  //Declaración de tipos pedefinidos (integer, byte, boolean, etc.)
   {Este nodo representa a una supuesta definición de los tipos básicos, que se supone ya
   están definidos. No se creará por código.}
   TSimpleTypeDef = class(TTypeDef)
@@ -743,7 +740,7 @@ type  //Nodos de declaraciones de tipos
     constructor Create(const ATypeName: string; const ASrcPos: TSrcPos);
     function ToString: string; override;
   end;
-  // Subrango (1..10, 'a'..'z')
+  //Subrango (1..10, 'a'..'z')
   TSubrangeTypeDef = class(TTypeDef)
   private
     FLowExpr: TExpression;    //Límite inferior del rango
@@ -760,7 +757,7 @@ type  //Nodos de declaraciones de tipos
     destructor Destroy; override;
     function ToString: string; override;
   end;
-  // Enumerado (Rojo, Verde, Azul)
+  //Enumerado (Rojo, Verde, Azul)
   TEnumTypeDef = class(TTypeDef)
   private
     FValues: TStringList;  // Lista de nombres de valores
@@ -772,7 +769,7 @@ type  //Nodos de declaraciones de tipos
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
   end;
-  // Alias (type TEdad = integer)
+  //Alias (type TEdad = integer)
   TAliasTypeDef = class(TTypeDef)
   private
     FBaseTypeName: string;
@@ -785,17 +782,15 @@ type  //Nodos de declaraciones de tipos
     constructor Create(const ABaseTypeName: string; const ASrcPos: TSrcPos);
     destructor Destroy; override;
   end;
-  // Arreglo (array[1..10] of TPersona)
+  //Arreglo (array[1..10] of TPersona)
   TArrayTypeDef = class(TTypeDef)
   private
-    FIndexRanges: TArrayRangeList;
-    FElementTypeName: string;
-    FElementTypeDef: TTypeDef;  // Para tipos definidos inline
+    FIndexRanges: TArrayRangeList;  //Dimensiones del arreglo
+    FElemTypeRef: TTypeRef;  //Referencia al tipo de elemento del arreglo.
   public
     procedure AddRange(Range: TArrayRange);
     property IndexRanges: TArrayRangeList read FIndexRanges;
-    property ElementTypeName: string read FElementTypeName write FElementTypeName;
-    property ElementTypeDef: TTypeDef read FElementTypeDef write FElementTypeDef;
+    property ElemTypeRef: TTypeRef read FElemTypeRef write FElemTypeRef;
   public  //Inicialización y depuración
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -1863,24 +1858,22 @@ constructor TArrayTypeDef.Create(const ASrcPos: TSrcPos);
 begin
   inherited Create(ntArrayType, '', ASrcPos);
   FIndexRanges := TArrayRangeList.Create(True);
-  FElementTypeName := '';
-  FElementTypeDef := nil;
+  {El campo FElemTypeRef se creará e inicializará en el Parser, cuando se determine que
+  este nodo es una función}
+  //FElemTypeRef := nil;
 end;
 destructor TArrayTypeDef.Destroy;
 begin
   FIndexRanges.Free;
-  FElementTypeDef.Free;
+  FElemTypeRef.Free;   //Lo destruye, si se ha creado.
   inherited;
 end;
 function TArrayTypeDef.ToString: string;
 var
   typName: String;
 begin
-  if FElementTypeDef <> nil then
-    typName := FElementTypeDef.TypeName
-  else
-    typName := FElementTypeName;
-  Result := Format('ArrayType: [%d dims] of %s', [FIndexRanges.Count, typName]);
+  Result := Format('ArrayType: [%d dims] of %s',
+                   [FIndexRanges.Count, FElemTypeRef.ToString]);
 end;
 // TRecordTypeDef
 constructor TRecordTypeDef.Create(const ASrcPos: TSrcPos);
