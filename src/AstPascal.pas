@@ -35,7 +35,7 @@ type  //Tipos de nodos
     //Nodos de declaraciones
     ntVarDecl,       //Declaración de variable: var x: byte;
     ntConstDecl,     //Declaración de constantes: const PI=3;
-    ntProcDecl,      //Declaración de procedimiento o función.
+    ntProcFunctDecl, //Declaración de procedimiento o función.
     ntForwardDecl,   //Declaración FORWARD
     //Nodos auxiliares para declaraciones de tipos
     ntTypeRef,       //Referencia a un tipo
@@ -76,7 +76,7 @@ type  //Declaraciones y clases base para el AST
   TUnaryOp = class;
   TFunctionCall = class;
   TCaseBranch = class;
-  TProcDecl = class;
+  TProcFunctDecl = class;
   TTypeDef = class;
   TRecordTypeDef = class;
   TTypeRef = class;
@@ -84,7 +84,7 @@ type  //Declaraciones y clases base para el AST
   // Listas genéricas especializadas
   TASTNodeList = specialize TFPGObjectList<TASTNode>;
   TVarDeclList = specialize TFPGObjectList<TVarDecl>;
-  TProcDeclList = specialize TFPGObjectList<TProcDecl>;
+  TProcDeclList = specialize TFPGObjectList<TProcFunctDecl>;
   TExpressionList = specialize TFPGObjectList<TExpression>;
 
   // Nodo base (clase abstracta)
@@ -299,14 +299,14 @@ type  //Nodos de expresiones
   private
     FName: string;
     FArguments: TExpressionList;
-    FDeclaration: TProcDecl;    //Enlace a la declaración
+    FDeclaration: TProcFunctDecl;    //Enlace a la declaración
     FIsProcedure: Boolean;      //"True" si es llamada a procedimiento
     FIsIntrinsic: Boolean;      //Indica si es una llamada a proc/función.
   public
     procedure AddArgument(Arg: TExpression);
     property Name: string read FName;
     property Arguments: TExpressionList read FArguments;
-    property Declaration: TProcDecl read FDeclaration write FDeclaration;
+    property Declaration: TProcFunctDecl read FDeclaration write FDeclaration;
     property IsProcedure: Boolean read FIsProcedure write FIsProcedure;
     property IsIntrinsic: Boolean read FIsIntrinsic write FIsIntrinsic;
   public  //Inicialización y depuración
@@ -632,7 +632,7 @@ type  //Nodos de declaraciones
     function ToString: string; override;
   end;
   // Declaración de procedimiento
-  TProcDecl = class(TCodeContainer)
+  TProcFunctDecl = class(TCodeContainer)
   private
     FReturnTypeName: string;     //Nombre del tipo de retorno.
     FReturnTypeDef: TTypeDef;    //Tipo de retorno. Resuelto en análisis semántico.
@@ -1657,20 +1657,20 @@ begin
     Result := Result + Format(': %s', [FTypeName]);
   Result := Result + Format(' = %s', [FValue.ToString]);
 end;
-// TProcDecl
-function TProcDecl.IsFunction: Boolean;
+// TProcFunctDecl
+function TProcFunctDecl.IsFunction: Boolean;
 begin
   if (FReturnTypeName<>'') or (FReturnTypeDef<>Nil) then Exit(True)
   else Exit(False);
 end;
-function TProcDecl.ToString: string;
+function TProcFunctDecl.ToString: string;
 begin
   Result := Format('Procedure: %s (%d params, %d locals)',
                    [FName, Parameters.Count, FDeclarations.Count]);
 end;
-constructor TProcDecl.Create(const AName: string; const ASrcPos: TSrcPos; AIsForward: Boolean);
+constructor TProcFunctDecl.Create(const AName: string; const ASrcPos: TSrcPos; AIsForward: Boolean);
 begin
-  inherited Create(ntProcDecl, AIsForward);
+  inherited Create(ntProcFunctDecl, AIsForward);
   FSrcPos := ASrcPos;
   FName := AName;
   FReturnTypeName := '';

@@ -82,7 +82,7 @@ type
     lex: TAleLexer;
     FGlobalScope: TScope;    //Ámbito global
     FCurrentScope: TScope;   //Ámbito actual
-    FCurrentProcedure: TProcDecl;
+    FCurrentProcedure: TProcFunctDecl;
     FErrors: Integer;
     FWarnings: Integer;
     FCurrentUnit: TUnit;
@@ -96,10 +96,10 @@ type
     //Utilidades
     function IsInFunction: Boolean;
     function IsInProcedure: Boolean;
-    function GetCurrentFunction: TProcDecl;
-    function GetCurrentProcedure: TProcDecl;
+    function GetCurrentFunction: TProcFunctDecl;
+    function GetCurrentProcedure: TProcFunctDecl;
     procedure CheckForwardDeclarations;
-    function CompareParameters(Sym: TSymbol; Proc: TProcDecl): Boolean;
+    function CompareParameters(Sym: TSymbol; Proc: TProcFunctDecl): Boolean;
     //Mensajes
     procedure Error(const txt: string; const SrcPos: TSrcPos);
     procedure Warning(const txt: string; const SrcPos: TSrcPos);
@@ -118,14 +118,14 @@ type
     function IsOrdinalType(TypeDef: TTypeDef): Boolean;
   private  //Registro de símbolos
     procedure RegisterDeclarations(Decls: TASTNodeList);
-    procedure RegisterProcDecl(Proc: TProcDecl);
+    procedure RegisterProcDecl(Proc: TProcFunctDecl);
     procedure RegisterVarDecl(VarDecl: TVarDecl);
     procedure RegisterConstDecl(ConstDecl: TConstDecl);
     procedure RegisterTypeDef(TypeDef: TTypeDef);
   private  //Visitantes de declaraciones
     procedure VisitVarDecl(VarDecl: TVarDecl);
     procedure VisitConstDecl(ConstDecl: TConstDecl);
-    procedure VisitProcDecl(Proc: TProcDecl);
+    procedure VisitProcDecl(Proc: TProcFunctDecl);
     procedure VisitTypeDef(TypeDef: TTypeDef);
     procedure VisitArrayTypeDef(ArrayType: TArrayTypeDef);
     procedure VisitRecordTypeDef(RecordType: TRecordTypeDef);
@@ -301,14 +301,14 @@ function TSemanticAnalyzer.IsInProcedure: Boolean;
 begin
   Result := (FCurrentProcedure <> nil) and not FCurrentProcedure.IsFunction;
 end;
-function TSemanticAnalyzer.GetCurrentFunction: TProcDecl;
+function TSemanticAnalyzer.GetCurrentFunction: TProcFunctDecl;
 begin
   if IsInFunction then
     Result := FCurrentProcedure
   else
     Result := nil;
 end;
-function TSemanticAnalyzer.GetCurrentProcedure: TProcDecl;
+function TSemanticAnalyzer.GetCurrentProcedure: TProcFunctDecl;
 begin
   if IsInProcedure then
     Result := FCurrentProcedure
@@ -330,7 +330,7 @@ begin
             Sym.Declaration.SrcPos);
   end;
 end;
-function TSemanticAnalyzer.CompareParameters(Sym: TSymbol; Proc: TProcDecl): Boolean;
+function TSemanticAnalyzer.CompareParameters(Sym: TSymbol; Proc: TProcFunctDecl): Boolean;
 var
   i: Integer;
   Param1, Param2: TVarDecl;
@@ -468,7 +468,7 @@ begin
       Result := SymType.DataType;
       //Si es un alias, resolvemos el tipo base
       if Result.NodeType = ntAliasType then begin
-        Result := ResolveTypeDef(Result);
+        Result := ResolveTypeDef(Result);  //*** Debería optimizarse
       end;
       TypeRef.Declaration := Result;
     end else begin
@@ -487,13 +487,16 @@ end;
 function TSemanticAnalyzer.ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
 {Resuelve el tipo de una definición de tipo, considerando que puede ser un alias.
 }
+var
+  AliasTypeDef: TAliasTypeDef;
 begin
   //Si es un alias, resolver el tipo base
   if TypeDef.NodeType = ntAliasType then begin
-    if TAliasTypeDef(TypeDef).BaseTypeDef <> nil then
-      Result := ResolveTypeDef(TAliasTypeDef(TypeDef).BaseTypeDef)
-    else if TAliasTypeDef(TypeDef).BaseTypeName <> '' then
-      Result := ResolveType(TAliasTypeDef(TypeDef).BaseTypeName)
+    AliasTypeDef := TAliasTypeDef(TypeDef);
+    if AliasTypeDef.BaseTypeDef <> nil then
+      Result := ResolveTypeDef(AliasTypeDef.BaseTypeDef)
+    else if AliasTypeDef.BaseTypeName <> '' then
+      Result := ResolveType(AliasTypeDef.BaseTypeName)
     else
       Result := TypeDef;
   end else begin
@@ -762,7 +765,7 @@ begin
   Sym.Declaration := ConstDecl;
   FCurrentScope.Declare(Sym);
 end;
-procedure TSemanticAnalyzer.RegisterProcDecl(Proc: TProcDecl);
+procedure TSemanticAnalyzer.RegisterProcDecl(Proc: TProcFunctDecl);
 {Registra las declaraciones de procedimientos/funciones, pero sin analizar el cuerpo, aún.}
 var
   Sym: TSymbol;
@@ -846,8 +849,8 @@ begin
         RegisterVarDecl(TVarDecl(Node));
       ntConstDecl:
         RegisterConstDecl(TConstDecl(Node));
-      ntProcDecl:
-        RegisterProcDecl(TProcDecl(Node));
+      ntProcFunctDecl:
+        RegisterProcDecl(TProcFunctDecl(Node));
       ntSimpleType, ntSubrangeType, ntArrayType, ntEnumType,
       ntRecordType, ntPointerType, ntAliasType, ntProceduralType:
         RegisterTypeDef(TTypeDef(Node));
@@ -865,7 +868,6 @@ begin
   // Verificar inicialización
   if VarDecl.initVal <> nil then begin
     InitType := GetTypeOf(VarDecl.initVal);
-    //VarType := ResolveType(VarDecl.TypeRef.Name);  //**** ¿NO está ya resuelto el tipo en VarDecl.TypeRef.Declaration?
     VarType := VarDecl.TypeRef.Declaration;
     if not AreTypesCompatible(VarType, InitType) then
       Error('Tipo de inicialización incompatible para: ' + VarDecl.Name, VarDecl.SrcPos);
@@ -886,12 +888,12 @@ begin
     // (implementación simplificada)
   end;
 end;
-procedure TSemanticAnalyzer.VisitProcDecl(Proc: TProcDecl);
+procedure TSemanticAnalyzer.VisitProcDecl(Proc: TProcFunctDecl);
 var
   i: Integer;
   Param: TVarDecl;
   Sym, SelfSym, FieldSym: TSymbol;
-  OldProcedure: TProcDecl;
+  OldProcedure: TProcFunctDecl;
   ParamType: TTypeDef;
   Field: TASTNode;
 begin
@@ -1251,7 +1253,7 @@ procedure TSemanticAnalyzer.VisitExitStatement(ExitStmt: TExitStatement);
 var
   ReturnType: TTypeDef;
   ValueType: TTypeDef;
-  Func: TProcDecl;
+  Func: TProcFunctDecl;
 begin
   if ExitStmt.HasReturnValue then
   begin
@@ -1370,7 +1372,7 @@ análisis sintáctico.}
 var
   Sym: TSymbol;
   i: Integer;
-  ProcDecl: TProcDecl;
+  ProcDecl: TProcFunctDecl;
   ParamType: TTypeDef;
   ArgType: TTypeDef;
   Param: TVarDecl;
@@ -1389,9 +1391,9 @@ begin
   //Enlaza referencia a la declaración, si existe
   if not Sym.IsIntrinsic then begin
     //Debe haber declaración
-    if Sym.Declaration.NodeType = ntProcDecl then begin
+    if Sym.Declaration.NodeType = ntProcFunctDecl then begin
       //Su declaración figura como procedimiento o función
-      FuncCall.Declaration := TProcDecl(Sym.Declaration); //Enlaza a declaración
+      FuncCall.Declaration := TProcFunctDecl(Sym.Declaration); //Enlaza a declaración
     end else begin  //Figura como otra cosa
       Error('Declaración inválida para: ' + FuncCall.Name, FuncCall.SrcPos);
       Exit;
@@ -1571,7 +1573,7 @@ begin
     //ntDeclarations: VisitDeclarations(TDeclarations(Node));
     ntVarDecl: VisitVarDecl(TVarDecl(Node));
     ntConstDecl: VisitConstDecl(TConstDecl(Node));
-    ntProcDecl: VisitProcDecl(TProcDecl(Node));
+    ntProcFunctDecl: VisitProcDecl(TProcFunctDecl(Node));
 
     // Declaraciones de Tipos
     ntSimpleType: VisitTypeDef(TTypeDef(Node));
@@ -1652,9 +1654,9 @@ begin
 
   //Analizar los cuerpos de los procedimientos/funciones
   for Node in Prog.Declarations do begin
-    if Node.NodeType = ntProcDecl then begin
-      if not TProcDecl(Node).IsForward then
-        VisitProcDecl(TProcDecl(Node));
+    if Node.NodeType = ntProcFunctDecl then begin
+      if not TProcFunctDecl(Node).IsForward then
+        VisitProcDecl(TProcFunctDecl(Node));
     end;
   end;
   CheckForwardDeclarations;
@@ -1673,9 +1675,9 @@ begin
   RegisterDeclarations(Unit0.ImplementationDecls);
   //Analizar cuerpos de procedimientos/funciones en IMPLEMENTATION
   for Node in Unit0.ImplementationDecls do begin
-    if Node.NodeType = ntProcDecl then begin
-      if not TProcDecl(Node).IsForward then
-        VisitProcDecl(TProcDecl(Node));
+    if Node.NodeType = ntProcFunctDecl then begin
+      if not TProcFunctDecl(Node).IsForward then
+        VisitProcDecl(TProcFunctDecl(Node));
     end;
   end;
   // Analizar initialization y finalization

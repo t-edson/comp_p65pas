@@ -1280,7 +1280,7 @@ procedure TParserPas.ParseProcedureDeclaration(declars: TASTNodeList;
   location: TElemLocation);
 {Realiza el análisis de un procedimiento o función.}
 var
-  Proc: TProcDecl;
+  Proc: TProcFunctDecl;
   SrcPos: TSrcPos;
   procName, returnType: string;
   Params: TASTNodeList;
@@ -1321,14 +1321,14 @@ begin
         Exit;
       end;
     end;
-    Proc := TProcDecl.Create(procName, SrcPos, True);
+    Proc := TProcFunctDecl.Create(procName, SrcPos, True);
     Proc.Parameters := Params;  //Puede ser NIL.
     Proc.ReturnTypeName := returnType;
     Proc.IsAssembler := IsAssembler;
     declars.Add(Proc);
   end else begin
     //Es declaración con cuerpo.
-    Proc := TProcDecl.Create(procName, SrcPos, False);
+    Proc := TProcFunctDecl.Create(procName, SrcPos, False);
     Proc.Parameters := Params;  //Puede ser NIL.
     Proc.ReturnTypeName := returnType;
     Proc.IsMethod := (location = locRecord);
