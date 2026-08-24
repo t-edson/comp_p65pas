@@ -20,7 +20,7 @@ type
   TAlumno3 = TAlumno2;
 var 
 //  col: TColor;
-alumno: TAlumno3; 
+alumno: TAlumno2; 
 begin
 //  col := Rojo;
 //  alumno.notas[i] := 0;

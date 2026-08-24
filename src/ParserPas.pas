@@ -85,7 +85,7 @@ private   //Declaraciones
   procedure ParseUsesClause(const unitContainer: TUnitRefList);
   procedure ParseVarDeclaration(declars: TASTNodeList);
   procedure ParseConstDeclaration(declars: TASTNodeList);
-  procedure ParseProcedureDeclaration(declars: TASTNodeList; location: TElemLocation);
+  procedure ParseProcFunctDeclaration(declars: TASTNodeList; location: TElemLocation);
   procedure ParseTypeDeclaration(declars: TASTNodeList);
 private   //Instrucciones
   procedure ParseAssigOrProcedureCall(var Block: TBlock);
@@ -1024,7 +1024,7 @@ begin
       end;
       Break;  //Ya no debe seguir nada después de la parte variante.
     end else if tokIdent = tiPROCED then begin   //Es un procedimiento (método).
-      ParseProcedureDeclaration(RecordType.Fields, locRecord);
+      ParseProcFunctDeclaration(RecordType.Fields, locRecord);
     end else begin
       //Explora y lee un bloque de campos, como: a,b,c: integer;
       ParseVariableBlockDeclar(RecordType.Fields, ptyNone);
@@ -1276,13 +1276,13 @@ begin
     ConsumeSemicolon;
   end;
 end;
-procedure TParserPas.ParseProcedureDeclaration(declars: TASTNodeList;
+procedure TParserPas.ParseProcFunctDeclaration(declars: TASTNodeList;
   location: TElemLocation);
-{Realiza el análisis de un procedimiento o función.}
+{Realiza el análisis sintáctico de un procedimiento o función.}
 var
   Proc: TProcFunctDecl;
-  SrcPos: TSrcPos;
-  procName, returnType: string;
+  SrcPos, retTypePos: TSrcPos;
+  procName, retTypeName: string;
   Params: TASTNodeList;
   isFunction, IsAssembler: Boolean;
 begin
@@ -1296,7 +1296,9 @@ begin
   //Lee tipo devuelto si es una función
   if isFunction then begin
       if not ConsumeTok(tiCOLON, 'Se esperaba ":" después del nombre') then Exit;
-      if not ConsumeIdent(returnType, 'Se esperaba el tipo de retorno.') then Exit;
+      //El tipo de una función solo puede ser un identificador.
+      retTypePos := lex.GetSrcPos;
+      if not ConsumeIdent(retTypeName, 'Se esperaba el tipo de retorno.') then Exit;
   end;
   if not ConsumeTok(tiSEMIC, ER_SEMICOL_EXP) then begin
     Params.Free;   //Por si se creó
@@ -1323,14 +1325,22 @@ begin
     end;
     Proc := TProcFunctDecl.Create(procName, SrcPos, True);
     Proc.Parameters := Params;  //Puede ser NIL.
-    Proc.ReturnTypeName := returnType;
+    if isFunction then begin
+      Proc.ReturnTypeRef := TTypeRef.Create;
+      Proc.ReturnTypeRef.Name := retTypeName;
+      Proc.ReturnTypeRef.SrcPos := retTypePos;
+    end;
     Proc.IsAssembler := IsAssembler;
     declars.Add(Proc);
   end else begin
     //Es declaración con cuerpo.
     Proc := TProcFunctDecl.Create(procName, SrcPos, False);
     Proc.Parameters := Params;  //Puede ser NIL.
-    Proc.ReturnTypeName := returnType;
+    if isFunction then begin
+      Proc.ReturnTypeRef := TTypeRef.Create;
+      Proc.ReturnTypeRef.Name := retTypeName;
+      Proc.ReturnTypeRef.SrcPos := retTypePos;
+    end;
     Proc.IsMethod := (location = locRecord);
     if IsAssembler or (tokIdent=tiASM) then begin
        //Es proc/función ASSEMBLER.
@@ -1778,7 +1788,7 @@ begin
     else if tokIdent = tiCONST then
       ParseConstDeclaration(Declars)
     else if (tokIdent = tiPROCED) or (tokIdent = tiFUNCT) then
-      ParseProcedureDeclaration(Declars, location)
+      ParseProcFunctDeclaration(Declars, location)
     else if tokIdent = tiTYPE then
       ParseTypeDeclaration(Declars)
     else

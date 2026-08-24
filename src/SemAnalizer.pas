@@ -810,12 +810,9 @@ begin
   end;
   //Tipo de retorno para funciones
   if Proc.IsFunction then begin
-    if Proc.ReturnTypeName <> '' then
-      Sym.ReturnType := ResolveType(Proc.ReturnTypeName)
-    else if Proc.ReturnTypeDef <> nil then
-      Sym.ReturnType := ResolveTypeDef(Proc.ReturnTypeDef);
+    Sym.ReturnType := ResolveTypeRef(Proc.ReturnTypeRef);
     if Sym.ReturnType = nil then
-      Error('Tipo de retorno desconocido para: ' + Proc.Name, Proc.SrcPos);
+      Error('Tipo de retorno desconocido para: ' + Proc.Name, Proc.ReturnTypeRef.SrcPos);
   end;
   FCurrentScope.Declare(Sym);
 end;
@@ -1255,27 +1252,18 @@ var
   ValueType: TTypeDef;
   Func: TProcFunctDecl;
 begin
-  if ExitStmt.HasReturnValue then
-  begin
-    // Verificar que estamos en una función
-    if not IsInFunction then
-    begin
+  if ExitStmt.HasReturnValue then begin
+    //Verificamos que estamos en una función
+    if not IsInFunction then begin
       Error('EXIT con valor solo permitido en funciones', ExitStmt.SrcPos);
       Exit;
     end;
-
-    // Verificar compatibilidad del valor de retorno
+    //Verificamos compatibilidad del valor de retorno
     VisitNode(ExitStmt.ReturnValue);
     ValueType := GetTypeOf(ExitStmt.ReturnValue);
-
     Func := GetCurrentFunction;
-    if Func <> nil then
-    begin
-      if Func.ReturnTypeName <> '' then
-        ReturnType := ResolveType(Func.ReturnTypeName)
-      else if Func.ReturnTypeDef <> nil then
-        ReturnType := ResolveTypeDef(Func.ReturnTypeDef);
-
+    if Func <> nil then begin
+      ReturnType := Func.ReturnTypeRef.Declaration;
       if ReturnType = nil then
         Error('No se puede determinar el tipo de retorno de la función', ExitStmt.SrcPos)
       else if not AreTypesCompatible(ReturnType, ValueType) then

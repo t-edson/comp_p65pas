@@ -632,22 +632,24 @@ type  //Nodos de declaraciones
     function ToString: string; override;
   end;
   // Declaración de procedimiento
+
+  { TProcFunctDecl }
+
   TProcFunctDecl = class(TCodeContainer)
   private
-    FReturnTypeName: string;     //Nombre del tipo de retorno.
-    FReturnTypeDef: TTypeDef;    //Tipo de retorno. Resuelto en análisis semántico.
-    FIsMethod  : Boolean;        //Bandera para indicar que es método.
-    FRecordType: TRecordTypeDef; //Referencia al tipo RECORD, cuando es un método.
+    FReturnTypeRef: TTypeRef;       //Referencia al tipo de retorno. También se usa como
+                                    //bandera para identificar a las funciones.
+    FIsMethod     : Boolean;        //Bandera para indicar que es método.
+    FRecordType   : TRecordTypeDef; //Referencia al tipo RECORD, cuando es un método.
   public
-    property ReturnTypeName: string read FReturnTypeName write FReturnTypeName;
-    property ReturnTypeDef: TTypeDef read FReturnTypeDef;
+    property ReturnTypeRef: TTypeRef read FReturnTypeRef write FReturnTypeRef;
     function IsFunction: Boolean; inline;
     property IsMethod: Boolean read FIsMethod write FIsMethod;
     property RecordType: TRecordTypeDef read FRecordType write FRecordType;
   public  //Inicialización y depuración
+    constructor Create(const AName: string; const ASrcPos: TSrcPos; AIsForward: Boolean);
+    destructor Destroy; override;
     function ToString: string; override;
-    constructor Create(const AName: string; const ASrcPos: TSrcPos;
-      AIsForward: Boolean);
   end;
 type  //Definiciones previas para declaraciones de tipos
   {Clase para representar a las referencias a tipos. Normalmente, en el código fuente, las
@@ -1659,26 +1661,40 @@ begin
 end;
 // TProcFunctDecl
 function TProcFunctDecl.IsFunction: Boolean;
+{Indica si este nodo es una función.}
 begin
-  if (FReturnTypeName<>'') or (FReturnTypeDef<>Nil) then Exit(True)
-  else Exit(False);
-end;
-function TProcFunctDecl.ToString: string;
-begin
-  Result := Format('Procedure: %s (%d params, %d locals)',
-                   [FName, Parameters.Count, FDeclarations.Count]);
+  //Cuando es función, debe tener creado su FReturnTypeRef.
+  Exit(FReturnTypeRef <> Nil);
 end;
 constructor TProcFunctDecl.Create(const AName: string; const ASrcPos: TSrcPos; AIsForward: Boolean);
 begin
   inherited Create(ntProcFunctDecl, AIsForward);
   FSrcPos := ASrcPos;
   FName := AName;
-  FReturnTypeName := '';
-  FReturnTypeDef := Nil;
-  {Para simplificar el análisis sintáctico, conviene que el tipo de retorno se actualice
-  después de leer los parámetros por eso no se incluye en el constructor.
-      FReturnTypeName := AReturnTypeName;
-  }
+  {El campo FReturnTypeRef se creará e inicializará en el Parser, cuando se determine que
+  este nodo es una función}
+  //FReturnTypeRef := nil;
+  //FIsMethod := False;
+  //FRecordType := nil;
+end;
+destructor TProcFunctDecl.Destroy;
+begin
+  FReturnTypeRef.Free;   //Lo destruye, solo si se ha creado.
+  inherited Destroy;
+end;
+function TProcFunctDecl.ToString: string;
+begin
+  Result := Format('Procedure: %s', [FName]);
+  if IsFunction then
+    Result := Result + Format(' returns %s', [FReturnTypeRef.Name]);
+  if Parameters.Count > 0 then
+    Result := Result + Format(' (%d params)', [Parameters.Count]);
+  if FDeclarations <> nil then
+    Result := Result + Format(' (%d locals)', [FDeclarations.Count]);
+  if IsForward then
+    Result := Result + ' FORWARD';
+  if IsAssembler then
+    Result := Result + ' ASSEMBLER';
 end;
 {$endregion}
 {$region "Definiciones previas para declaraciones de tipos"}
