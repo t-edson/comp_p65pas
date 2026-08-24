@@ -16,9 +16,11 @@ type
     promedio: real;
     aprobado: boolean;
   end;
+  TAlumno2 = TAlumno;
+  TAlumno3 = TAlumno2;
 var 
 //  col: TColor;
-alumno: TAlumno; 
+alumno: TAlumno3; 
 begin
 //  col := Rojo;
 //  alumno.notas[i] := 0;

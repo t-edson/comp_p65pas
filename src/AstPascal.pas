@@ -667,7 +667,7 @@ type  //Definiciones previas para declaraciones de tipos
     las declaraciones de la forma: VAR a,b,c: <tipo estructurado>
     comparten un mismo objeto "TTypeDef" y solo uno debe destruirlo.}
     FTypeOwner: boolean;
-    //Enlace a la declaración (Resuelto en análisis semántico).
+    //Enlace a la declaración. Se resuelve en el análisis semántico.
     FDeclaration: TTypeDef;
   public
     property Name: string read FName write FName;

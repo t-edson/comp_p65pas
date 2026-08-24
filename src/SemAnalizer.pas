@@ -455,8 +455,9 @@ begin
     Result := nil;
 end;
 function TSemanticAnalyzer.ResolveTypeRef(TypeRef: TTypeRef): TTypeDef;
-{Resuelve el tipo de un objeto TTypeRef en la tabla de símbolos. Si no logra
-resolverlo, devuelve NIL.}
+{Resuelve el tipo de un objeto TTypeRef en la tabla de símbolos. También actualiza el
+campo "Declaration" del TTypeRef.
+Si no logra resolver el tipo, devuelve NIL.}
 var
   Sym, SymType: TSymbol;
 begin
@@ -464,17 +465,23 @@ begin
     //Busca el tipo por nombre
     SymType := FCurrentScope.LookupRecursive(UpperCase(TypeRef.Name));
     if (SymType <> nil) and (SymType.Kind = skType) then begin
-      Exit(SymType.DataType);
+      Result := SymType.DataType;
+      //Si es un alias, resolvemos el tipo base
+      if Result.NodeType = ntAliasType then begin
+        Result := ResolveTypeDef(Result);
+      end;
+      TypeRef.Declaration := Result;
     end else begin
       //Error('Tipo desconocido: ' + TypeRef.Name, TypeRef.SrcPos);
-      Exit(Nil)
+      Result := Nil;
     end;
   end else if TypeRef.TypeDef <> nil then begin
     //El tipo es INLINE. Está creado en TypeRef.TypeDef
-    Exit(TypeRef.TypeDef);  //*** No considera si es un alias
+    Result := TypeRef.TypeDef;
+    TypeRef.Declaration := Result;
   end else begin   //No debería pasar
     //Error('Tipo no especificado.', TypeRef.SrcPos);
-    Exit(Nil);
+    Result := Nil;
   end;
 end;
 function TSemanticAnalyzer.ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
@@ -723,8 +730,6 @@ begin
   TypeDef := ResolveTypeRef(VarDecl.TypeRef);
   if TypeDef = Nil then
      Error('Tipo desconocido: ' + VarDecl.TypeRef.Name, VarDecl.TypeRef.SrcPos);
-  //Actualiza la referencia a la definición
-  VarDecl.TypeRef.Declaration := TypeDef;
   //Crea símbolo
   Sym := TSymbol.Create(VarDecl.Name, skVariable);
   Sym.DataType := TypeDef;
@@ -903,9 +908,7 @@ begin
         ParamType := ResolveTypeRef(Param.TypeRef);
         if ParamType = nil then
           Error('Tipo desconocido para parámetro: ' + Param.Name, Param.SrcPos);
-        Param.TypeRef.Declaration := ParamType;
-
-        // Registrar parámetro
+        //Registra parámetro
         Sym := TSymbol.Create(Param.Name, skParameter);
         Sym.DataType := ParamType;
         Sym.Declaration := Param;
@@ -996,7 +999,6 @@ begin
       TypeDef := ResolveTypeRef(Field.TypeRef);
       if TypeDef = nil then
           Error('Tipo desconocido para el campo: ' + Field.Name, Field.SrcPos);
-      Field.TypeRef.Declaration := TypeDef;  //Actualiza declaración
     end;
   end;
   //Analiza variantes
@@ -1014,7 +1016,6 @@ begin
           TypeDef := ResolveTypeRef(Field.TypeRef);
           if TypeDef = nil then
               Error('Tipo desconocido para el campo: ' + Field.Name, Field.SrcPos);
-          Field.TypeRef.Declaration := TypeDef;  //Actualiza declaración
         end;
       end;
     end;
@@ -1421,7 +1422,6 @@ begin
         ArgType := GetTypeOf(FuncCall.Arguments[i]);
         Param := TVarDecl(Sym.Parameters[i]);
         ParamType := ResolveTypeRef(Param.TypeRef);
-        Param.TypeRef.Declaration := ParamType;
         if not AreTypesCompatible(ParamType, ArgType) then
           Error('Tipo de argumento incompatible para parámetro ' + IntToStr(i+1) + ' de ' +
                 FuncCall.Name, FuncCall.Arguments[i].SrcPos);
