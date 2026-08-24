@@ -655,18 +655,18 @@ type  //Definiciones previas para declaraciones de tipos
   nodo permite representar ambos casos.}
   TTypeRef = class(TASTNode)
   private
-    //Nombre del tipo, cuando es un tipo con identificador. Algo como "byte", "word"
-    //o "mi_tipo". Se usa para "tipos con nombre".
+    {Nombre del tipo, cuando es un tipo con identificador. Algo como "byte", "word"
+    o "mi_tipo". Se usa para "tipos con nombre".}
     FName: string;
-    //Referencia al tipo cuando el tipo es INLINE y definido en la misma declaración
-    //de la variable. Algo como: var1: ARRAY[1..3] OF Byte;
+    {Referencia al tipo cuando el tipo es INLINE y definido en la misma declaración
+    de la variable. Algo como: var1: ARRAY[1..3] OF Byte;}
     FTypeDef  : TTypeDef;
     {Bandera para indicar que este nodo es propietario del tipo "FTypeDef" y, en
     consecuencia, debe responsabilizarse de destruirlo. Esta variable es necesaria porque
     las declaraciones de la forma: VAR a,b,c: <tipo estructurado>
     comparten un mismo objeto "TTypeDef" y solo uno debe destruirlo.}
     FTypeOwner: boolean;
-    //Enlace a la declaración. Se resuelve en el análisis semántico.
+    {Enlace a la declaración. Se resuelve en el análisis semántico.}
     FDeclaration: TTypeDef;
   public
     property Name: string read FName write FName;
@@ -676,7 +676,8 @@ type  //Definiciones previas para declaraciones de tipos
     function IsInline: Boolean; inline;
     function IsNamed: Boolean; inline;
   public  //Inicialización
-    constructor Create;
+    constructor Create(const AName: string; const ASrcPos: TSrcPos);
+    constructor Create(ATypeDef: TTypeDef; const ASrcPos: TSrcPos; ATypeOwner: boolean);
     destructor Destroy; override;
     function ToString: string; override;
   end;
@@ -1693,19 +1694,6 @@ end;
 {$endregion}
 {$region "Definiciones previas para declaraciones de tipos"}
 // TTypeRef
-constructor TTypeRef.Create;
-begin
-  FNodeType := ntTypeRef;         //FIja tipo de nodo
-  //La posición se fijará después.
-end;
-destructor TTypeRef.Destroy;
-begin
-  if TypeOwner then begin
-    //Este nodo es el propietario del tipo. Lo destruimos.
-    TypeDef.Destroy;
-  end;
-  inherited;
-end;
 function TTypeRef.IsInline: Boolean;
 {Indica que no es una referencia al tipo, sino una declaración anónima de tipo.}
 begin
@@ -1715,6 +1703,33 @@ function TTypeRef.IsNamed: Boolean;
 {Indica es una referencia a tipo con un identificador.}
 begin
   Result := FName <> '';
+end;
+constructor TTypeRef.Create(const AName: string; const ASrcPos: TSrcPos);
+{COnstructor para las referencias a tipo que son solo identificadores como "integer" o
+"TMitipo".}
+begin
+  FNodeType := ntTypeRef;     //FIja tipo de nodo
+  FName := AName;             //FIja nombre del tipo
+  //varDecl.TypeDef := Nil;   //No es necesario actualizar
+  FSrcPos := ASrcPos;
+end;
+constructor TTypeRef.Create(ATypeDef: TTypeDef; const ASrcPos: TSrcPos;
+  ATypeOwner: boolean);
+begin
+  {Constructor para las referencias a tipo que son definiciones INLINE como "array[0..4]
+  of byte".}
+  FNodeType := ntTypeRef;     //FIja tipo de nodo
+  FTypeDef := ATypeDef;       //Referencia al tipo INLINE
+  FTypeOwner := ATypeOwner;   //Indica si debe encargarse de liberarlo
+  FSrcPos := ASrcPos;
+end;
+destructor TTypeRef.Destroy;
+begin
+  if TypeOwner then begin
+    //Este nodo es el propietario del tipo. Lo destruimos.
+    TypeDef.Destroy;
+  end;
+  inherited;
 end;
 function TTypeRef.ToString: string;
 begin

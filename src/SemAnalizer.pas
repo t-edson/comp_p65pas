@@ -1754,8 +1754,7 @@ begin
   Sym.Parameters := TASTNodeList.Create(True);
   //Parámetros: argumentos variables (array of const)
   Param := TVarDecl.Create('Args', DummyPos);
-  Param.TypeRef := TTypeRef.Create;
-  Param.TypeRef.Name := 'ARRAY_OF_CONST';
+  Param.TypeRef := TTypeRef.Create('ARRAY_OF_CONST', DummyPos);
   Param.IsParameter := True;
   Sym.Parameters.Add(Param);
   FGlobalScope.Declare(Sym);
@@ -1766,8 +1765,7 @@ begin
   Sym.Parameters := TASTNodeList.Create(True);
   //Parámetros: argumentos variables (array of const)
   Param := TVarDecl.Create('Args', DummyPos);
-  Param.TypeRef := TTypeRef.Create;
-  Param.TypeRef.Name := 'ARRAY_OF_CONST';
+  Param.TypeRef := TTypeRef.Create('ARRAY_OF_CONST', DummyPos);
   Param.IsParameter := True;
   Sym.Parameters.Add(Param);
   FGlobalScope.Declare(Sym);
@@ -1778,8 +1776,7 @@ begin
   Sym.Parameters := TASTNodeList.Create(True);
   //Parámetros: argumentos variables (array of const)
   Param := TVarDecl.Create('Args', DummyPos);
-  Param.TypeRef := TTypeRef.Create;
-  Param.TypeRef.Name := 'ARRAY_OF_CONST';
+  Param.TypeRef := TTypeRef.Create('ARRAY_OF_CONST', DummyPos);
   Param.IsParameter := True;
   Sym.Parameters.Add(Param);
   FGlobalScope.Declare(Sym);
@@ -1790,8 +1787,7 @@ begin
   Sym.Parameters := TASTNodeList.Create(True);
   //Parámetros: argumentos variables (array of const)
   Param := TVarDecl.Create('Args', DummyPos);
-  Param.TypeRef := TTypeRef.Create;
-  Param.TypeRef.Name := 'ARRAY_OF_CONST';
+  Param.TypeRef := TTypeRef.Create('ARRAY_OF_CONST', DummyPos);
   Param.IsParameter := True;
   Sym.Parameters.Add(Param);
   FGlobalScope.Declare(Sym);

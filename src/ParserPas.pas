@@ -713,6 +713,7 @@ var
   i, idxVarIni: Integer;
   typeDef: TTypeDef;
   varDecl: TVarDecl;
+  TypeDefPos: TSrcPos;
 begin
   //Explora la lista de identificadores y crea las variables.
   idxVarIni := varContainer.Count;  //Guardamos el índice de la primera variable.
@@ -737,13 +738,11 @@ begin
     for i := idxVarIni to varContainer.Count-1 do begin
       //Todos estos ítems deben ser los que hemos agregados
       varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
-      varDecl.TypeRef := TTypeRef.Create;
-      varDecl.TypeRef.Name := lex.token;  //Es tipo simple
-      varDecl.TypeRef.SrcPos := lex.GetSrcPos;  //Guarda la ubicación
-      //varDecl.TypeDef := Nil;  //No es necesario actualizar
+      varDecl.TypeRef := TTypeRef.Create(lex.token, lex.GetSrcPos);  //Tipo simple
     end;
     Next;   //Consume el identificador de tipo
   end else begin //Debe ser una definición Inline: record ... end
+    TypeDefPos := lex.GetSrcPos;
     typeDef := ParseTypeDefinition;
     if HayError then begin
       typeDef.Free; //Por si acaso
@@ -754,13 +753,12 @@ begin
     for i := idxVarIni to varContainer.Count-1 do begin
       //Todos estos ítems deben ser los que hemos agregados
       varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
-      varDecl.TypeRef := TTypeRef.Create;
-      //varDecl.TypeName := '';   //No es necesario actualizar
-      varDecl.TypeRef.TypeDef := typeDef;  //No es tipo estructurado o anónimo.
       if i = idxVarIni then begin
         //Ponemos, como propietario del tipo, solo a la primera declaración, para evitar
         //que varios objetos intenten destruirlo.
-        varDecl.TypeRef.TypeOwner := true
+        varDecl.TypeRef := TTypeRef.Create(typeDef, TypeDefPos, True);
+      end else begin
+        varDecl.TypeRef := TTypeRef.Create(typeDef, TypeDefPos, False);
       end;
     end;
   end;
@@ -891,6 +889,8 @@ Opcionalmente, y aunque no es estándar en Pascal, se acepta también la forma:
 var
   ArrayType: TArrayTypeDef;
   LowExpr, HighExpr: TExpression;
+  TypeDef: TTypeDef;
+  TypeDefPos: TSrcPos;
 begin
   ArrayType := TArrayTypeDef.Create(lex.GetSrcPos);
   if tokIdent = tiARRAY then Next;     //Consume ARRAY, pero se acepta también que vaya "["
@@ -933,20 +933,17 @@ begin
   if tokIdent = tiOF then Next;   //Es opcional en P65Pas
   //Lee tipo de los elementos (puede ser cualquier tipo).
   if tokIdent = tiIDENTIF then begin
-    ArrayType.ElemTypeRef := TTypeRef.Create;
-    ArrayType.ElemTypeRef.Name := lex.token;
-    ArrayType.ElemTypeRef.SrcPos := lex.GetSrcPos;
+    ArrayType.ElemTypeRef := TTypeRef.Create(lex.token, lex.GetSrcPos);
     Next;
   end else begin
     // Definición Inline: array[1..10] of record ... end)
-    ArrayType.ElemTypeRef := TTypeRef.Create;
-    ArrayType.ElemTypeRef.TypeDef := ParseTypeDefinition;  //Llamada recursiva
+    TypeDefPos := lex.GetSrcPos;
+    TypeDef := ParseTypeDefinition;  //Llamada recursiva
     if HayError then begin
       ArrayType.Destroy;
       Exit(nil);
     end;
-    ArrayType.ElemTypeRef.TypeOwner := True;
-    ArrayType.ElemTypeRef.SrcPos := lex.GetSrcPos;
+    ArrayType.ElemTypeRef := TTypeRef.Create(TypeDef, TypeDefPos, True);
   end;
   Result := ArrayType;
 end;
@@ -973,9 +970,7 @@ Si se encuentra algún error, se devuelve NIL.}
     if tokIdent = tiIDENTIF then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
       //Creamos la variable selector con su tipo.
       varDecl := TVarDecl.Create(selectorName, SrcPos);
-      varDecl.TypeRef := TTypeRef.Create;
-      varDecl.TypeRef.Name := lex.token;  //No pemitiremos tipos complejos aquí
-      varDecl.TypeRef.SrcPos := lex.GetSrcPos;  //Guarda la ubicación
+      varDecl.TypeRef := TTypeRef.Create(lex.token, lex.GetSrcPos);  //Solo tipos simples
       Next;
     end else begin //Debe ser una definición Inline: record ... end
       typeDef := ParseTypeDefinition;
@@ -1334,9 +1329,7 @@ begin
     Proc := TProcFunctDecl.Create(procName, SrcPos, True);
     Proc.Parameters := Params;  //Puede ser NIL.
     if isFunction then begin
-      Proc.ReturnTypeRef := TTypeRef.Create;
-      Proc.ReturnTypeRef.Name := retTypeName;
-      Proc.ReturnTypeRef.SrcPos := retTypePos;
+      Proc.ReturnTypeRef := TTypeRef.Create(retTypeName, retTypePos);
     end;
     Proc.IsAssembler := IsAssembler;
     declars.Add(Proc);
@@ -1345,9 +1338,7 @@ begin
     Proc := TProcFunctDecl.Create(procName, SrcPos, False);
     Proc.Parameters := Params;  //Puede ser NIL.
     if isFunction then begin
-      Proc.ReturnTypeRef := TTypeRef.Create;
-      Proc.ReturnTypeRef.Name := retTypeName;
-      Proc.ReturnTypeRef.SrcPos := retTypePos;
+      Proc.ReturnTypeRef := TTypeRef.Create(retTypeName, retTypePos);
     end;
     Proc.IsMethod := (location = locRecord);
     if IsAssembler or (tokIdent=tiASM) then begin
