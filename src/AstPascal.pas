@@ -21,35 +21,35 @@ type  //Tipos de nodos
     ntPointerDeref,  //Acceso a dirección de puntero (p^).
     ntArrayRef,      //Acceso a arreglo (variable[index]).
     //Nodos de sentencias
-    ntAssignment,    //Asignación de valor a variable.
-    ntIfStatement,   //Condicional IF-THEN-ELSE.
-    ntWhileLoop,     //Bucle WHILE-DO.
-    ntRepeatUntil,   //Bucle REPEAT-UNTIL.
-    ntForLoop,       //Bucle FOR-TO/DOWNTO-DO.
-    ntCaseStatement, //Estructura CASE.
-    ntCaseBranch,    //Rama individual de un CASE.
-    ntWithStatement, //Estructura WITH ... DO
-    ntExitStatement, //Instrucción EXIT
-    ntAsmBlock,      //Bloque asm ... end;
-    ntAsmInstruction,//Instrucción dentro de un bloque ASM
+    ntAssignment,     //Asignación de valor a variable.
+    ntIfStatement,    //Condicional IF-THEN-ELSE.
+    ntWhileLoop,      //Bucle WHILE-DO.
+    ntRepeatUntil,    //Bucle REPEAT-UNTIL.
+    ntForLoop,        //Bucle FOR-TO/DOWNTO-DO.
+    ntCaseStatement,  //Estructura CASE.
+    ntCaseBranch,     //Rama individual de un CASE.
+    ntWithStatement,  //Estructura WITH ... DO
+    ntExitStatement,  //Instrucción EXIT
+    ntAsmBlock,       //Bloque asm ... end;
+    ntAsmInstruction, //Instrucción dentro de un bloque ASM
     //Nodos de declaraciones
-    ntVarDecl,       //Declaración de variable: var x: byte;
-    ntConstDecl,     //Declaración de constantes: const PI=3;
-    ntProcFunctDecl, //Declaración de procedimiento o función.
-    ntForwardDecl,   //Declaración FORWARD
+    ntVarDecl,        //Declaración de variable: var x: byte;
+    ntConstDecl,      //Declaración de constantes: const PI=3;
+    ntProcFunctDecl,  //Declaración de procedimiento o función.
+    ntForwardDecl,    //Declaración FORWARD
     //Nodos auxiliares para declaraciones de tipos
-    ntTypeRef,       //Referencia a un tipo
-    ntArrayRange,    //Rango de arreglo (1..10)
-    ntVariantBranch, //Una rama de los casos RECORD con variantes.
+    ntTypeRef,        //Referencia a un tipo
+    ntArrayRange,     //Rango de arreglo (1..10)
+    ntVariantBranch,  //Una rama de los casos RECORD con variantes.
     //Nodos de declaraciones de tipos
-    ntSimpleType,    //Tipo simple, ya predefinido por el sistema.
-    ntSubrangeType,  //Subrango
-    ntEnumType,      //Enumerado
-    ntArrayType,     //Tipo arreglo
-    ntRecordType,    //Tipo RECORD
-    ntPointerType,   //Puntero
-    ntAliasType,     //Alias
-    ntProceduralType,//Tipos procedurales: proprocedure(a: integer; b: integer);
+    ntSimpleTypeDecl, //Tipo simple, ya predefinido por el sistema.
+    ntAliasTypeDecl,  //Alias
+    ntSubranTypeDecl, //Subrango
+    ntEnumTypeDecl,   //Enumerado
+    ntArrayTypeDecl,  //Tipo arreglo
+    ntRecordTypeDecl, //Tipo RECORD
+    ntPointerTypeDecl,//Puntero
+    ntProcedTypeDecl, //Tipos procedurales: = proocedure(a: integer; b: integer);
     //Nodos estructurales
     ntUnitRef,       //Referencia a unidades: USES unit1, unit2, ...
     ntProgram,       //Nodo raíz del programa completo: program MiPrograma;
@@ -613,9 +613,9 @@ type  //Nodos de declaraciones
   // Declaraciones de constantes
   TConstDecl = class(TASTNode)
   private
-    FName     : string;            //Nombre de la constante
+    FName     : string;       //Nombre de la constante
     FTypeRef  : TTypeRef;     //Referencia al tipo de la constante.
-    FValue    : TExpression;      //La expresión que define el valor
+    FValue    : TExpression;  //La expresión que define el valor
   public
     property Name: string read FName;
     property TypeRef: TTypeRef read FTypeRef write FTypeRef;
@@ -796,10 +796,10 @@ type  //Nodos de declaraciones de tipos
   TRecordTypeDef = class(TTypeDef)
   private
   public
-    Fields: TASTNodeList;  //Declaraciones de variables, y, a futuro, métodos y constantes.
+    Fields: TASTNodeList;         //Declaraciones de variables.
     //Campos para manejar los casos de "Variant Record"
-    VarSelector: TVarDecl;           //El campo selector (Si no es variante, está en NIL)
-    Branches: TVariantBranchList;    //Ramas de las variantes
+    VarSelector: TVarDecl;        //El campo selector (Si no es variante, está en NIL)
+    Branches: TVariantBranchList; //Ramas de las variantes
   public  //Inicialización y depuración
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -1785,7 +1785,7 @@ end;
 // TSimpleTypeDef
 constructor TSimpleTypeDef.Create(const ATypeName: string; const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntSimpleType, ATypeName, ASrcPos);
+  inherited Create(ntSimpleTypeDecl, ATypeName, ASrcPos);
 end;
 function TSimpleTypeDef.ToString: string;
 begin
@@ -1795,7 +1795,7 @@ end;
 constructor TSubrangeTypeDef.Create(ALowExpr, AHighExpr: TExpression;
   const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntSubrangeType, '', ASrcPos);
+  inherited Create(ntSubranTypeDecl, '', ASrcPos);
   FLowExpr := ALowExpr;
   FHighExpr := AHighExpr;
 end;
@@ -1825,7 +1825,7 @@ begin
 end;
 constructor TEnumTypeDef.Create(const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntEnumType, '', ASrcPos);
+  inherited Create(ntEnumTypeDecl, '', ASrcPos);
   FValues := TStringList.Create;
 end;
 destructor TEnumTypeDef.Destroy;
@@ -1841,7 +1841,7 @@ end;
 constructor TAliasTypeDef.Create(const ABaseTypeName: string;
   const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntAliasType, '', ASrcPos);
+  inherited Create(ntAliasTypeDecl, '', ASrcPos);
   FBaseTypeName := ABaseTypeName;
 end;
 destructor TAliasTypeDef.Destroy;
@@ -1855,7 +1855,7 @@ begin
 end;
 constructor TArrayTypeDef.Create(const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntArrayType, '', ASrcPos);
+  inherited Create(ntArrayTypeDecl, '', ASrcPos);
   FIndexRanges := TArrayRangeList.Create(True);
   {El campo FElemTypeRef se creará e inicializará en el Parser, cuando se determine que
   este nodo es una función}
@@ -1877,7 +1877,7 @@ end;
 // TRecordTypeDef
 constructor TRecordTypeDef.Create(const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntRecordType, '', ASrcPos);
+  inherited Create(ntRecordTypeDecl, '', ASrcPos);
   Fields := TASTNodeList.Create(True);
   VarSelector := Nil;   //No se usa por defecto
   Branches := Nil;      //No se usa por defecto
@@ -1897,7 +1897,7 @@ end;
 constructor TPointerTypeDef.Create(const ATargetTypeName: string;
   const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntPointerType, '', ASrcPos);
+  inherited Create(ntPointerTypeDecl, '', ASrcPos);
   FTargetTypeName := ATargetTypeName;
   FTargetTypeDef := nil;
 end;
@@ -1913,7 +1913,7 @@ end;
 // TProceduralType
 constructor TProceduralType.Create(AIsFunction: Boolean; const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntProceduralType, '', ASrcPos);
+  inherited Create(ntProcedTypeDecl, '', ASrcPos);
   FIsFunction := AIsFunction;
   //Parameters := TVarDeclList.Create(True);
   Parameters := Nil;   //Se crea a demanda
