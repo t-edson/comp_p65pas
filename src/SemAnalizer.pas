@@ -127,11 +127,11 @@ type
     procedure VisitConstDecl(ConstDecl: TConstDecl);
     procedure VisitProcDecl(Proc: TProcFunctDecl);
     procedure VisitTypeDef(TypeDef: TTypeDef);
-    procedure VisitArrayTypeDef(ArrayType: TArrayTypeDef);
-    procedure VisitRecordTypeDef(RecordType: TRecordTypeDef);
-    procedure VisitEnumTypeDef(EnumType: TEnumTypeDef);
-    procedure VisitSubrangeTypeDef(SubrangeType: TSubrangeTypeDef);
-    procedure VisitPointerTypeDef(PointerType: TPointerTypeDef);
+    procedure VisitArrayTypeDef(ArrayType: TArrayTypeDecl);
+    procedure VisitRecordTypeDef(RecordType: TRecordTypeDecl);
+    procedure VisitEnumTypeDef(EnumType: TEnumTypeDecl);
+    procedure VisitSubrangeTypeDef(SubrangeType: TSubranTypeDecl);
+    procedure VisitPointerTypeDef(PointerType: TPointerTypeDecl);
   private  //Visitantes de sentencias
     procedure VisitAssignment(Assign: TAssignment);
     procedure VisitIfStatement(IfStmt: TIfStatement);
@@ -416,9 +416,9 @@ begin
     FCurrentScope.AddChild(NewScope);
 
   // Registrar los campos del registro como símbolos
-  for i := 0 to TRecordTypeDef(RecordType).Fields.Count - 1 do begin
-    if TRecordTypeDef(RecordType).Fields[i].NodeType = ntVarDecl then begin
-      FieldDecl := TVarDecl(TRecordTypeDef(RecordType).Fields[i]);
+  for i := 0 to TRecordTypeDecl(RecordType).Fields.Count - 1 do begin
+    if TRecordTypeDecl(RecordType).Fields[i].NodeType = ntVarDecl then begin
+      FieldDecl := TVarDecl(TRecordTypeDecl(RecordType).Fields[i]);
       Sym := TSymbol.Create(FieldDecl.Name, skField);
       Sym.DataType := ResolveType(FieldDecl.TypeRef.Name);
       Sym.Declaration := FieldDecl;
@@ -488,11 +488,11 @@ function TSemanticAnalyzer.ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
 {Resuelve el tipo de una definición de tipo, considerando que puede ser un alias.
 }
 var
-  AliasTypeDef: TAliasTypeDef;
+  AliasTypeDef: TAliasTypeDecl;
 begin
   //Si es un alias, resolver el tipo base
   if TypeDef.NodeType = ntAliasTypeDecl then begin
-    AliasTypeDef := TAliasTypeDef(TypeDef);
+    AliasTypeDef := TAliasTypeDecl(TypeDef);
     if AliasTypeDef.BaseTypeDef <> nil then
       Result := ResolveTypeDef(AliasTypeDef.BaseTypeDef)
     else if AliasTypeDef.BaseTypeName <> '' then
@@ -508,7 +508,7 @@ function TSemanticAnalyzer.GetTypeOf(Expr: TExpression): TTypeDef;
 var
   Sym: TSymbol;
   ArrayVarType, RecordVarType: TTypeDef;
-  ArrayType: TArrayTypeDef;
+  ArrayType: TArrayTypeDecl;
   Fields: TASTNodeList;
   FieldAccess: TFieldAccess;
   i: Integer;
@@ -572,7 +572,7 @@ begin
         Exit;
       end;
       //Busca el campo en el registro
-      Fields := TRecordTypeDef(RecordVarType).Fields;
+      Fields := TRecordTypeDecl(RecordVarType).Fields;
       Result := nil;
       for i := 0 to Fields.Count - 1 do begin
         if Fields[i].NodeType = ntVarDecl then begin
@@ -591,7 +591,7 @@ begin
       ArrayVarType := GetTypeOf(TArrayRef(Expr).ArrayVar);  //Obtiene el tipo del arreglo
       if ArrayVarType = nil then Exit(nil);      //Valida que exista
       if ArrayVarType.NodeType <> ntArrayTypeDecl then Exit(nil);  //Valida que sea arreglo
-      ArrayType := TArrayTypeDef(ArrayVarType);    //Convierte a TArrayTypeDef
+      ArrayType := TArrayTypeDecl(ArrayVarType);    //Convierte a TArrayTypeDecl
       // Resuelve el tipo de los elementos
       Result := ArrayType.ElemTypeRef.Declaration;
     end;
@@ -605,7 +605,7 @@ function TSemanticAnalyzer.AreTypesCompatible(T1, T2: TTypeDef): Boolean;
   function GetBaseType(TypeDef: TTypeDef): TTypeDef;
   begin
     if TypeDef.NodeType = ntSubranTypeDecl then begin
-      Result := TSubrangeTypeDef(TypeDef).BaseType;
+      Result := TSubranTypeDecl(TypeDef).BaseType;
     end else begin
       Result := TypeDef;
     end;
@@ -647,8 +647,8 @@ begin
 
   // === ARREGLOS ===
   //if (Base1.NodeType = ntArrayTypeDecl) and (Base2.NodeType = ntArrayTypeDecl) then begin
-  //  Arr1 := TArrayTypeDef(Base1);
-  //  Arr2 := TArrayTypeDef(Base2);
+  //  Arr1 := TArrayTypeDecl(Base1);
+  //  Arr2 := TArrayTypeDecl(Base2);
   //  // Compatibles si tienen el mismo número de dimensiones y el mismo tipo de elementos
   //  if (Arr1.IndexRanges.Count = Arr2.IndexRanges.Count) then
   //    Exit(AreTypesCompatible(GetElementType(Arr1), GetElementType(Arr2)));
@@ -660,8 +660,8 @@ begin
 
   // === PUNTEROS ===
   //if (Base1.NodeType = ntPointerTypeDecl) and (Base2.NodeType = ntPointerTypeDecl) then begin
-  //  Ptr1 := TPointerTypeDef(Base1);
-  //  Ptr2 := TPointerTypeDef(Base2);
+  //  Ptr1 := TPointerTypeDecl(Base1);
+  //  Ptr2 := TPointerTypeDecl(Base2);
   //  Exit(AreTypesCompatible(GetTargetType(Ptr1), GetTargetType(Ptr2)));
   //end;
 
@@ -946,14 +946,14 @@ begin
   // Ya fue registrada en RegisterTypeDef
   // Verificar definiciones recursivas
   if TypeDef.NodeType = ntAliasTypeDecl then begin
-    if TAliasTypeDef(TypeDef).BaseTypeName <> '' then begin
-      BaseType := ResolveType(TAliasTypeDef(TypeDef).BaseTypeName);
+    if TAliasTypeDecl(TypeDef).BaseTypeName <> '' then begin
+      BaseType := ResolveType(TAliasTypeDecl(TypeDef).BaseTypeName);
       if BaseType = nil then
-        Error('Tipo base desconocido: ' + TAliasTypeDef(TypeDef).BaseTypeName, TypeDef.SrcPos);
+        Error('Tipo base desconocido: ' + TAliasTypeDecl(TypeDef).BaseTypeName, TypeDef.SrcPos);
     end;
   end;
 end;
-procedure TSemanticAnalyzer.VisitArrayTypeDef(ArrayType: TArrayTypeDef);
+procedure TSemanticAnalyzer.VisitArrayTypeDef(ArrayType: TArrayTypeDecl);
 var
   ElemType: TTypeDef;
   i: Integer;
@@ -972,7 +972,7 @@ begin
       VisitNode(Range.HighExpr);
   end;
 end;
-procedure TSemanticAnalyzer.VisitRecordTypeDef(RecordType: TRecordTypeDef);
+procedure TSemanticAnalyzer.VisitRecordTypeDef(RecordType: TRecordTypeDecl);
 var
   i, j: Integer;
   Branch: TVariantBranch;
@@ -1009,7 +1009,7 @@ begin
     end;
   end;
 end;
-procedure TSemanticAnalyzer.VisitEnumTypeDef(EnumType: TEnumTypeDef);
+procedure TSemanticAnalyzer.VisitEnumTypeDef(EnumType: TEnumTypeDecl);
 var
   i: Integer;
   ValueName: String;
@@ -1039,7 +1039,7 @@ begin
     end;
   end;
 end;
-procedure TSemanticAnalyzer.VisitSubrangeTypeDef(SubrangeType: TSubrangeTypeDef);
+procedure TSemanticAnalyzer.VisitSubrangeTypeDef(SubrangeType: TSubranTypeDecl);
 var
   LowType, HighType: TTypeDef;
 begin
@@ -1089,7 +1089,7 @@ begin
           SubrangeType.SrcPos);
   end
 end;
-procedure TSemanticAnalyzer.VisitPointerTypeDef(PointerType: TPointerTypeDef);
+procedure TSemanticAnalyzer.VisitPointerTypeDef(PointerType: TPointerTypeDecl);
 var
   TargetType: TTypeDef;
 begin
@@ -1449,9 +1449,9 @@ begin
   //Busca el campo en el registro
   FoundField := False;
   if RecordType.NodeType = ntRecordTypeDecl then begin
-    for i := 0 to TRecordTypeDef(RecordType).Fields.Count - 1 do begin
-      if TRecordTypeDef(RecordType).Fields[i].NodeType = ntVarDecl then begin
-        FieldDecl := TVarDecl(TRecordTypeDef(RecordType).Fields[i]);
+    for i := 0 to TRecordTypeDecl(RecordType).Fields.Count - 1 do begin
+      if TRecordTypeDecl(RecordType).Fields[i].NodeType = ntVarDecl then begin
+        FieldDecl := TVarDecl(TRecordTypeDecl(RecordType).Fields[i]);
         if FieldDecl.Name = FieldAccess.FieldName then begin
           FoundField := True;
           Break;
@@ -1497,9 +1497,9 @@ begin
   end;
 
   // Verificar número de índices
-  if ArrayIndex.Indices.Count <> TArrayTypeDef(ArrayType).IndexRanges.Count then
+  if ArrayIndex.Indices.Count <> TArrayTypeDecl(ArrayType).IndexRanges.Count then
     Error('Número incorrecto de índices para el arreglo (esperaba ' +
-          IntToStr(TArrayTypeDef(ArrayType).IndexRanges.Count) + ', tiene ' +
+          IntToStr(TArrayTypeDecl(ArrayType).IndexRanges.Count) + ', tiene ' +
           IntToStr(ArrayIndex.Indices.Count) + ')', ArrayIndex.SrcPos);
 
   // Analizar índices
@@ -1555,10 +1555,10 @@ begin
     // Declaraciones de Tipos
     ntSimpleTypeDecl: VisitTypeDef(TTypeDef(Node));
     ntSubranTypeDecl: VisitTypeDef(TTypeDef(Node));
-    ntEnumTypeDecl: VisitEnumTypeDef(TEnumTypeDef(Node));
-    ntArrayTypeDecl: VisitArrayTypeDef(TArrayTypeDef(Node));
-    ntRecordTypeDecl: VisitRecordTypeDef(TRecordTypeDef(Node));
-    ntPointerTypeDecl: VisitPointerTypeDef(TPointerTypeDef(Node));
+    ntEnumTypeDecl: VisitEnumTypeDef(TEnumTypeDecl(Node));
+    ntArrayTypeDecl: VisitArrayTypeDef(TArrayTypeDecl(Node));
+    ntRecordTypeDecl: VisitRecordTypeDef(TRecordTypeDecl(Node));
+    ntPointerTypeDecl: VisitPointerTypeDef(TPointerTypeDecl(Node));
     ntAliasTypeDecl: VisitTypeDef(TTypeDef(Node));
     ntProcedTypeDecl: VisitTypeDef(TTypeDef(Node));
 
@@ -1703,37 +1703,37 @@ begin
 
   // Tipos predefinidos
   Sym := TSymbol.Create('INTEGER', skType);
-  Sym.DataType := TSimpleTypeDef.Create('INTEGER', SrcPos);
+  Sym.DataType := TSimpleTypeDecl.Create('INTEGER', SrcPos);
   Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
   FGlobalScope.Declare(Sym);
 
   Sym := TSymbol.Create('BYTE', skType);
-  Sym.DataType := TSimpleTypeDef.Create('BYTE', SrcPos);
+  Sym.DataType := TSimpleTypeDecl.Create('BYTE', SrcPos);
   Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
   FGlobalScope.Declare(Sym);
 
   Sym := TSymbol.Create('WORD', skType);
-  Sym.DataType := TSimpleTypeDef.Create('WORD', SrcPos);
+  Sym.DataType := TSimpleTypeDecl.Create('WORD', SrcPos);
   Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
   FGlobalScope.Declare(Sym);
 
   Sym := TSymbol.Create('BOOLEAN', skType);
-  Sym.DataType := TSimpleTypeDef.Create('BOOLEAN', SrcPos);
+  Sym.DataType := TSimpleTypeDecl.Create('BOOLEAN', SrcPos);
   Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
   FGlobalScope.Declare(Sym);
 
   Sym := TSymbol.Create('CHAR', skType);
-  Sym.DataType := TSimpleTypeDef.Create('CHAR', SrcPos);
+  Sym.DataType := TSimpleTypeDecl.Create('CHAR', SrcPos);
   Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
   FGlobalScope.Declare(Sym);
 
   Sym := TSymbol.Create('STRING', skType);
-  Sym.DataType := TSimpleTypeDef.Create('STRING', SrcPos);
+  Sym.DataType := TSimpleTypeDecl.Create('STRING', SrcPos);
   Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
   FGlobalScope.Declare(Sym);
 
   Sym := TSymbol.Create('REAL', skType);
-  Sym.DataType := TSimpleTypeDef.Create('REAL', SrcPos);
+  Sym.DataType := TSimpleTypeDecl.Create('REAL', SrcPos);
   Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
   FGlobalScope.Declare(Sym);
 end;
