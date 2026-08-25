@@ -666,7 +666,7 @@ type  //Definiciones previas para declaraciones de tipos
   public
     property Name: string read FName write FName;
     property TypeDef: TTypeDef read FTypeDef write FTypeDef;
-    property TypeOwner: boolean read FTypeOwner write FTypeOwner;
+    //property TypeOwner: boolean read FTypeOwner write FTypeOwner;
     property Declaration: TTypeDef read FDeclaration write FDeclaration;
     function IsInline: Boolean; inline;
     function IsNamed: Boolean; inline;
@@ -1710,7 +1710,7 @@ begin
 end;
 destructor TTypeRef.Destroy;
 begin
-  if TypeOwner then begin
+  if FTypeOwner then begin
     //Este nodo es el propietario del tipo. Lo destruimos.
     TypeDef.Destroy;
   end;

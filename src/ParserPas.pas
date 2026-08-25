@@ -957,7 +957,7 @@ Si se encuentra algún error, se devuelve NIL.}
     selectorName: string;
     varDecl: TVarDecl;
     branch: TVariantBranch;
-    SrcPos: TSrcPos;
+    SrcPos, TypeDefPos: TSrcPos;
     typeDef: TTypeDef;
   begin
     //Es la sección variante del RECORD
@@ -973,14 +973,14 @@ Si se encuentra algún error, se devuelve NIL.}
       varDecl.TypeRef := TTypeRef.Create(lex.token, lex.GetSrcPos);  //Solo tipos simples
       Next;
     end else begin //Debe ser una definición Inline: record ... end
+      TypeDefPos := lex.GetSrcPos;
       typeDef := ParseTypeDefinition;
       if HayError then begin
         typeDef.Free; //Por si acaso
         Exit;
       end;
       varDecl := TVarDecl.Create(selectorName, SrcPos);
-      varDecl.TypeRef.TypeDef := typeDef;  //No es tipo estructurado o anónimo.
-      varDecl.TypeRef.TypeOwner := true;   //Es el propietario del tipo
+      varDecl.TypeRef := TTypeRef.Create(typeDef, TypeDefPos, True);
     end;
     if not ConsumeTok(tiOf, 'Se esperaba "of".') then Exit;
     RecordType.VarSelector := varDecl;  //De la detrucción de "varDecl" se encargará RecordType.
@@ -1228,7 +1228,7 @@ begin
 end;
 procedure TParserPas.ParseConstDeclaration(declars: TASTNodeList);
 var
-  ConstName, TypeName: string;
+  ConstName: string;
   ConstValue: TExpression;
   SrcPos, TypeDefPos: TSrcPos;
   ConstDecl: TConstDecl;
@@ -1336,7 +1336,8 @@ begin
     IsAssembler := True;
   end;
   if (location <> locRecord) and
-    ((tokIdent = tiFORWARD) or (location = locInterface)) then begin      //Es declaración FORWARD
+    ((tokIdent = tiFORWARD) or (location = locInterface)) then begin
+    {Es declaración FORWARD o en la sección INTERFACE de una unidad.}
     if tokIdent = tiFORWARD then begin
       Next;   //Consume "FORWARD"
       if not ConsumeTok(tiSEMIC, ER_SEMICOL_EXP) then begin
@@ -1346,19 +1347,14 @@ begin
     end;
     Proc := TProcFunctDecl.Create(procName, SrcPos, True);
     Proc.Parameters := Params;  //Puede ser NIL.
-    if isFunction then begin
-      Proc.ReturnTypeRef := TTypeRef.Create(retTypeName, retTypePos);
-    end;
     Proc.IsAssembler := IsAssembler;
     declars.Add(Proc);
   end else begin
-    //Es declaración con cuerpo.
+    {Es declaración con cuerpo. Puede ser dentro del programa principal, dentro de la
+    sección de implementación o dentro de un RECORD.}
     Proc := TProcFunctDecl.Create(procName, SrcPos, False);
     Proc.Parameters := Params;  //Puede ser NIL.
-    if isFunction then begin
-      Proc.ReturnTypeRef := TTypeRef.Create(retTypeName, retTypePos);
-    end;
-    Proc.IsMethod := (location = locRecord);
+    Proc.IsMethod := (location = locRecord);   //Identifica a los métodos
     if IsAssembler or (tokIdent=tiASM) then begin
        //Es proc/función ASSEMBLER.
       if tokIdent <> tiASM then begin
@@ -1393,6 +1389,9 @@ begin
         declars.Add(Proc);
       end;
     end;
+  end;
+  if isFunction then begin
+    Proc.ReturnTypeRef := TTypeRef.Create(retTypeName, retTypePos);
   end;
 end;
 procedure TParserPas.ParseTypeDeclaration(declars: TASTNodeList);
@@ -1556,19 +1555,14 @@ var
 begin
   SrcPos := lex.GetSrcPos;
   if not ConsumeTok(tiREPEAT, 'Se esperaba "repeat"') then Exit;
-
   Body := TBlock.Create(lex.GetSrcPos);
-
-  // Parsear instrucciones hasta encontrar 'until'
+  //Analiza instrucciones hasta encontrar 'until'
   while not (HayError or (tokIdent = tiUNTIL)) do
     ParseStatement(Body);
-
   if HayError then Exit;
 
   if not ConsumeTok(tiUNTIL, 'Se esperaba "until"') then Exit;
-
   Condition := ParseExpression;
-
   if not HayError then
     Block.AddStatement(TRepeatUntil.Create(Body, Condition, SrcPos));
 end;
