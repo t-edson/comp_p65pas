@@ -613,21 +613,16 @@ type  //Nodos de declaraciones
   // Declaraciones de constantes
   TConstDecl = class(TASTNode)
   private
-    FName: string;            //Nombre de la constante
-    FTypeName: string;        //Tipo opcional ('' si no se especifica).
-    FTypeDef: TTypeDef;       //Tipo, cuando se declaran constantes con tipo.
-    FValue: TExpression;      //La expresión que define el valor
+    FName     : string;            //Nombre de la constante
+    FTypeRef  : TTypeRef;     //Referencia al tipo de la constante.
+    FValue    : TExpression;      //La expresión que define el valor
   public
     property Name: string read FName;
-    property TypeName: string read FTypeName;
-    property TypeDef: TTypeDef read FTypeDef write FTypeDef;
+    property TypeRef: TTypeRef read FTypeRef write FTypeRef;
     property Value: TExpression read FValue;
     function HasType: Boolean;
   public  //Inicialización y depuración
-    constructor Create(const AName: string; AValue: TExpression;
-                       const ASrcPos: TSrcPos); overload;
-    constructor Create(const AName, ATypeName: string; ATypeDef: TTypeDef;
-      AValue: TExpression; const ASrcPos: TSrcPos); overload;
+    constructor Create(const AName: string; AValue: TExpression; const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
   end;
@@ -1620,38 +1615,28 @@ end;
 // TConstDecl
 function TConstDecl.HasType: Boolean;
 begin
-  Result := FTypeName <> '';
+  //Se usa "FTypeRef" como bandera.
+  Result := FTypeRef<>nil;
 end;
 constructor TConstDecl.Create(const AName: string; AValue: TExpression;
                               const ASrcPos: TSrcPos);
 begin
   inherited Create(ntConstDecl, ASrcPos);
   FName := AName;
-  FTypeName := '';
-  FTypeDef := nil;
-  FValue := AValue;
-end;
-constructor TConstDecl.Create(const AName, ATypeName: string; ATypeDef: TTypeDef;
-                              AValue: TExpression; const ASrcPos: TSrcPos);
-//Constructor con tipo: MIN: integer = 0;
-begin
-  inherited Create(ntConstDecl, ASrcPos);
-  FName := AName;
-  FTypeName := ATypeName;
-  FTypeDef := ATypeDef;
+  //FTypeRef := nil;
   FValue := AValue;
 end;
 destructor TConstDecl.Destroy;
 begin
   FValue.Free;
-  FTypeDef.Free;
+  FTypeRef.Free;    //Destruye si se ha creado.
   inherited;
 end;
 function TConstDecl.ToString: string;
 begin
   Result := Format('ConstDecl: %s', [FName]);
   if HasType then
-    Result := Result + Format(': %s', [FTypeName]);
+    Result := Result + Format(': %s', [FTypeRef.ToString]);
   Result := Result + Format(' = %s', [FValue.ToString]);
 end;
 // TProcFunctDecl

@@ -19,6 +19,8 @@ type
   TAlumno2 = TAlumno;
   TAlumno3 = TAlumno2;
   Tarr3 = array[0..2] of byte;
+const
+  MIN_VALOR: integer = 0;
 var 
 //  col: TColor;
 alumno: TAlumno2; 

@@ -745,7 +745,7 @@ begin
   end;
   // Resolver tipo
   if ConstDecl.HasType then begin
-    TypeDef := ResolveType(ConstDecl.TypeName)
+    TypeDef := ResolveTypeRef(ConstDecl.TypeRef);
   end else begin
     // Inferir tipo del valor
     if ConstDecl.Value <> nil then

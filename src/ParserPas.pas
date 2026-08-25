@@ -733,7 +733,7 @@ begin
   if not ConsumeTok(tiCOLON, 'Se esperaba ":" después de la variable(s).') then
     Exit(0);   //No es necesario limpiar nada adicional
   //Lee el tipo y completa esa información en las variables creadas.
-  if tokIdent  = tiIDENTIF then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
+  if tokIdent = tiIDENTIF then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
     //Actualiza el tipo en todas las variables creadas.
     for i := idxVarIni to varContainer.Count-1 do begin
       //Todos estos ítems deben ser los que hemos agregados
@@ -1093,7 +1093,8 @@ begin
 end;
 function TParserPas.ParseTypeDefinition: TTypeDef;
 {Analiza la definición de un tipo, simple o estructurado. Devuelve un nodo "TTypeDef" con
-la estructura del tipo analizado.}
+la estructura del tipo analizado.
+Si se produce algún error, devuelve NIL.}
 var
   SrcPos: TSrcPos;
   TypeName: string;
@@ -1229,9 +1230,10 @@ procedure TParserPas.ParseConstDeclaration(declars: TASTNodeList);
 var
   ConstName, TypeName: string;
   ConstValue: TExpression;
-  SrcPos: TSrcPos;
+  SrcPos, TypeDefPos: TSrcPos;
   ConstDecl: TConstDecl;
   TypeDef: TTypeDef;
+  TypeRef: TTypeRef;
 begin
   Next;  //Pasa al siguiente token.
   // Parsear constantes hasta que se acaben
@@ -1246,19 +1248,35 @@ begin
     Next;  // Consumir el nombre
     if tokIdent = tiCOLON then begin    //Constante con tipo
       Next;  // Consume ':'
-      // Leer el tipo
-      TypeDef := ParseTypeDefinition;
-      TypeName := 'Tipo';
+      //Lee el tipo
+      if tokIdent = tiIDENTIF then begin
+        TypeRef := TTypeRef.Create(lex.token, lex.GetSrcPos);
+        Next;
+      end else begin
+        TypeDefPos := lex.GetSrcPos;
+        TypeDef := ParseTypeDefinition;
+        if HayError then begin
+          Break;
+        end;
+        TypeRef := TTypeRef.Create(TypeDef, TypeDefPos, True);
+      end;
       //Continua con la asignación del valor.
-      if not ConsumeTok(tiEQUAL, 'Se esperaba "=" en la declaración.') then Break;
+      if not ConsumeTok(tiEQUAL, 'Se esperaba "=" en la declaración.') then begin
+        TypeRef.Destroy;
+        TypeRef := Nil;
+        Break;
+      end;
       // Parsear el valor de la constante
       ConstValue := ParseExpression;  //Puede ser cualquier expresión constante
       if HayError then begin
         ConstValue.Free;
+        TypeRef.Destroy;
+        TypeRef := Nil;
         Break;
       end;
       //Crea la declaración de constante y la agrega
-      ConstDecl := TConstDecl.Create(ConstName, TypeName, TypeDef, ConstValue, SrcPos);
+      ConstDecl := TConstDecl.Create(ConstName, ConstValue, SrcPos);
+      ConstDecl.TypeRef := TypeRef;
       declars.Add(ConstDecl);
     end else if tokIdent = tiEQUAL then begin  //Constante simple
       Next;  // Consume '='
