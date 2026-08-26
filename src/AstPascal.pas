@@ -79,6 +79,7 @@ type  //Declaraciones y clases base para el AST
   TCaseBranch = class;
   TProcFunctDecl = class;
   TTypeDef = class;
+  TTypeDecl = class;
   TRecordTypeDef = class;
   TTypeRef = class;
 
@@ -662,7 +663,7 @@ type  //Definiciones previas para declaraciones de tipos
     las declaraciones de la forma: VAR a,b,c: <tipo estructurado>
     comparten un mismo objeto "TTypeDef" y solo uno debe destruirlo.}
     FTypeOwner: boolean;
-    {Enlace a la declaración. Se resuelve en el análisis semántico.}
+    {Enlace a la declaración (definición). Se resuelve en el análisis semántico.}
     FDeclaration: TTypeDef;
   public
     property Name: string read FName write FName;
@@ -679,12 +680,28 @@ type  //Definiciones previas para declaraciones de tipos
   end;
 
   //Clase base para todas las definiciones de tipo (alias o INLINE).
+  {Una definición de tipo se encuentra en:
+    - Las declaraciones de tipo:  "= array[1..12] of char"
+    - Declaraciones de variables: ": array[1..12] of char"
+    - Declaración de parámetros: ": mitipo"
+    - Valor devuelto de una función:  ": byte"
+    - Campos de un RECORD: ": tipodecampo"
+  }
   TTypeDef = class(TASTnode)
     private
       //Nombre del tipo
-      {Normalmente, no se debería usar un nombre, pues una definición de tipo suele se
-      anónima (array[1..12] of char). Y cuando es un identificador, ese identificador se
-      guarda en el campo Name del TTypeRef asociado.}
+      {Normalmente, no se debería usar un nombre, pues una definición de tipo, es anónima
+      en su concepción:
+        array[1..5] of char
+        integer
+      Solo en las declaraciones de tipo tienen un nombre:
+        TArreglo5 = array[1..5] of char;
+        mitipo = integer;
+      Pero este nombre se guarda en el campo Name del TTypeDecl asociado.
+      Sin embargo, para mantener toda la información de la declaración de un tipo
+      (TTypeDecl) en la definición (excepto su SrcPos), se guarda una copia del nombre en
+      este campo (cuando hay un nombre). Así se simplifica la implementación. En cualquier
+      caso, se puede acceder al nombre del tipo, a traves del nodo padre.}
       FTypeName: string;
     public
       property TypeName: string read FTypeName write FTypeName;
@@ -694,15 +711,20 @@ type  //Definiciones previas para declaraciones de tipos
           const ASrcPos: TSrcPos);
       function ToString: string; override;
     end;
-  //Clase que implementa la declaración de tipos
+  //Clase que implementa la declaración de tipos: <Name> = <Definit>
   TTypeDecl = class(TASTNode)
   private
-    FName: string;   //Nombre del tipo: TYPE <nombre_del_tipo> = ...
-    FTypeRef: TTypeRef;  //Nombre o definición del tipo.
+    //Nombre del tipo: TYPE <nombre_del_tipo> = ...
+    FName: string;
+    {Definición del tipo. También se podría usar un TTypeRef, pero complicaría más el
+    manejo. Además, se espera que la declaración de un tipo contenga siempre una
+    definición, aún cuando se trate de un Alias}
+    FDefinit: TTypeDef;
   public
     property Name: string read FName write FName;
-    property TypeRef: TTypeRef read FTypeRef;
+    property Definit: TTypeDef read FDefinit write FDefinit;
     constructor Create(const ATypeName: string; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
     function ToString: string; override;
   end;
 
@@ -1622,7 +1644,7 @@ function TVarDecl.ToString: string;
 begin
   Result := 'VarDecl: Name=' + Name +
   ', TypeName=' + FTypeRef.Name + ', TypeDef=' ;
-  if TypeRef.TypeDef=Nil then Result += '<Nil>' else Result += TypeRef.TypeDef.TypeName;
+  if TypeRef.TypeDef=Nil then Result += '<Nil>' else Result += TypeRef.TypeDef.FTypeName;
   if FIsParameter then begin
     Result := Result + ' (parameter';
     if FParamType = ptyVar then
@@ -1760,9 +1782,16 @@ begin
   inherited Create(ntTypeDecl, ASrcPos);
   FName := ATypeName;
 end;
+destructor TTypeDecl.Destroy;
+begin
+  FDefinit.Free;    //Destruye si se ha creado (que es lo normal)
+  inherited Destroy;
+end;
 function TTypeDecl.ToString: string;
 begin
-  Result := inherited ToString;
+  Result := 'TTypeDecl: Name=' + FName + LineEnding + 'Definition: ' + LineEnding;
+  if FDefinit = Nil then Result += '<Nil>'
+  else Result += FDefinit.ToString;
 end;
 // TArrayRange
 constructor TArrayRange.Create(ALowExpr, AHighExpr: TExpression;
@@ -1855,7 +1884,7 @@ begin
   if FBaseTypeName <> '' then
     Result := Result + Format(' base %s', [FBaseTypeName])
   else if FBaseType <> nil then
-    Result := Result + Format(' base %s', [FBaseType.TypeName]);
+    Result := Result + Format(' base %s', [FBaseType.FTypeName]);
 end;
 // TEnumTypeDef
 procedure TEnumTypeDef.AddValue(const Value: string);

@@ -1399,25 +1399,34 @@ procedure TParserPas.ParseTypeDeclaration(declars: TASTNodeList);
 var
   TypeName: string;
   TypeDef: TTypeDef;
+  TypePos, TypeDefPos: TSrcPos;
+  TypeRef: TTypeRef;
+  TypeDecl: TTypeDecl;
 begin
   Next;  //Consume TYPE
   while not HayError do begin
     if tokIdent <> tiIDENTIF then
       Break;  // No hay más declaraciones de tipo
     TypeName := lex.token;
+    TypePos:= lex.GetSrcPos;
     Next;
     if tokIdent <> tiEQUAL then begin
       GenError('Se esperaba "=" en la definición del tipo');
       Break;
     end;
     Next;
-    TypeDef := ParseTypeDefinition;
+    //Crea la declaración del tipo
+    TypeDecl := TTypeDecl.Create(TypeName, TypePos);
+    {Crea la definición del tipo. Notar que si es una declaración simple como: "MiTipo" o
+    "integer", se creará un tipo "Alias".}
+    TypeDecl.Definit := ParseTypeDefinition;
     if HayError then begin
-      TypeDef.Free;
+      TypeDecl.Destroy;
       Break;
     end;
-    TypeDef.TypeName := TypeName;
-    declars.Add(TypeDef);        //Agrega la declaración
+    TypeDecl.Definit.TypeName := TypeName;  //Guarda una copia del combre en su definción.
+    TypeDecl.Definit.Parent := TypeDecl;  //Guarda referencia a su declaracón padre
+    declars.Add(TypeDecl);      //Agrega la declaración
     if tokIdent = tiSEMIC then  // ";"
       Next
     else
