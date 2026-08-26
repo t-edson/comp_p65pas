@@ -493,10 +493,10 @@ begin
   //Si es un alias, resolver el tipo base
   if TypeDef.NodeType = ntAliasTypeDef then begin
     AliasTypeDef := TAliasTypeDef(TypeDef);
-    if AliasTypeDef.BaseTypeDef <> nil then
-      Result := ResolveTypeDef(AliasTypeDef.BaseTypeDef)
-    else if AliasTypeDef.BaseTypeName <> '' then
-      Result := ResolveType(AliasTypeDef.BaseTypeName)
+    if AliasTypeDef.BaseTypeRef.Declaration <> nil then
+      Result := ResolveTypeDef(AliasTypeDef.BaseTypeRef.Declaration)
+    else if AliasTypeDef.BaseTypeRef.Name <> '' then
+      Result := ResolveType(AliasTypeDef.BaseTypeRef.Name)
     else
       Result := TypeDef;
   end else begin
@@ -939,17 +939,20 @@ begin
   end;
 end;
 procedure TSemanticAnalyzer.VisitTypeDef(TypeDef: TTypeDef);
-{Visita declaraciones de tipos sismples}
+{Visita declaraciones de tipos sismples.
+**** Notar la similitud con ResolveTypeDef()}
 var
   BaseType: TTypeDef;
+  AliasTypeDef: TAliasTypeDef;
 begin
   // Ya fue registrada en RegisterTypeDef
   // Verificar definiciones recursivas
   if TypeDef.NodeType = ntAliasTypeDef then begin
-    if TAliasTypeDef(TypeDef).BaseTypeName <> '' then begin
-      BaseType := ResolveType(TAliasTypeDef(TypeDef).BaseTypeName);
+    AliasTypeDef := TAliasTypeDef(TypeDef);
+    if AliasTypeDef.BaseTypeRef.Name <> '' then begin
+      BaseType := ResolveType(AliasTypeDef.BaseTypeRef.Name);
       if BaseType = nil then
-        Error('Tipo base desconocido: ' + TAliasTypeDef(TypeDef).BaseTypeName, TypeDef.SrcPos);
+        Error('Tipo base desconocido: ' + AliasTypeDef.BaseTypeRef.Name, TypeDef.SrcPos);
     end;
   end;
 end;

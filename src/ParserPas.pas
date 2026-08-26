@@ -1106,7 +1106,6 @@ begin
       TypeName := lex.token;
       Next;
       Result := TAliasTypeDef.Create(TypeName, SrcPos);
-
     end;
     tiLitNumbI: begin        //Subrango:  = 1..10
       Result := ParseSubrangeType;
@@ -1398,9 +1397,7 @@ end;
 procedure TParserPas.ParseTypeDeclaration(declars: TASTNodeList);
 var
   TypeName: string;
-  TypeDef: TTypeDef;
-  TypePos, TypeDefPos: TSrcPos;
-  TypeRef: TTypeRef;
+  TypePos: TSrcPos;
   TypeDecl: TTypeDecl;
 begin
   Next;  //Consume TYPE

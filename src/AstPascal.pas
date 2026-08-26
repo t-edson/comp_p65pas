@@ -779,15 +779,13 @@ type  //Nodos de definiciones de tipos
   //Alias (type TEdad = integer)
   TAliasTypeDef = class(TTypeDef)
   private
-    FBaseTypeName: string;
-    FBaseTypeDef: TTypeDef;
+    FBaseTypeRef: TTypeRef;  //Referencia al tipo base.
   public
-    property BaseTypeName: string read FBaseTypeName;
-    property BaseTypeDef: TTypeDef read FBaseTypeDef write FBaseTypeDef;
+    property BaseTypeRef: TTypeRef read FBaseTypeRef write FBaseTypeRef;
   public  //Inicialización y depuración
-    function ToString: string; override;
-    constructor Create(const ABaseTypeName: string; const ASrcPos: TSrcPos);
+    constructor Create(const ATypeName: string; const ASrcPos: TSrcPos);
     destructor Destroy; override;
+    function ToString: string; override;
   end;
   //Subrango (1..10, 'a'..'z')
   TSubranTypeDef = class(TTypeDef)
@@ -1849,19 +1847,18 @@ begin
   Result := Format('SimpleType: %s', [FTypeName]);
 end;
 // TAliasTypeDef
-function TAliasTypeDef.ToString: string;
+constructor TAliasTypeDef.Create(const ATypeName: string; const ASrcPos: TSrcPos);
 begin
-  Result := Format('Alias: %s = %s', [FTypeName, FBaseTypeName]);
-end;
-constructor TAliasTypeDef.Create(const ABaseTypeName: string;
-  const ASrcPos: TSrcPos);
-begin
-  inherited Create(ntAliasTypeDef, '', ASrcPos);
-  FBaseTypeName := ABaseTypeName;
+  inherited Create(ntAliasTypeDef, ATypeName, ASrcPos);
 end;
 destructor TAliasTypeDef.Destroy;
 begin
+  FBaseTypeRef.Free;         //Destruye si se ha creado (Lo esperado).
   inherited Destroy;
+end;
+function TAliasTypeDef.ToString: string;
+begin
+  Result := Format('Alias: %s = %s', [FTypeName, FBaseTypeRef.Name]);
 end;
 // TSubranTypeDef
 constructor TSubranTypeDef.Create(ALowExpr, AHighExpr: TExpression;
