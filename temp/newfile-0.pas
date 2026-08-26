@@ -22,6 +22,7 @@ program muestra;
 //var 
 //a, b, c: array[0..4] of byte;
 // alumno: TAlumno2; 
+
 type
   MiTipo = byte;
 //  MiTipo2 = MiTipo;

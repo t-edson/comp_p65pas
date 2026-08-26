@@ -663,13 +663,13 @@ type  //Definiciones previas para declaraciones de tipos
     las declaraciones de la forma: VAR a,b,c: <tipo estructurado>
     comparten un mismo objeto "TTypeDef" y solo uno debe destruirlo.}
     FTypeOwner: boolean;
-    {Enlace a la declaración (definición). Se resuelve en el análisis semántico.}
-    FDeclaration: TTypeDef;
+    {Enlace a la definición. Se resuelve en el análisis semántico.}
+    FDefinit: TTypeDef;
   public
     property Name: string read FName write FName;
     property TypeDef: TTypeDef read FTypeDef write FTypeDef;
     //property TypeOwner: boolean read FTypeOwner write FTypeOwner;
-    property Declaration: TTypeDef read FDeclaration write FDeclaration;
+    property Definit: TTypeDef read FDefinit write FDefinit;
     function IsInline: Boolean; inline;
     function IsNamed: Boolean; inline;
   public  //Inicialización
@@ -689,8 +689,8 @@ type  //Definiciones previas para declaraciones de tipos
   }
   TTypeDef = class(TASTnode)
     private
-      //Nombre del tipo
-      {Normalmente, no se debería usar un nombre, pues una definición de tipo, es anónima
+      {Nombre del tipo.
+      Normalmente, no se debería usar un nombre, pues una definición de tipo, es anónima
       en su concepción:
         array[1..5] of char
         integer

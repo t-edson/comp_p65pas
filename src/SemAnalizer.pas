@@ -470,7 +470,7 @@ begin
       if Result.NodeType = ntAliasTypeDef then begin
         Result := ResolveTypeDef(Result);  //*** Podría optimizarse
       end;
-      TypeRef.Declaration := Result;
+      TypeRef.Definit := Result;
     end else begin
       //Error('Tipo desconocido: ' + TypeRef.Name, TypeRef.SrcPos);
       Result := Nil;
@@ -478,7 +478,7 @@ begin
   end else if TypeRef.TypeDef <> nil then begin
     //El tipo es INLINE. Está creado en TypeRef.TypeDef
     Result := TypeRef.TypeDef;
-    TypeRef.Declaration := Result;
+    TypeRef.Definit := Result;
   end else begin   //No debería pasar
     //Error('Tipo no especificado.', TypeRef.SrcPos);
     Result := Nil;
@@ -493,8 +493,8 @@ begin
   //Si es un alias, resolver el tipo base
   if TypeDef.NodeType = ntAliasTypeDef then begin
     AliasTypeDef := TAliasTypeDef(TypeDef);
-    if AliasTypeDef.BaseTypeRef.Declaration <> nil then
-      Result := ResolveTypeDef(AliasTypeDef.BaseTypeRef.Declaration)
+    if AliasTypeDef.BaseTypeRef.Definit <> nil then
+      Result := ResolveTypeDef(AliasTypeDef.BaseTypeRef.Definit)
     else if AliasTypeDef.BaseTypeRef.Name <> '' then
       Result := ResolveType(AliasTypeDef.BaseTypeRef.Name)
     else
@@ -579,7 +579,7 @@ begin
           FieldDecl := TVarDecl(Fields[i]);
           if CompareText(FieldDecl.Name, FieldAccess.FieldName)=0 then begin
             //Encontró el campo, lee su tipo
-            Result := FieldDecl.TypeRef.Declaration;  //Ya debe estar actualizado
+            Result := FieldDecl.TypeRef.Definit;  //Ya debe estar actualizado
             Break;
           end;
         end;
@@ -593,7 +593,7 @@ begin
       if ArrayVarType.NodeType <> ntArrayTypeDef then Exit(nil);  //Valida que sea arreglo
       ArrayType := TArrayTypeDef(ArrayVarType);    //Convierte a TArrayTypeDef
       // Resuelve el tipo de los elementos
-      Result := ArrayType.ElemTypeRef.Declaration;
+      Result := ArrayType.ElemTypeRef.Definit;
     end;
     ntPointerLiteral:
       Result := ResolveType('POINTER');
@@ -842,9 +842,11 @@ begin
         RegisterConstDecl(TConstDecl(Node));
       ntProcFunctDecl:
         RegisterProcDecl(TProcFunctDecl(Node));
-      ntSimpleTypeDef, ntSubranTypeDef, ntArrayTypeDef, ntEnumTypeDef,
-      ntRecordTypeDef, ntPointerTypeDef, ntAliasTypeDef, ntProcedTypeDef:
-        RegisterTypeDef(TTypeDef(Node));
+      ntTypeDecl:
+        RegisterTypeDef(TTypeDecl(Node).Definit);
+      //ntSimpleTypeDef, ntSubranTypeDef, ntArrayTypeDef, ntEnumTypeDef,
+      //ntRecordTypeDef, ntPointerTypeDef, ntAliasTypeDef, ntProcedTypeDef:
+      //  RegisterTypeDef(TTypeDef(Node));
     end;
   end;
 end;
@@ -859,7 +861,7 @@ begin
   // Verificar inicialización
   if VarDecl.initVal <> nil then begin
     InitType := GetTypeOf(VarDecl.initVal);
-    VarType := VarDecl.TypeRef.Declaration;
+    VarType := VarDecl.TypeRef.Definit;
     if not AreTypesCompatible(VarType, InitType) then
       Error('Tipo de inicialización incompatible para: ' + VarDecl.Name, VarDecl.SrcPos);
   end;
@@ -1257,7 +1259,7 @@ begin
     ValueType := GetTypeOf(ExitStmt.ReturnValue);
     Func := GetCurrentFunction;
     if Func <> nil then begin
-      ReturnType := Func.ReturnTypeRef.Declaration;
+      ReturnType := Func.ReturnTypeRef.Definit;
       if ReturnType = nil then
         Error('No se puede determinar el tipo de retorno de la función', ExitStmt.SrcPos)
       else if not AreTypesCompatible(ReturnType, ValueType) then
