@@ -407,7 +407,7 @@ begin
   if RecordType = nil then
     Exit;
 
-  if not (RecordType.NodeType = ntRecordTypeDecl) then
+  if not (RecordType.NodeType = ntRecordTypeDef) then
     Exit;
 
   // Crear nuevo ámbito para WITH
@@ -467,7 +467,7 @@ begin
     if (SymType <> nil) and (SymType.Kind = skType) then begin
       Result := SymType.DataType;
       //Si es un alias, resolvemos el tipo base
-      if Result.NodeType = ntAliasTypeDecl then begin
+      if Result.NodeType = ntAliasTypeDef then begin
         Result := ResolveTypeDef(Result);  //*** Podría optimizarse
       end;
       TypeRef.Declaration := Result;
@@ -491,7 +491,7 @@ var
   AliasTypeDef: TAliasTypeDef;
 begin
   //Si es un alias, resolver el tipo base
-  if TypeDef.NodeType = ntAliasTypeDecl then begin
+  if TypeDef.NodeType = ntAliasTypeDef then begin
     AliasTypeDef := TAliasTypeDef(TypeDef);
     if AliasTypeDef.BaseTypeDef <> nil then
       Result := ResolveTypeDef(AliasTypeDef.BaseTypeDef)
@@ -567,7 +567,7 @@ begin
         Exit;
       end;
       //Validar que sea un RECORD
-      if RecordVarType.NodeType <> ntRecordTypeDecl then begin
+      if RecordVarType.NodeType <> ntRecordTypeDef then begin
         Result := nil;
         Exit;
       end;
@@ -590,7 +590,7 @@ begin
       //El tipo de un arreglo es el tipo de sus elementos
       ArrayVarType := GetTypeOf(TArrayRef(Expr).ArrayVar);  //Obtiene el tipo del arreglo
       if ArrayVarType = nil then Exit(nil);      //Valida que exista
-      if ArrayVarType.NodeType <> ntArrayTypeDecl then Exit(nil);  //Valida que sea arreglo
+      if ArrayVarType.NodeType <> ntArrayTypeDef then Exit(nil);  //Valida que sea arreglo
       ArrayType := TArrayTypeDef(ArrayVarType);    //Convierte a TArrayTypeDef
       // Resuelve el tipo de los elementos
       Result := ArrayType.ElemTypeRef.Declaration;
@@ -604,7 +604,7 @@ end;
 function TSemanticAnalyzer.AreTypesCompatible(T1, T2: TTypeDef): Boolean;
   function GetBaseType(TypeDef: TTypeDef): TTypeDef;
   begin
-    if TypeDef.NodeType = ntSubranTypeDecl then begin
+    if TypeDef.NodeType = ntSubranTypeDef then begin
       Result := TSubranTypeDef(TypeDef).BaseType;
     end else begin
       Result := TypeDef;
@@ -626,7 +626,7 @@ begin
     Exit(False);
 
   // === TIPOS SIMPLES ===
-  if (Base1.NodeType = ntSimpleTypeDecl) and (Base2.NodeType = ntSimpleTypeDecl) then begin
+  if (Base1.NodeType = ntSimpleTypeDef) and (Base2.NodeType = ntSimpleTypeDef) then begin
     // Numéricos: todos compatibles entre sí
     if IsNumericType(Base1) and IsNumericType(Base2) then
       Exit(True);
@@ -642,11 +642,11 @@ begin
   end;
 
   // === ENUMERADOS ===
-  if (Base1.NodeType = ntEnumTypeDecl) and (Base2.NodeType = ntEnumTypeDecl) then
+  if (Base1.NodeType = ntEnumTypeDef) and (Base2.NodeType = ntEnumTypeDef) then
     Exit(Base1 = Base2);
 
   // === ARREGLOS ===
-  //if (Base1.NodeType = ntArrayTypeDecl) and (Base2.NodeType = ntArrayTypeDecl) then begin
+  //if (Base1.NodeType = ntArrayTypeDef) and (Base2.NodeType = ntArrayTypeDef) then begin
   //  Arr1 := TArrayTypeDef(Base1);
   //  Arr2 := TArrayTypeDef(Base2);
   //  // Compatibles si tienen el mismo número de dimensiones y el mismo tipo de elementos
@@ -655,18 +655,18 @@ begin
   //end;
 
   // === RECORDS ===
-  if (Base1.NodeType = ntRecordTypeDecl) and (Base2.NodeType = ntRecordTypeDecl) then
+  if (Base1.NodeType = ntRecordTypeDef) and (Base2.NodeType = ntRecordTypeDef) then
     Exit(Base1 = Base2);
 
   // === PUNTEROS ===
-  //if (Base1.NodeType = ntPointerTypeDecl) and (Base2.NodeType = ntPointerTypeDecl) then begin
+  //if (Base1.NodeType = ntPointerTypeDef) and (Base2.NodeType = ntPointerTypeDef) then begin
   //  Ptr1 := TPointerTypeDef(Base1);
   //  Ptr2 := TPointerTypeDef(Base2);
   //  Exit(AreTypesCompatible(GetTargetType(Ptr1), GetTargetType(Ptr2)));
   //end;
 
   // === SUBRANGOS ===
-  if (Base1.NodeType = ntSubranTypeDecl) and (Base2.NodeType = ntSubranTypeDecl) then
+  if (Base1.NodeType = ntSubranTypeDef) and (Base2.NodeType = ntSubranTypeDef) then
     Exit(True);  // Todos los subrangos son compatibles entre sí
 
   Result := False;
@@ -676,7 +676,7 @@ begin
   if TypeDef = nil then
     Exit(False);
 
-  if TypeDef.NodeType = ntSimpleTypeDecl then begin
+  if TypeDef.NodeType = ntSimpleTypeDef then begin
     Result := (TypeDef.TypeName = 'INTEGER') or
               (TypeDef.TypeName = 'BYTE') or
               (TypeDef.TypeName = 'WORD') or
@@ -684,7 +684,7 @@ begin
     Exit;
   end;
 
-  if TypeDef.NodeType = ntSubranTypeDecl then
+  if TypeDef.NodeType = ntSubranTypeDef then
     Exit(True);
 
   Result := False;
@@ -694,7 +694,7 @@ begin
   if TypeDef = nil then
     Exit(False);
 
-  if TypeDef.NodeType = ntSimpleTypeDecl then begin
+  if TypeDef.NodeType = ntSimpleTypeDef then begin
     Result := (TypeDef.TypeName = 'INTEGER') or
               (TypeDef.TypeName = 'BYTE') or
               (TypeDef.TypeName = 'WORD') or
@@ -703,10 +703,10 @@ begin
     Exit;
   end;
 
-  if TypeDef.NodeType = ntEnumTypeDecl then
+  if TypeDef.NodeType = ntEnumTypeDef then
     Exit(True);
 
-  if TypeDef.NodeType = ntSubranTypeDecl then
+  if TypeDef.NodeType = ntSubranTypeDef then
     Exit(True);
 
   Result := False;
@@ -842,8 +842,8 @@ begin
         RegisterConstDecl(TConstDecl(Node));
       ntProcFunctDecl:
         RegisterProcDecl(TProcFunctDecl(Node));
-      ntSimpleTypeDecl, ntSubranTypeDecl, ntArrayTypeDecl, ntEnumTypeDecl,
-      ntRecordTypeDecl, ntPointerTypeDecl, ntAliasTypeDecl, ntProcedTypeDecl:
+      ntSimpleTypeDef, ntSubranTypeDef, ntArrayTypeDef, ntEnumTypeDef,
+      ntRecordTypeDef, ntPointerTypeDef, ntAliasTypeDef, ntProcedTypeDef:
         RegisterTypeDef(TTypeDef(Node));
     end;
   end;
@@ -945,7 +945,7 @@ var
 begin
   // Ya fue registrada en RegisterTypeDef
   // Verificar definiciones recursivas
-  if TypeDef.NodeType = ntAliasTypeDecl then begin
+  if TypeDef.NodeType = ntAliasTypeDef then begin
     if TAliasTypeDef(TypeDef).BaseTypeName <> '' then begin
       BaseType := ResolveType(TAliasTypeDef(TypeDef).BaseTypeName);
       if BaseType = nil then
@@ -1134,7 +1134,7 @@ begin
   CondType := GetTypeOf(IfStmt.Condition);
   if CondType = nil then
     Error('No se puede determinar el tipo de la condición', IfStmt.Condition.SrcPos)
-  else if (CondType.TypeName <> 'BOOLEAN') and (not (CondType.NodeType = ntSimpleTypeDecl)) then
+  else if (CondType.TypeName <> 'BOOLEAN') and (not (CondType.NodeType = ntSimpleTypeDef)) then
     Warning('La condición debería ser booleana', IfStmt.Condition.SrcPos);
 
   // Analizar ramas
@@ -1224,7 +1224,7 @@ begin
   // Verificar que sea un registro
   if RecordType = nil then
     Error('WITH requiere una expresión de tipo RECORD', WithStmt.RecordVar.SrcPos)
-  else if not (RecordType.NodeType = ntRecordTypeDecl) then
+  else if not (RecordType.NodeType = ntRecordTypeDef) then
     Error('WITH solo puede usarse con RECORDs', WithStmt.RecordVar.SrcPos);
 
   // Entrar en el ámbito del WITH
@@ -1450,7 +1450,7 @@ begin
 
   //Busca el campo en el registro
   FoundField := False;
-  if RecordType.NodeType = ntRecordTypeDecl then begin
+  if RecordType.NodeType = ntRecordTypeDef then begin
     for i := 0 to TRecordTypeDef(RecordType).Fields.Count - 1 do begin
       if TRecordTypeDef(RecordType).Fields[i].NodeType = ntVarDecl then begin
         FieldDecl := TVarDecl(TRecordTypeDef(RecordType).Fields[i]);
@@ -1474,7 +1474,7 @@ begin
 
   if PtrType <> nil then
   begin
-    if not (PtrType.NodeType = ntPointerTypeDecl) then
+    if not (PtrType.NodeType = ntPointerTypeDef) then
       Error('^ solo puede aplicarse a punteros', PointerDeref.SrcPos);
   end;
 end;
@@ -1493,7 +1493,7 @@ begin
   end;
 
   // Verificar que sea un arreglo
-  if not (ArrayType.NodeType = ntArrayTypeDecl) then begin
+  if not (ArrayType.NodeType = ntArrayTypeDef) then begin
     Error('[] solo puede aplicarse a arreglos', ArrayIndex.SrcPos);
     Exit;
   end;
@@ -1555,14 +1555,14 @@ begin
     ntProcFunctDecl: VisitProcDecl(TProcFunctDecl(Node));
 
     // Declaraciones de Tipos
-    ntSimpleTypeDecl: VisitTypeDef(TTypeDef(Node));
-    ntSubranTypeDecl: VisitTypeDef(TTypeDef(Node));
-    ntEnumTypeDecl: VisitEnumTypeDef(TEnumTypeDef(Node));
-    ntArrayTypeDecl: VisitArrayTypeDef(TArrayTypeDef(Node));
-    ntRecordTypeDecl: VisitRecordTypeDef(TRecordTypeDef(Node));
-    ntPointerTypeDecl: VisitPointerTypeDef(TPointerTypeDef(Node));
-    ntAliasTypeDecl: VisitTypeDef(TTypeDef(Node));
-    ntProcedTypeDecl: VisitTypeDef(TTypeDef(Node));
+    ntSimpleTypeDef: VisitTypeDef(TTypeDef(Node));
+    ntSubranTypeDef: VisitTypeDef(TTypeDef(Node));
+    ntEnumTypeDef: VisitEnumTypeDef(TEnumTypeDef(Node));
+    ntArrayTypeDef: VisitArrayTypeDef(TArrayTypeDef(Node));
+    ntRecordTypeDef: VisitRecordTypeDef(TRecordTypeDef(Node));
+    ntPointerTypeDef: VisitPointerTypeDef(TPointerTypeDef(Node));
+    ntAliasTypeDef: VisitTypeDef(TTypeDef(Node));
+    ntProcedTypeDef: VisitTypeDef(TTypeDef(Node));
 
     // Sentencias
     ntAssignment: VisitAssignment(TAssignment(Node));
@@ -1625,8 +1625,8 @@ begin
   {Analizar las declaraciones de tipos para registrar sus símbolos (como los valores de
   los enumerados).}
   for Node in Prog.Declarations do begin
-    if Node.NodeType in [ntEnumTypeDecl, ntRecordTypeDecl, ntArrayTypeDecl, ntSubranTypeDecl,
-      ntPointerTypeDecl, ntAliasTypeDecl, ntProcedTypeDecl] then begin
+    if Node.NodeType in [ntEnumTypeDef, ntRecordTypeDef, ntArrayTypeDef, ntSubranTypeDef,
+      ntPointerTypeDef, ntAliasTypeDef, ntProcedTypeDef] then begin
         VisitNode(Node);
     end;
   end;

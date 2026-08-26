@@ -37,24 +37,25 @@ type  //Tipos de nodos
     ntConstDecl,      //Declaración de constantes: const PI=3;
     ntProcFunctDecl,  //Declaración de procedimiento o función.
     ntForwardDecl,    //Declaración FORWARD
+    ntTypeDecl,       //Declaración de tipo
     //Nodos auxiliares para declaraciones de tipos
     ntTypeRef,        //Referencia a un tipo
     ntArrayRange,     //Rango de arreglo (1..10)
     ntVariantBranch,  //Una rama de los casos RECORD con variantes.
-    //Nodos de declaraciones de tipos
-    ntSimpleTypeDecl, //Tipo simple, ya predefinido por el sistema.
-    ntAliasTypeDecl,  //Alias
-    ntSubranTypeDecl, //Subrango
-    ntEnumTypeDecl,   //Enumerado
-    ntArrayTypeDecl,  //Tipo arreglo
-    ntRecordTypeDecl, //Tipo RECORD
-    ntPointerTypeDecl,//Puntero
-    ntProcedTypeDecl, //Tipos procedurales: = proocedure(a: integer; b: integer);
+    //Nodos de definiciones de tipos
+    ntSimpleTypeDef,  //Tipo simple, ya predefinido por el sistema.
+    ntAliasTypeDef,   //Alias
+    ntSubranTypeDef,  //Subrango
+    ntEnumTypeDef,    //Enumerado
+    ntArrayTypeDef,   //Tipo arreglo
+    ntRecordTypeDef,  //Tipo RECORD
+    ntPointerTypeDef, //Puntero
+    ntProcedTypeDef,  //Tipos procedurales: = proocedure(a: integer; b: integer);
     //Nodos estructurales
-    ntUnitRef,       //Referencia a unidades: USES unit1, unit2, ...
-    ntProgram,       //Nodo raíz del programa completo: program MiPrograma;
-    ntUnit,          //Nodo raiz de una unidad
-    ntBlock          //Bloque de instrucciones (begin...end)
+    ntUnitRef,        //Referencia a unidades: USES unit1, unit2, ...
+    ntProgram,        //Nodo raíz del programa completo: program MiPrograma;
+    ntUnit,           //Nodo raiz de una unidad
+    ntBlock           //Bloque de instrucciones (begin...end)
   );
 type  //Declaraciones y clases base para el AST
   // Dirección del bucle FOR
@@ -651,7 +652,7 @@ type  //Definiciones previas para declaraciones de tipos
   TTypeRef = class(TASTNode)
   private
     {Nombre del tipo, cuando es un tipo con identificador. Algo como "byte", "word"
-    o "mi_tipo". Se usa para "tipos con nombre".}
+    o "mi_tipo". Se usa para referencias a tipos simples o alias.}
     FName: string;
     {Referencia al tipo cuando el tipo es INLINE y definido en la misma declaración
     de la variable. Algo como: var1: ARRAY[1..3] OF Byte;}
@@ -677,10 +678,14 @@ type  //Definiciones previas para declaraciones de tipos
     function ToString: string; override;
   end;
 
-  //Clase base para las declaraciones de tipo
+  //Clase base para todas las definiciones de tipo (alias o INLINE).
   TTypeDef = class(TASTnode)
     private
-      FTypeName: string;  //Nombre del tipo (para tipos simples o alias)
+      //Nombre del tipo
+      {Normalmente, no se debería usar un nombre, pues una definición de tipo suele se
+      anónima (array[1..12] of char). Y cuando es un identificador, ese identificador se
+      guarda en el campo Name del TTypeRef asociado.}
+      FTypeName: string;
     public
       property TypeName: string read FTypeName write FTypeName;
 //      function HasSubtypes: boolean;
@@ -689,6 +694,18 @@ type  //Definiciones previas para declaraciones de tipos
           const ASrcPos: TSrcPos);
       function ToString: string; override;
     end;
+  //Clase que implementa la declaración de tipos
+  TTypeDecl = class(TASTNode)
+  private
+    FName: string;   //Nombre del tipo: TYPE <nombre_del_tipo> = ...
+    FTypeRef: TTypeRef;  //Nombre o definición del tipo.
+  public
+    property Name: string read FName write FName;
+    property TypeRef: TTypeRef read FTypeRef;
+    constructor Create(const ATypeName: string; const ASrcPos: TSrcPos);
+    function ToString: string; override;
+  end;
+
   // Rango de arreglo (1..10, 'a'..'z', etc.)
   TArrayRange = class(TASTNode)
   private
@@ -728,8 +745,8 @@ type  //Definiciones previas para declaraciones de tipos
     function ToString: string; override;
   end;
   TVariantBranchList = specialize TFPGObjectList<TVariantBranch>;
-type  //Nodos de declaraciones de tipos
-  //Declaración de tipos pedefinidos (integer, byte, boolean, etc.)
+type  //Nodos de definiciones de tipos
+  //Definición de tipos pedefinidos (integer, byte, boolean, etc.)
   {Este nodo representa a una supuesta definición de los tipos básicos, que se supone ya
   están definidos. No se creará por código.}
   TSimpleTypeDef = class(TTypeDef)
@@ -1737,6 +1754,16 @@ function TTypeDef.ToString: string;
 begin
   Result := Format('TypeDef(%d): %s', [Ord(NodeType), FTypeName]);
 end;
+{ TTypeDecl }
+constructor TTypeDecl.Create(const ATypeName: string; const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntTypeDecl, ASrcPos);
+  FName := ATypeName;
+end;
+function TTypeDecl.ToString: string;
+begin
+  Result := inherited ToString;
+end;
 // TArrayRange
 constructor TArrayRange.Create(ALowExpr, AHighExpr: TExpression;
   const ASrcPos: TSrcPos);
@@ -1786,17 +1813,32 @@ end;
 // TSimpleTypeDef
 constructor TSimpleTypeDef.Create(const ATypeName: string; const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntSimpleTypeDecl, ATypeName, ASrcPos);
+  inherited Create(ntSimpleTypeDef, ATypeName, ASrcPos);
 end;
 function TSimpleTypeDef.ToString: string;
 begin
   Result := Format('SimpleType: %s', [FTypeName]);
 end;
+// TAliasTypeDef
+function TAliasTypeDef.ToString: string;
+begin
+  Result := Format('Alias: %s = %s', [FTypeName, FBaseTypeName]);
+end;
+constructor TAliasTypeDef.Create(const ABaseTypeName: string;
+  const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntAliasTypeDef, '', ASrcPos);
+  FBaseTypeName := ABaseTypeName;
+end;
+destructor TAliasTypeDef.Destroy;
+begin
+  inherited Destroy;
+end;
 // TSubranTypeDef
 constructor TSubranTypeDef.Create(ALowExpr, AHighExpr: TExpression;
   const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntSubranTypeDecl, '', ASrcPos);
+  inherited Create(ntSubranTypeDef, '', ASrcPos);
   FLowExpr := ALowExpr;
   FHighExpr := AHighExpr;
 end;
@@ -1826,28 +1868,13 @@ begin
 end;
 constructor TEnumTypeDef.Create(const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntEnumTypeDecl, '', ASrcPos);
+  inherited Create(ntEnumTypeDef, '', ASrcPos);
   FValues := TStringList.Create;
 end;
 destructor TEnumTypeDef.Destroy;
 begin
   FValues.Free;
   inherited;
-end;
-// TAliasTypeDef
-function TAliasTypeDef.ToString: string;
-begin
-  Result := Format('Alias: %s = %s', [FTypeName, FBaseTypeName]);
-end;
-constructor TAliasTypeDef.Create(const ABaseTypeName: string;
-  const ASrcPos: TSrcPos);
-begin
-  inherited Create(ntAliasTypeDecl, '', ASrcPos);
-  FBaseTypeName := ABaseTypeName;
-end;
-destructor TAliasTypeDef.Destroy;
-begin
-  inherited Destroy;
 end;
 // TArrayTypeDef
 procedure TArrayTypeDef.AddRange(Range: TArrayRange);
@@ -1856,7 +1883,7 @@ begin
 end;
 constructor TArrayTypeDef.Create(const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntArrayTypeDecl, '', ASrcPos);
+  inherited Create(ntArrayTypeDef, '', ASrcPos);
   FIndexRanges := TArrayRangeList.Create(True);
   {El campo FElemTypeRef se creará e inicializará en el Parser, cuando se determine que
   este nodo es una función}
@@ -1878,7 +1905,7 @@ end;
 // TRecordTypeDef
 constructor TRecordTypeDef.Create(const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntRecordTypeDecl, '', ASrcPos);
+  inherited Create(ntRecordTypeDef, '', ASrcPos);
   Fields := TASTNodeList.Create(True);
   VarSelector := Nil;   //No se usa por defecto
   Branches := Nil;      //No se usa por defecto
@@ -1898,7 +1925,7 @@ end;
 constructor TPointerTypeDef.Create(const ATargetTypeName: string;
   const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntPointerTypeDecl, '', ASrcPos);
+  inherited Create(ntPointerTypeDef, '', ASrcPos);
   FTargetTypeName := ATargetTypeName;
   FTargetTypeDef := nil;
 end;
@@ -1914,7 +1941,7 @@ end;
 // TProcedTypeDef
 constructor TProcedTypeDef.Create(AIsFunction: Boolean; const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntProcedTypeDecl, '', ASrcPos);
+  inherited Create(ntProcedTypeDef, '', ASrcPos);
   FIsFunction := AIsFunction;
   //Parameters := TVarDeclList.Create(True);
   Parameters := Nil;   //Se crea a demanda
