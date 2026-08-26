@@ -1,6 +1,6 @@
 program muestra; 
 //uses unit1, unit2;
-type
+//type
 //  TColor = (Rojo, Verde, Azul);
 //  TMyRecord = record
 //    valor: Integer;
@@ -9,25 +9,25 @@ type
 ////      valor := valor + 1;  // Self implícito
 ////    end;
 //  end;  
-  TAlumno = record
-    nombre: string;
-    apellido: string;
-//    notas: TNota;
-    promedio: real;
-    aprobado: boolean;
-  end;
-  TAlumno2 = TAlumno;
-  TAlumno3 = TAlumno2;
-  Tarr3 = array[0..2] of byte;
-const
-  MIN_VALOR: integer = 0;
-var 
-//  col: TColor;
-alumno: TAlumno2; 
-arr3: Tarr3;
+//  TAlumno = record
+//    nombre: string;
+//    apellido: string;
+////    notas: TNota;
+//    promedio: real;
+//    aprobado: boolean;
+//  end;
+//  TAlumno2 = TAlumno;
+//  TAlumno3 = TAlumno2;
+//  Tarr3 = array[0..2] of byte;
+//var 
+//a, b, c: array[0..4] of byte;
+// alumno: TAlumno2; 
+type
+  MiTipo = byte;
+//  MiTipo2 = MiTipo;
 begin
 //  col := Rojo;
-arr3[0]:=3;
+//arr3[0]:=3;
 //  alumno.notas[i] := 0;
 //  alumno.nombre := 'hola';  
 //  writeln('PROGRAMA');

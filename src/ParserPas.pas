@@ -74,12 +74,12 @@ private   //Expresiones
   function ParseExpression(AllowFormat: Boolean = False): TExpression;
 private   //Métodos auxiliares para las declaraciones
   procedure ParseParameters(var Params: TASTNodeList);
-  function ParseSubrangeType: TSubranTypeDecl;
-  function ParseEnumType: TEnumTypeDecl;
-  function ParseArrayTypeDef: TArrayTypeDecl;
-  function ParseRecordTypeDef: TRecordTypeDecl;
-  function ParsePointerType: TPointerTypeDecl;
-  function ParseProceduralType: TProcedTypeDecl;
+  function ParseSubrangeType: TSubranTypeDef;
+  function ParseEnumType: TEnumTypeDef;
+  function ParseArrayTypeDef: TArrayTypeDef;
+  function ParseRecordTypeDef: TRecordTypeDef;
+  function ParsePointerType: TPointerTypeDef;
+  function ParseProceduralType: TProcedTypeDef;
   function ParseTypeDefinition: TTypeDef;
 private   //Declaraciones
   procedure ParseUsesClause(const unitContainer: TUnitRefList);
@@ -743,17 +743,18 @@ begin
     Next;   //Consume el identificador de tipo
   end else begin //Debe ser una definición Inline: record ... end
     TypeDefPos := lex.GetSrcPos;
-    typeDef := ParseTypeDefinition;
-    if HayError then begin
-      typeDef.Free; //Por si acaso
-      Exit(0);
-    end;
+    typeDef := Nil;
     //Actualiza el tipo en todas las variables creadas, haciendo que todas las variables
     //creadas en un solo bloque, apunten al mismo tipo definido "typeDef".
     for i := idxVarIni to varContainer.Count-1 do begin
       //Todos estos ítems deben ser los que hemos agregados
       varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
-      if i = idxVarIni then begin
+      if typeDef = Nil then begin
+        typeDef := ParseTypeDefinition;
+        if HayError then begin
+          typeDef.Free; //Por si acaso
+          Exit(0);
+        end;
         //Ponemos, como propietario del tipo, solo a la primera declaración, para evitar
         //que varios objetos intenten destruirlo.
         varDecl.TypeRef := TTypeRef.Create(typeDef, TypeDefPos, True);
@@ -828,7 +829,7 @@ begin
     end;
   end;
 end;
-function TParserPas.ParseSubrangeType: TSubranTypeDecl;
+function TParserPas.ParseSubrangeType: TSubranTypeDef;
 var
   LowExpr, HighExpr: TExpression;
   BaseTypeName: String;
@@ -851,15 +852,15 @@ begin
     Result := nil;
     Exit;
   end;
-  Result := TSubranTypeDecl.Create(LowExpr, HighExpr, lex.GetSrcPos);
+  Result := TSubranTypeDef.Create(LowExpr, HighExpr, lex.GetSrcPos);
 end;
-function TParserPas.ParseEnumType: TEnumTypeDecl;
+function TParserPas.ParseEnumType: TEnumTypeDef;
 var
-  EnumType: TEnumTypeDecl;
+  EnumType: TEnumTypeDef;
   enumName: string;
 begin
   Next;     //Consume "("
-  EnumType := TEnumTypeDecl.Create(lex.GetSrcPos);
+  EnumType := TEnumTypeDef.Create(lex.GetSrcPos);
   while not HayError do begin
     if not ConsumeIdent(enumName, 'Se esperaba un identificador en el enumerado') then begin
       EnumType.Free;
@@ -880,19 +881,19 @@ begin
   Next;
   Result := EnumType;
 end;
-function TParserPas.ParseArrayTypeDef: TArrayTypeDecl;
+function TParserPas.ParseArrayTypeDef: TArrayTypeDef;
 {Procesa la declaración de tipos arreglo de la forma:
 ARRAY [<valor_ini>..<valor_fin>] OF <tipo>;
 Opcionalmente, y aunque no es estándar en Pascal, se acepta también la forma:
 [<valor_ini>..<valor_fin>] OF <tipo>;
 }
 var
-  ArrayType: TArrayTypeDecl;
+  ArrayType: TArrayTypeDef;
   LowExpr, HighExpr: TExpression;
   TypeDef: TTypeDef;
   TypeDefPos: TSrcPos;
 begin
-  ArrayType := TArrayTypeDecl.Create(lex.GetSrcPos);
+  ArrayType := TArrayTypeDef.Create(lex.GetSrcPos);
   if tokIdent = tiARRAY then Next;     //Consume ARRAY, pero se acepta también que vaya "["
   if tokIdent = tiBRACK_OP then begin    //Es un arreglo estático: ARRAY[1..3] OF ...
     Next;     //Consume "[".
@@ -947,11 +948,11 @@ begin
   end;
   Result := ArrayType;
 end;
-function TParserPas.ParseRecordTypeDef: TRecordTypeDecl;
-{Analiza la definición de un tipo RECORD y devuelve un objeto "TRecordTypeDecl" con la
+function TParserPas.ParseRecordTypeDef: TRecordTypeDef;
+{Analiza la definición de un tipo RECORD y devuelve un objeto "TRecordTypeDef" con la
 estructura del tipo analizado.
 Si se encuentra algún error, se devuelve NIL.}
-  procedure ParseVariantBlock(RecordType: TRecordTypeDecl);
+  procedure ParseVariantBlock(RecordType: TRecordTypeDef);
   {Analiza la parte variante de una declaración RECORD.}
   var
     selectorName: string;
@@ -1012,10 +1013,10 @@ Si se encuentra algún error, se devuelve NIL.}
     end;
   end;
 var
-  RecordType: TRecordTypeDecl;
+  RecordType: TRecordTypeDef;
 begin
   //Creamos el tipo. La posición TSrcPos no es relevante ahora.
-  RecordType := TRecordTypeDecl.Create(lex.GetSrcPos);
+  RecordType := TRecordTypeDef.Create(lex.GetSrcPos);
   Next;  //Toma el token "RECORD"
   //Explora los campos y los agrega a "RecordType".
   while not (HayError or (tokIdent = tiEND)) do begin
@@ -1048,7 +1049,7 @@ begin
   end;
   Exit(RecordType);
 end;
-function TParserPas.ParsePointerType: TPointerTypeDecl;
+function TParserPas.ParsePointerType: TPointerTypeDef;
 var
   TargetTypeName: string;
 begin
@@ -1056,11 +1057,11 @@ begin
   if not ConsumeIdent(TargetTypeName, 'Se esperaba el tipo al que apunta el puntero') then begin
     Exit(Nil);
   end;
-  Result := TPointerTypeDecl.Create(TargetTypeName, lex.GetSrcPos);
+  Result := TPointerTypeDef.Create(TargetTypeName, lex.GetSrcPos);
 end;
-function TParserPas.ParseProceduralType: TProcedTypeDecl;
+function TParserPas.ParseProceduralType: TProcedTypeDef;
 var
-  ProcType: TProcedTypeDecl;
+  ProcType: TProcedTypeDef;
   IsFunction: Boolean;
 begin
   // Verificar si es function
@@ -1069,7 +1070,7 @@ begin
   end else begin
     IsFunction := False;
   end;
-  ProcType := TProcedTypeDecl.Create(IsFunction, lex.GetSrcPos);
+  ProcType := TProcedTypeDef.Create(IsFunction, lex.GetSrcPos);
   Next;  //Consumir 'procedure' o 'function'.
   // Parsear parámetros (si hay paréntesis)
   ParseParameters(ProcType.Parameters);
@@ -1104,7 +1105,8 @@ begin
     tiIDENTIF: begin         //Alias: = integer, byte, TPersona, etc.
       TypeName := lex.token;
       Next;
-      Result := TAliasTypeDecl.Create(TypeName, SrcPos);
+      Result := TAliasTypeDef.Create(TypeName, SrcPos);
+
     end;
     tiLitNumbI: begin        //Subrango:  = 1..10
       Result := ParseSubrangeType;
@@ -1346,6 +1348,7 @@ begin
       end;
     end;
     Proc := TProcFunctDecl.Create(procName, SrcPos, True);
+    if isFunction then Proc.ReturnTypeRef := TTypeRef.Create(retTypeName, retTypePos);
     Proc.Parameters := Params;  //Puede ser NIL.
     Proc.IsAssembler := IsAssembler;
     declars.Add(Proc);
@@ -1353,6 +1356,7 @@ begin
     {Es declaración con cuerpo. Puede ser dentro del programa principal, dentro de la
     sección de implementación o dentro de un RECORD.}
     Proc := TProcFunctDecl.Create(procName, SrcPos, False);
+    if isFunction then Proc.ReturnTypeRef := TTypeRef.Create(retTypeName, retTypePos);
     Proc.Parameters := Params;  //Puede ser NIL.
     Proc.IsMethod := (location = locRecord);   //Identifica a los métodos
     if IsAssembler or (tokIdent=tiASM) then begin
@@ -1389,9 +1393,6 @@ begin
         declars.Add(Proc);
       end;
     end;
-  end;
-  if isFunction then begin
-    Proc.ReturnTypeRef := TTypeRef.Create(retTypeName, retTypePos);
   end;
 end;
 procedure TParserPas.ParseTypeDeclaration(declars: TASTNodeList);

@@ -78,7 +78,7 @@ type  //Declaraciones y clases base para el AST
   TCaseBranch = class;
   TProcFunctDecl = class;
   TTypeDef = class;
-  TRecordTypeDecl = class;
+  TRecordTypeDef = class;
   TTypeRef = class;
 
   // Listas genéricas especializadas
@@ -632,12 +632,12 @@ type  //Nodos de declaraciones
     FReturnTypeRef: TTypeRef;        //Referencia al tipo de retorno. También se usa como
                                      //bandera para identificar a las funciones.
     FIsMethod     : Boolean;         //Bandera para indicar que es método.
-    FRecordType   : TRecordTypeDecl; //Referencia al tipo RECORD, cuando es un método.
+    FRecordType   : TRecordTypeDef; //Referencia al tipo RECORD, cuando es un método.
   public
     property ReturnTypeRef: TTypeRef read FReturnTypeRef write FReturnTypeRef;
     function IsFunction: Boolean; inline;
     property IsMethod: Boolean read FIsMethod write FIsMethod;
-    property RecordType: TRecordTypeDecl read FRecordType write FRecordType;
+    property RecordType: TRecordTypeDef read FRecordType write FRecordType;
   public  //Inicialización y depuración
     constructor Create(const AName: string; const ASrcPos: TSrcPos; AIsForward: Boolean);
     destructor Destroy; override;
@@ -683,6 +683,7 @@ type  //Definiciones previas para declaraciones de tipos
       FTypeName: string;  //Nombre del tipo (para tipos simples o alias)
     public
       property TypeName: string read FTypeName write FTypeName;
+//      function HasSubtypes: boolean;
     public  //Inicialización y depuración
       constructor Create(ANodeType: TASTNodeType; const ATypeName: string;
           const ASrcPos: TSrcPos);
@@ -731,13 +732,26 @@ type  //Nodos de declaraciones de tipos
   //Declaración de tipos pedefinidos (integer, byte, boolean, etc.)
   {Este nodo representa a una supuesta definición de los tipos básicos, que se supone ya
   están definidos. No se creará por código.}
-  TSimpleTypeDecl = class(TTypeDef)
+  TSimpleTypeDef = class(TTypeDef)
   public  //Inicialización y depuración
     constructor Create(const ATypeName: string; const ASrcPos: TSrcPos);
     function ToString: string; override;
   end;
+  //Alias (type TEdad = integer)
+  TAliasTypeDef = class(TTypeDef)
+  private
+    FBaseTypeName: string;
+    FBaseTypeDef: TTypeDef;
+  public
+    property BaseTypeName: string read FBaseTypeName;
+    property BaseTypeDef: TTypeDef read FBaseTypeDef write FBaseTypeDef;
+  public  //Inicialización y depuración
+    function ToString: string; override;
+    constructor Create(const ABaseTypeName: string; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+  end;
   //Subrango (1..10, 'a'..'z')
-  TSubranTypeDecl = class(TTypeDef)
+  TSubranTypeDef = class(TTypeDef)
   private
     FLowExpr: TExpression;    //Límite inferior del rango
     FHighExpr: TExpression;   //Límite superior del rango
@@ -754,7 +768,7 @@ type  //Nodos de declaraciones de tipos
     function ToString: string; override;
   end;
   //Enumerado (Rojo, Verde, Azul)
-  TEnumTypeDecl = class(TTypeDef)
+  TEnumTypeDef = class(TTypeDef)
   private
     FValues: TStringList;  // Lista de nombres de valores
   public
@@ -765,21 +779,8 @@ type  //Nodos de declaraciones de tipos
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
   end;
-  //Alias (type TEdad = integer)
-  TAliasTypeDecl = class(TTypeDef)
-  private
-    FBaseTypeName: string;
-    FBaseTypeDef: TTypeDef;
-  public
-    property BaseTypeName: string read FBaseTypeName;
-    property BaseTypeDef: TTypeDef read FBaseTypeDef write FBaseTypeDef;
-  public  //Inicialización y depuración
-    function ToString: string; override;
-    constructor Create(const ABaseTypeName: string; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-  end;
   //Arreglo (array[1..10] of TPersona)
-  TArrayTypeDecl = class(TTypeDef)
+  TArrayTypeDef = class(TTypeDef)
   private
     FIndexRanges: TArrayRangeList;  //Dimensiones del arreglo
     FElemTypeRef: TTypeRef;  //Referencia al tipo de elemento del arreglo.
@@ -793,7 +794,7 @@ type  //Nodos de declaraciones de tipos
     function ToString: string; override;
   end;
   // Registro (record ... end)
-  TRecordTypeDecl = class(TTypeDef)
+  TRecordTypeDef = class(TTypeDef)
   private
   public
     Fields: TASTNodeList;         //Declaraciones de variables.
@@ -807,7 +808,7 @@ type  //Nodos de declaraciones de tipos
   end;
   // Puntero (^TLista, ^integer)
   // ============================================================
-  TPointerTypeDecl = class(TTypeDef)
+  TPointerTypeDef = class(TTypeDef)
   private
     FTargetTypeName: string;
     FTargetTypeDef: TTypeDef;  // Para tipos definidos inline
@@ -820,7 +821,7 @@ type  //Nodos de declaraciones de tipos
     function ToString: string; override;
   end;
   // Tipo procedural: procedure(a: integer; b: integer);
-  TProcedTypeDecl = class(TTypeDef)
+  TProcedTypeDef = class(TTypeDef)
   private
     FIsFunction: Boolean;        // True = función, False = procedimiento
   public
@@ -1782,30 +1783,30 @@ begin
 end;
 {$endregion}
 {$region "Nodos de declaraciones de tipos"}
-// TSimpleTypeDecl
-constructor TSimpleTypeDecl.Create(const ATypeName: string; const ASrcPos: TSrcPos);
+// TSimpleTypeDef
+constructor TSimpleTypeDef.Create(const ATypeName: string; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntSimpleTypeDecl, ATypeName, ASrcPos);
 end;
-function TSimpleTypeDecl.ToString: string;
+function TSimpleTypeDef.ToString: string;
 begin
   Result := Format('SimpleType: %s', [FTypeName]);
 end;
-// TSubranTypeDecl
-constructor TSubranTypeDecl.Create(ALowExpr, AHighExpr: TExpression;
+// TSubranTypeDef
+constructor TSubranTypeDef.Create(ALowExpr, AHighExpr: TExpression;
   const ASrcPos: TSrcPos);
 begin
   inherited Create(ntSubranTypeDecl, '', ASrcPos);
   FLowExpr := ALowExpr;
   FHighExpr := AHighExpr;
 end;
-destructor TSubranTypeDecl.Destroy;
+destructor TSubranTypeDef.Destroy;
 begin
   FLowExpr.Free;
   FHighExpr.Free;
   inherited;
 end;
-function TSubranTypeDecl.ToString: string;
+function TSubranTypeDef.ToString: string;
 begin
   Result := Format('Subrange: %s..%s',
                    [FLowExpr.ToString, FHighExpr.ToString]);
@@ -1814,46 +1815,46 @@ begin
   else if FBaseType <> nil then
     Result := Result + Format(' base %s', [FBaseType.TypeName]);
 end;
-// TEnumTypeDecl
-procedure TEnumTypeDecl.AddValue(const Value: string);
+// TEnumTypeDef
+procedure TEnumTypeDef.AddValue(const Value: string);
 begin
   FValues.Add(Value);
 end;
-function TEnumTypeDecl.ToString: string;
+function TEnumTypeDef.ToString: string;
 begin
   Result := Format('Enum: (%s)', [FValues.CommaText]);
 end;
-constructor TEnumTypeDecl.Create(const ASrcPos: TSrcPos);
+constructor TEnumTypeDef.Create(const ASrcPos: TSrcPos);
 begin
   inherited Create(ntEnumTypeDecl, '', ASrcPos);
   FValues := TStringList.Create;
 end;
-destructor TEnumTypeDecl.Destroy;
+destructor TEnumTypeDef.Destroy;
 begin
   FValues.Free;
   inherited;
 end;
-// TAliasTypeDecl
-function TAliasTypeDecl.ToString: string;
+// TAliasTypeDef
+function TAliasTypeDef.ToString: string;
 begin
   Result := Format('Alias: %s = %s', [FTypeName, FBaseTypeName]);
 end;
-constructor TAliasTypeDecl.Create(const ABaseTypeName: string;
+constructor TAliasTypeDef.Create(const ABaseTypeName: string;
   const ASrcPos: TSrcPos);
 begin
   inherited Create(ntAliasTypeDecl, '', ASrcPos);
   FBaseTypeName := ABaseTypeName;
 end;
-destructor TAliasTypeDecl.Destroy;
+destructor TAliasTypeDef.Destroy;
 begin
   inherited Destroy;
 end;
-// TArrayTypeDecl
-procedure TArrayTypeDecl.AddRange(Range: TArrayRange);
+// TArrayTypeDef
+procedure TArrayTypeDef.AddRange(Range: TArrayRange);
 begin
   FIndexRanges.Add(Range);
 end;
-constructor TArrayTypeDecl.Create(const ASrcPos: TSrcPos);
+constructor TArrayTypeDef.Create(const ASrcPos: TSrcPos);
 begin
   inherited Create(ntArrayTypeDecl, '', ASrcPos);
   FIndexRanges := TArrayRangeList.Create(True);
@@ -1861,57 +1862,57 @@ begin
   este nodo es una función}
   //FElemTypeRef := nil;
 end;
-destructor TArrayTypeDecl.Destroy;
+destructor TArrayTypeDef.Destroy;
 begin
   FIndexRanges.Free;
   FElemTypeRef.Free;   //Lo destruye, si se ha creado.
   inherited;
 end;
-function TArrayTypeDecl.ToString: string;
+function TArrayTypeDef.ToString: string;
 var
   typName: String;
 begin
   Result := Format('ArrayType: [%d dims] of %s',
                    [FIndexRanges.Count, FElemTypeRef.ToString]);
 end;
-// TRecordTypeDecl
-constructor TRecordTypeDecl.Create(const ASrcPos: TSrcPos);
+// TRecordTypeDef
+constructor TRecordTypeDef.Create(const ASrcPos: TSrcPos);
 begin
   inherited Create(ntRecordTypeDecl, '', ASrcPos);
   Fields := TASTNodeList.Create(True);
   VarSelector := Nil;   //No se usa por defecto
   Branches := Nil;      //No se usa por defecto
 end;
-destructor TRecordTypeDecl.Destroy;
+destructor TRecordTypeDef.Destroy;
 begin
   Branches.Free;     //Destruye si se ha usado.
   VarSelector.Free;  //Destruye si se ha usado.
   Fields.Destroy;
   inherited;
 end;
-function TRecordTypeDecl.ToString: string;
+function TRecordTypeDef.ToString: string;
 begin
   Result := Format('Record: %d fields', [Fields.Count]);
 end;
-// TPointerTypeDecl
-constructor TPointerTypeDecl.Create(const ATargetTypeName: string;
+// TPointerTypeDef
+constructor TPointerTypeDef.Create(const ATargetTypeName: string;
   const ASrcPos: TSrcPos);
 begin
   inherited Create(ntPointerTypeDecl, '', ASrcPos);
   FTargetTypeName := ATargetTypeName;
   FTargetTypeDef := nil;
 end;
-destructor TPointerTypeDecl.Destroy;
+destructor TPointerTypeDef.Destroy;
 begin
   FTargetTypeDef.Free;
   inherited;
 end;
-function TPointerTypeDecl.ToString: string;
+function TPointerTypeDef.ToString: string;
 begin
   Result := Format('Pointer: ^%s', [FTargetTypeName]);
 end;
-// TProcedTypeDecl
-constructor TProcedTypeDecl.Create(AIsFunction: Boolean; const ASrcPos: TSrcPos);
+// TProcedTypeDef
+constructor TProcedTypeDef.Create(AIsFunction: Boolean; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntProcedTypeDecl, '', ASrcPos);
   FIsFunction := AIsFunction;
@@ -1920,18 +1921,18 @@ begin
   ReturnTypeName := '';
   ReturnTypeDef := nil;
 end;
-destructor TProcedTypeDecl.Destroy;
+destructor TProcedTypeDef.Destroy;
 begin
   Parameters.Free;
   ReturnTypeDef.Free;   //Destruye si existe
   inherited;
 end;
-procedure TProcedTypeDecl.AddParameter(Param: TVarDecl);
+procedure TProcedTypeDef.AddParameter(Param: TVarDecl);
 begin
   Param.IsParameter := True;
   Parameters.Add(Param);
 end;
-function TProcedTypeDecl.ToString: string;
+function TProcedTypeDef.ToString: string;
 begin
   if FIsFunction then
     Result := Format('FunctionType: (%d params) returns %s',
