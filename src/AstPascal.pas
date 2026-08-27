@@ -645,6 +645,22 @@ type  //Nodos de declaraciones
     destructor Destroy; override;
     function ToString: string; override;
   end;
+  //Clase que implementa la declaración de tipos: <Name> = <Definit>
+  TTypeDecl = class(TASTNode)
+  private
+    //Nombre del tipo: TYPE <nombre_del_tipo> = ...
+    FName: string;
+    {Definición del tipo. También se podría usar un TTypeRef, pero complicaría más el
+    manejo. Además, se espera que la declaración de un tipo contenga siempre una
+    definición, aún cuando se trate de un Alias}
+    FDefinit: TTypeDef;
+  public
+    property Name: string read FName write FName;
+    property Definit: TTypeDef read FDefinit write FDefinit;
+    constructor Create(const ATypeName: string; const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    function ToString: string; override;
+  end;
 type  //Definiciones previas para declaraciones de tipos
   {Clase para representar a las referencias a tipos. Normalmente, en el código fuente, las
   referencias a tipos son identificadores, como "integer" o "TMitipo", pero pueden ser
@@ -711,22 +727,6 @@ type  //Definiciones previas para declaraciones de tipos
           const ASrcPos: TSrcPos);
       function ToString: string; override;
     end;
-  //Clase que implementa la declaración de tipos: <Name> = <Definit>
-  TTypeDecl = class(TASTNode)
-  private
-    //Nombre del tipo: TYPE <nombre_del_tipo> = ...
-    FName: string;
-    {Definición del tipo. También se podría usar un TTypeRef, pero complicaría más el
-    manejo. Además, se espera que la declaración de un tipo contenga siempre una
-    definición, aún cuando se trate de un Alias}
-    FDefinit: TTypeDef;
-  public
-    property Name: string read FName write FName;
-    property Definit: TTypeDef read FDefinit write FDefinit;
-    constructor Create(const ATypeName: string; const ASrcPos: TSrcPos);
-    destructor Destroy; override;
-    function ToString: string; override;
-  end;
 
   // Rango de arreglo (1..10, 'a'..'z', etc.)
   TArrayRange = class(TASTNode)
@@ -779,11 +779,14 @@ type  //Nodos de definiciones de tipos
   //Alias (type TEdad = integer)
   TAliasTypeDef = class(TTypeDef)
   private
-    FBaseTypeRef: TTypeRef;  //Referencia al tipo base.
+    {Referencia al tipo base.
+    Este es el tipo referenciado directamente: <tipo_alias> = <tipo_base>.
+    Solo es necesario una cadena, porque esta definición es de tipo alias}
+    FBaseType: String;   //Nombre del tipo base (ej: 'integer', 'TPersona').
   public
-    property BaseTypeRef: TTypeRef read FBaseTypeRef write FBaseTypeRef;
+    property BaseType: String read FBaseType write FBaseType;
   public  //Inicialización y depuración
-    constructor Create(const ATypeName: string; const ASrcPos: TSrcPos);
+    constructor Create(ABaseType: String; const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
   end;
@@ -1847,18 +1850,18 @@ begin
   Result := Format('SimpleType: %s', [FTypeName]);
 end;
 // TAliasTypeDef
-constructor TAliasTypeDef.Create(const ATypeName: string; const ASrcPos: TSrcPos);
+constructor TAliasTypeDef.Create(ABaseType: String; const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntAliasTypeDef, ATypeName, ASrcPos);
+  inherited Create(ntAliasTypeDef, '', ASrcPos);
+  FBaseType := ABaseType;
 end;
 destructor TAliasTypeDef.Destroy;
 begin
-  FBaseTypeRef.Free;         //Destruye si se ha creado (Lo esperado).
   inherited Destroy;
 end;
 function TAliasTypeDef.ToString: string;
 begin
-  Result := Format('Alias: %s = %s', [FTypeName, FBaseTypeRef.Name]);
+  Result := Format('Alias: %s = %s', [FTypeName, FBaseType]);
 end;
 // TSubranTypeDef
 constructor TSubranTypeDef.Create(ALowExpr, AHighExpr: TExpression;

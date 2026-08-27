@@ -1098,14 +1098,14 @@ la estructura del tipo analizado.
 Si se produce algún error, devuelve NIL.}
 var
   SrcPos: TSrcPos;
-  TypeName: string;
+  BaseType: string;
 begin
   SrcPos := lex.GetSrcPos;
   case tokIdent of
-    tiIDENTIF: begin         //Alias: = integer, byte, TPersona, etc.
-      TypeName := lex.token;
+    tiIDENTIF: begin         //integer, byte, TPersona, etc.
+      BaseType := lex.token; //Nombre del tipo base
       Next;
-      Result := TAliasTypeDef.Create(TypeName, SrcPos);
+      Result := TAliasTypeDef.Create(BaseType, SrcPos);
     end;
     tiLitNumbI: begin        //Subrango:  = 1..10
       Result := ParseSubrangeType;
@@ -1421,7 +1421,7 @@ begin
       TypeDecl.Destroy;
       Break;
     end;
-    TypeDecl.Definit.TypeName := TypeName;  //Guarda una copia del combre en su definción.
+    TypeDecl.Definit.TypeName := TypeName;  //Guarda una copia del nombre en su definción.
     TypeDecl.Definit.Parent := TypeDecl;  //Guarda referencia a su declaracón padre
     declars.Add(TypeDecl);      //Agrega la declaración
     if tokIdent = tiSEMIC then  // ";"

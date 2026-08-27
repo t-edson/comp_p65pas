@@ -109,9 +109,9 @@ type
     procedure EnterWithScope(RecordVar: TExpression);
     procedure ExitWithScope;
   private  //Resolución de tipos
+    function GetFundamentalType(TypeDef: TTypeDef): TTypeDef;
     function ResolveType(const TypeName: string): TTypeDef;
     function ResolveTypeRef(TypeRef: TTypeRef): TTypeDef;
-    function ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
     function GetTypeOf(Expr: TExpression): TTypeDef;
     function AreTypesCompatible(T1, T2: TTypeDef): Boolean;
     function IsNumericType(TypeDef: TTypeDef): Boolean;
@@ -441,6 +441,25 @@ begin
 end;
 {$endregion}
 {$region "Resolución de tipos"}
+function TSemanticAnalyzer.GetFundamentalType(TypeDef: TTypeDef): TTypeDef;
+{Devuelve el tipo final de una definición de tipo. Funciona de la siguiente forma:
+- Para los tipos de sistema (integer, byte, ...) devuelve el mismo tipo.
+- Para las definiciones INLINE o estructurados (array of .., o record ... end) devuelve
+el mismo tipo.
+- En el caso de un tipo alias, debe devolver el tipo final (un tipo de sistema o una
+definición INLINE).
+}
+var
+  AliasTypeDef: TAliasTypeDef;
+begin
+  //Si es un alias, resolver el tipo base
+  if TypeDef.NodeType = ntAliasTypeDef then begin
+    AliasTypeDef := TAliasTypeDef(TypeDef);
+    Result := ResolveType(AliasTypeDef.BaseType);
+  end else begin
+    Result := TypeDef;
+  end;
+end;
 function TSemanticAnalyzer.ResolveType(const TypeName: string): TTypeDef;
 {Resuelve un tipo por su nombre en la tabla de símbolos}
 var
@@ -468,7 +487,7 @@ begin
       Result := SymType.DataType;
       //Si es un alias, resolvemos el tipo base
       if Result.NodeType = ntAliasTypeDef then begin
-        Result := ResolveTypeDef(Result);  //*** Podría optimizarse
+        Result := GetFundamentalType(Result);  //*** Podría optimizarse
       end;
       TypeRef.Definit := Result;
     end else begin
@@ -482,25 +501,6 @@ begin
   end else begin   //No debería pasar
     //Error('Tipo no especificado.', TypeRef.SrcPos);
     Result := Nil;
-  end;
-end;
-function TSemanticAnalyzer.ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
-{Resuelve el tipo de una definición de tipo, considerando que puede ser un alias.
-}
-var
-  AliasTypeDef: TAliasTypeDef;
-begin
-  //Si es un alias, resolver el tipo base
-  if TypeDef.NodeType = ntAliasTypeDef then begin
-    AliasTypeDef := TAliasTypeDef(TypeDef);
-    if AliasTypeDef.BaseTypeRef.Definit <> nil then
-      Result := ResolveTypeDef(AliasTypeDef.BaseTypeRef.Definit)
-    else if AliasTypeDef.BaseTypeRef.Name <> '' then
-      Result := ResolveType(AliasTypeDef.BaseTypeRef.Name)
-    else
-      Result := TypeDef;
-  end else begin
-    Result := TypeDef;
   end;
 end;
 function TSemanticAnalyzer.GetTypeOf(Expr: TExpression): TTypeDef;
@@ -821,7 +821,7 @@ begin
     Error('Tipo duplicado: ' + TypeDef.TypeName, TypeDef.SrcPos);
     Exit;
   end;
-  //Reggistra e nombre del tipo
+  //Registra e nombre del tipo
   Sym := TSymbol.Create(TypeDef.TypeName, skType);
   Sym.DataType := TypeDef;
   Sym.Declaration := TypeDef;
@@ -951,10 +951,10 @@ begin
   // Verificar definiciones recursivas
   if TypeDef.NodeType = ntAliasTypeDef then begin
     AliasTypeDef := TAliasTypeDef(TypeDef);
-    if AliasTypeDef.BaseTypeRef.Name <> '' then begin
-      BaseType := ResolveType(AliasTypeDef.BaseTypeRef.Name);
+    if AliasTypeDef.BaseType <> '' then begin
+      BaseType := ResolveType(AliasTypeDef.BaseType);
       if BaseType = nil then
-        Error('Tipo base desconocido: ' + AliasTypeDef.BaseTypeRef.Name, TypeDef.SrcPos);
+        Error('Tipo base desconocido: ' + AliasTypeDef.BaseType, TypeDef.SrcPos);
     end;
   end;
 end;
