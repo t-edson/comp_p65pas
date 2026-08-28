@@ -109,8 +109,8 @@ type
     procedure EnterWithScope(RecordVar: TExpression);
     procedure ExitWithScope;
   private  //Resolución de tipos
-    function GetFundamentalType(TypeDef: TTypeDef): TTypeDef;
     function ResolveType(const TypeName: string): TTypeDef;
+    function GetFundamentalType(TypeDef: TTypeDef): TTypeDef;
     function ResolveTypeRef(TypeRef: TTypeRef): TTypeDef;
     function GetTypeOf(Expr: TExpression): TTypeDef;
     function AreTypesCompatible(T1, T2: TTypeDef): Boolean;
@@ -118,10 +118,10 @@ type
     function IsOrdinalType(TypeDef: TTypeDef): Boolean;
   private  //Registro de símbolos
     procedure RegisterDeclarations(Decls: TASTNodeList);
-    procedure RegisterProcDecl(Proc: TProcFunctDecl);
+    procedure RegisterProcDecl(ProcFunctDecl: TProcFunctDecl);
     procedure RegisterVarDecl(VarDecl: TVarDecl);
     procedure RegisterConstDecl(ConstDecl: TConstDecl);
-    procedure RegisterTypeDef(TypeDef: TTypeDef);
+    procedure RegisterTypeDecl(TypeDecl: TTypeDecl);
   private  //Visitantes de declaraciones
     procedure VisitVarDecl(VarDecl: TVarDecl);
     procedure VisitConstDecl(ConstDecl: TConstDecl);
@@ -441,6 +441,19 @@ begin
 end;
 {$endregion}
 {$region "Resolución de tipos"}
+function TSemanticAnalyzer.ResolveType(const TypeName: string): TTypeDef;
+{Resuelve un tipo por su nombre en la tabla de símbolos}
+var
+  Sym: TSymbol;
+begin
+  Sym := FCurrentScope.LookupRecursive(UpperCase(TypeName));
+  if Sym = nil then    //No existe
+    Result := nil
+  else if Sym.Kind = skType then  //Es un tipo
+    Result := Sym.DataType
+  else                 //Es otra cosa
+    Result := nil;
+end;
 function TSemanticAnalyzer.GetFundamentalType(TypeDef: TTypeDef): TTypeDef;
 {Devuelve el tipo final de una definición de tipo. Funciona de la siguiente forma:
 - Para los tipos de sistema (integer, byte, ...) devuelve el mismo tipo.
@@ -459,19 +472,6 @@ begin
   end else begin
     Result := TypeDef;
   end;
-end;
-function TSemanticAnalyzer.ResolveType(const TypeName: string): TTypeDef;
-{Resuelve un tipo por su nombre en la tabla de símbolos}
-var
-  Sym: TSymbol;
-begin
-  Sym := FCurrentScope.LookupRecursive(UpperCase(TypeName));
-  if Sym = nil then    //No existe
-    Result := nil
-  else if Sym.Kind = skType then  //Es un tipo
-    Result := Sym.DataType
-  else                 //Es otra cosa
-    Result := nil;
 end;
 function TSemanticAnalyzer.ResolveTypeRef(TypeRef: TTypeRef): TTypeDef;
 {Resuelve el tipo de un objeto TTypeRef en la tabla de símbolos. También actualiza el
@@ -759,7 +759,7 @@ begin
   Sym.Declaration := ConstDecl;
   FCurrentScope.Declare(Sym);
 end;
-procedure TSemanticAnalyzer.RegisterProcDecl(Proc: TProcFunctDecl);
+procedure TSemanticAnalyzer.RegisterProcDecl(ProcFunctDecl: TProcFunctDecl);
 {Registra las declaraciones de procedimientos/funciones, pero sin analizar el cuerpo, aún.}
 var
   Sym: TSymbol;
@@ -767,64 +767,64 @@ var
   Param: TVarDecl;
 begin
   //Verifica si es una declaración duplicada
-  Sym := FCurrentScope.Lookup(Proc.Name);
+  Sym := FCurrentScope.Lookup(ProcFunctDecl.Name);
   if Sym <> nil then begin
-    if Sym.IsForward and not Proc.IsForward then begin
+    if Sym.IsForward and not ProcFunctDecl.IsForward then begin
       //Es la implementación de un FORWARD.
       //Verificamos que los parámetros coincidan.
-      if not CompareParameters(Sym, Proc) then begin
-        Error('La implementación de ' + Proc.Name +
-              ' no coincide con la declaración FORWARD', Proc.SrcPos);
+      if not CompareParameters(Sym, ProcFunctDecl) then begin
+        Error('La implementación de ' + ProcFunctDecl.Name +
+              ' no coincide con la declaración FORWARD', ProcFunctDecl.SrcPos);
         Exit;
       end;
       //Actualizar el símbolo con la implementación
-      Sym.Declaration := Proc;
+      Sym.Declaration := ProcFunctDecl;
       Sym.IsForward := False;
       Exit;
     end else begin
       //Duplicado real
-      Error('Procedimiento/Función duplicado: ' + Proc.Name, Proc.SrcPos);
+      Error('Procedimiento/Función duplicado: ' + ProcFunctDecl.Name, ProcFunctDecl.SrcPos);
       Exit;
     end;
     end;
   // Crear símbolo
-  if Proc.IsFunction then
-    Sym := TSymbol.Create(Proc.Name, skFunction)
+  if ProcFunctDecl.IsFunction then
+    Sym := TSymbol.Create(ProcFunctDecl.Name, skFunction)
   else
-    Sym := TSymbol.Create(Proc.Name, skProcedure);
-  Sym.Declaration := Proc;
-  Sym.IsForward := Proc.IsForward;
+    Sym := TSymbol.Create(ProcFunctDecl.Name, skProcedure);
+  Sym.Declaration := ProcFunctDecl;
+  Sym.IsForward := ProcFunctDecl.IsForward;
   // Registrar parámetros (solo para validación, no se declaran en el ámbito global)
-  if Proc.Parameters <> nil then begin
+  if ProcFunctDecl.Parameters <> nil then begin
     Sym.Parameters := TASTNodeList.Create(False);   //No debe liberar los nodos parámetro, porque ya los hace el AST.
-    for i := 0 to Proc.Parameters.Count - 1 do begin
-      Param := TVarDecl(Proc.Parameters[i]);
+    for i := 0 to ProcFunctDecl.Parameters.Count - 1 do begin
+      Param := TVarDecl(ProcFunctDecl.Parameters[i]);
       Sym.Parameters.Add(Param);
     end;
   end;
   //Tipo de retorno para funciones
-  if Proc.IsFunction then begin
-    Sym.ReturnType := ResolveTypeRef(Proc.ReturnTypeRef);
+  if ProcFunctDecl.IsFunction then begin
+    Sym.ReturnType := ResolveTypeRef(ProcFunctDecl.ReturnTypeRef);
     if Sym.ReturnType = nil then
-      Error('Tipo de retorno desconocido para: ' + Proc.Name, Proc.ReturnTypeRef.SrcPos);
+      Error('Tipo de retorno desconocido para: ' + ProcFunctDecl.Name, ProcFunctDecl.ReturnTypeRef.SrcPos);
   end;
   FCurrentScope.Declare(Sym);
 end;
-procedure TSemanticAnalyzer.RegisterTypeDef(TypeDef: TTypeDef);
+procedure TSemanticAnalyzer.RegisterTypeDecl(TypeDecl: TTypeDecl);
 var
   Sym: TSymbol;
 begin
-  if TypeDef.TypeName = '' then
+  if TypeDecl.Name = '' then
     Exit; // Tipo anónimo (inline)
   // Verificar duplicado
-  if FCurrentScope.Lookup(TypeDef.TypeName) <> nil then begin
-    Error('Tipo duplicado: ' + TypeDef.TypeName, TypeDef.SrcPos);
+  if FCurrentScope.Lookup(TypeDecl.Name) <> nil then begin
+    Error('Tipo duplicado: ' + TypeDecl.Name, TypeDecl.SrcPos);
     Exit;
   end;
   //Registra e nombre del tipo
-  Sym := TSymbol.Create(TypeDef.TypeName, skType);
-  Sym.DataType := TypeDef;
-  Sym.Declaration := TypeDef;
+  Sym := TSymbol.Create(TypeDecl.Name, skType);
+  Sym.DataType := TypeDecl.Definit;
+  Sym.Declaration := TypeDecl;
   FCurrentScope.Declare(Sym);
 end;
 procedure TSemanticAnalyzer.RegisterDeclarations(Decls: TASTNodeList);
@@ -843,10 +843,7 @@ begin
       ntProcFunctDecl:
         RegisterProcDecl(TProcFunctDecl(Node));
       ntTypeDecl:
-        RegisterTypeDef(TTypeDecl(Node).Definit);
-      //ntSimpleTypeDef, ntSubranTypeDef, ntArrayTypeDef, ntEnumTypeDef,
-      //ntRecordTypeDef, ntPointerTypeDef, ntAliasTypeDef, ntProcedTypeDef:
-      //  RegisterTypeDef(TTypeDef(Node));
+        RegisterTypeDecl(TTypeDecl(Node));
     end;
   end;
 end;
@@ -947,7 +944,7 @@ var
   BaseType: TTypeDef;
   AliasTypeDef: TAliasTypeDef;
 begin
-  // Ya fue registrada en RegisterTypeDef
+  // Ya fue registrada en RegisterTypeDecl
   // Verificar definiciones recursivas
   if TypeDef.NodeType = ntAliasTypeDef then begin
     AliasTypeDef := TAliasTypeDef(TypeDef);
@@ -966,9 +963,12 @@ var
 begin
   //Verifica tipo de elementos
   ElemType := ResolveTypeRef(ArrayType.ElemTypeRef);
-  if ElemType = nil then
+  if ElemType = nil then begin
     Error('Tipo de elemento desconocido: ' + ArrayType.ElemTypeRef.Name, ArrayType.ElemTypeRef.SrcPos);
-  //*** Se debe verificar si el tipo ElemType tiene subtipos que deben visitarse también.
+  end else begin
+    //*** Se debe verificar si el tipo ElemType tiene subtipos que deben visitarse también.
+    VisitNode(ElemType);  // ← Analizar tipos anidados
+  end;
 
   //Verifica rangos de índices
   for i := 0 to ArrayType.IndexRanges.Count - 1 do begin
@@ -1630,8 +1630,7 @@ begin
   {Analizar las declaraciones de tipos para registrar sus símbolos (como los valores de
   los enumerados).}
   for Node in Prog.Declarations do begin
-    if Node.NodeType in [ntEnumTypeDef, ntRecordTypeDef, ntArrayTypeDef, ntSubranTypeDef,
-      ntPointerTypeDef, ntAliasTypeDef, ntProcedTypeDef] then begin
+    if Node.NodeType = ntTypeDecl then begin
         VisitNode(Node);
     end;
   end;
