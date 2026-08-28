@@ -76,6 +76,9 @@ type
   end;
 
   //Analizador semántico
+
+  { TSemanticAnalyzer }
+
   TSemanticAnalyzer = class
   private
     msg: TMessageManager;    //Referencia al gestor de mensajes
@@ -88,6 +91,7 @@ type
     FCurrentUnit: TUnit;
     FInWith: Boolean;
     FWithScope: TScope;
+    procedure VisitTypeDecl(TypeDecl: TTypeDecl);
   public   //Atributos publicos
     property Errors: Integer read FErrors;
     property Warnings: Integer read FWarnings;
@@ -122,10 +126,11 @@ type
     procedure RegisterVarDecl(VarDecl: TVarDecl);
     procedure RegisterConstDecl(ConstDecl: TConstDecl);
     procedure RegisterTypeDecl(TypeDecl: TTypeDecl);
-  private  //Visitantes de declaraciones
+  private  //Visitantes de declaraciones y definiciones de tipos
     procedure VisitVarDecl(VarDecl: TVarDecl);
     procedure VisitConstDecl(ConstDecl: TConstDecl);
-    procedure VisitProcDecl(Proc: TProcFunctDecl);
+    procedure VisitProcDecl(ProcFunctDecl: TProcFunctDecl);
+    //Definiciones de tipos
     procedure VisitTypeDef(TypeDef: TTypeDef);
     procedure VisitArrayTypeDef(ArrayType: TArrayTypeDef);
     procedure VisitRecordTypeDef(RecordType: TRecordTypeDef);
@@ -255,7 +260,6 @@ end;
 procedure TScope.Clear;
 var
   i: Integer;
-  Child: TScope;
 begin
   //Liberar símbolos
   for i := 0 to FSymbols.Count - 1 do begin
@@ -478,7 +482,7 @@ function TSemanticAnalyzer.ResolveTypeRef(TypeRef: TTypeRef): TTypeDef;
 campo "Declaration" del TTypeRef.
 Si no logra resolver el tipo, devuelve NIL.}
 var
-  Sym, SymType: TSymbol;
+  SymType: TSymbol;
 begin
   if TypeRef.Name <> '' then begin
     //Busca el tipo por nombre
@@ -878,7 +882,7 @@ begin
     // (implementación simplificada)
   end;
 end;
-procedure TSemanticAnalyzer.VisitProcDecl(Proc: TProcFunctDecl);
+procedure TSemanticAnalyzer.VisitProcDecl(ProcFunctDecl: TProcFunctDecl);
 var
   i: Integer;
   Param: TVarDecl;
@@ -887,15 +891,15 @@ var
   ParamType: TTypeDef;
   Field: TASTNode;
 begin
-  if Proc.IsForward then Exit;
+  if ProcFunctDecl.IsForward then Exit;
   OldProcedure := FCurrentProcedure;
-  FCurrentProcedure := Proc;
+  FCurrentProcedure := ProcFunctDecl;
   EnterScope;
   try
     // Registrar parámetros en el ámbito local
-    if Proc.Parameters <> nil then begin
-      for i := 0 to Proc.Parameters.Count - 1 do begin
-        Param := TVarDecl(Proc.Parameters[i]);
+    if ProcFunctDecl.Parameters <> nil then begin
+      for i := 0 to ProcFunctDecl.Parameters.Count - 1 do begin
+        Param := TVarDecl(ProcFunctDecl.Parameters[i]);
         // Resolver tipo del parámetro
         ParamType := ResolveTypeRef(Param.TypeRef);
         if ParamType = nil then
@@ -908,14 +912,14 @@ begin
       end;
     end;
     //Validamos si estamos en un método
-    if Proc.IsMethod and (Proc.RecordType <> nil) then begin
+    if ProcFunctDecl.IsMethod and (ProcFunctDecl.RecordType <> nil) then begin
       //Es un método de RECORD. Registramos "Self".
       SelfSym := TSymbol.Create('SELF', skParameter);
-      SelfSym.DataType := Proc.RecordType;
+      SelfSym.DataType := ProcFunctDecl.RecordType;
       SelfSym.IsSelf := True;
       FCurrentScope.Declare(SelfSym);
       //Registramos los campos del record como accesibles
-      for Field in Proc.RecordType.Fields do begin
+      for Field in ProcFunctDecl.RecordType.Fields do begin
         if Field is TVarDecl then begin
           FieldSym := TSymbol.Create(TVarDecl(Field).Name, skField);
           FieldSym.DataType := ResolveType(TVarDecl(Field).TypeRef.Name);
@@ -925,18 +929,27 @@ begin
       end;
     end;
     // Analizar declaraciones locales
-    if Proc.Declarations <> nil then begin
-      RegisterDeclarations(Proc.Declarations);
+    if ProcFunctDecl.Declarations <> nil then begin
+      RegisterDeclarations(ProcFunctDecl.Declarations);
     end;
     // Analizar el cuerpo
-    if Proc.Body <> nil then begin
-      VisitBlock(Proc.Body);
+    if ProcFunctDecl.Body <> nil then begin
+      VisitBlock(ProcFunctDecl.Body);
     end;
   finally
     ExitScope;
     FCurrentProcedure := OldProcedure;
   end;
 end;
+procedure TSemanticAnalyzer.VisitTypeDecl(TypeDecl: TTypeDecl);
+{Visitante para las declaraciones de tipos. Lo que nos interesa aquí, es visitar las
+definiciones de los tipos, porque la valiación de duplicidad en los nombres, ya la hizo
+RegisterTypeDecl().}
+begin
+  //Definiciones de Tipos
+  VisitNode(TypeDecl.Definit);
+end;
+//Definiciones de tipos
 procedure TSemanticAnalyzer.VisitTypeDef(TypeDef: TTypeDef);
 {Visita declaraciones de tipos sismples.
 **** Notar la similitud con ResolveTypeDef()}
@@ -967,7 +980,7 @@ begin
     Error('Tipo de elemento desconocido: ' + ArrayType.ElemTypeRef.Name, ArrayType.ElemTypeRef.SrcPos);
   end else begin
     //*** Se debe verificar si el tipo ElemType tiene subtipos que deben visitarse también.
-    VisitNode(ElemType);  // ← Analizar tipos anidados
+    VisitNode(ElemType);  //Analiza tipos anidados
   end;
 
   //Verifica rangos de índices
@@ -1356,7 +1369,6 @@ análisis sintáctico.}
 var
   Sym: TSymbol;
   i: Integer;
-  ProcDecl: TProcFunctDecl;
   ParamType: TTypeDef;
   ArgType: TTypeDef;
   Param: TVarDecl;
@@ -1438,7 +1450,6 @@ end;
 procedure TSemanticAnalyzer.VisitFieldAccess(FieldAccess: TFieldAccess);
 var
   RecordType: TTypeDef;
-  Sym: TSymbol;
   FoundField: Boolean;
   i: Integer;
   FieldDecl: TVarDecl;
@@ -1554,20 +1565,20 @@ begin
 
     // Bloques y declaraciones
     ntBlock: VisitBlock(TBlock(Node));
-    //ntDeclarations: VisitDeclarations(TDeclarations(Node));
     ntVarDecl: VisitVarDecl(TVarDecl(Node));
     ntConstDecl: VisitConstDecl(TConstDecl(Node));
     ntProcFunctDecl: VisitProcDecl(TProcFunctDecl(Node));
+    ntTypeDecl: VisitTypeDecl(TTypeDecl(Node));
 
-    // Declaraciones de Tipos
-    ntSimpleTypeDef: VisitTypeDef(TTypeDef(Node));
-    ntSubranTypeDef: VisitTypeDef(TTypeDef(Node));
-    ntEnumTypeDef: VisitEnumTypeDef(TEnumTypeDef(Node));
-    ntArrayTypeDef: VisitArrayTypeDef(TArrayTypeDef(Node));
-    ntRecordTypeDef: VisitRecordTypeDef(TRecordTypeDef(Node));
+    //Definiciones de tipos
+    ntSimpleTypeDef : VisitTypeDef(TTypeDef(Node));
+    ntSubranTypeDef : VisitTypeDef(TTypeDef(Node));
+    ntEnumTypeDef   : VisitEnumTypeDef(TEnumTypeDef(Node));
+    ntArrayTypeDef  : VisitArrayTypeDef(TArrayTypeDef(Node));
+    ntRecordTypeDef : VisitRecordTypeDef(TRecordTypeDef(Node));
     ntPointerTypeDef: VisitPointerTypeDef(TPointerTypeDef(Node));
-    ntAliasTypeDef: VisitTypeDef(TTypeDef(Node));
-    ntProcedTypeDef: VisitTypeDef(TTypeDef(Node));
+    ntAliasTypeDef  : VisitTypeDef(TTypeDef(Node));
+    ntProcedTypeDef : VisitTypeDef(TTypeDef(Node));
 
     // Sentencias
     ntAssignment: VisitAssignment(TAssignment(Node));
@@ -1631,7 +1642,7 @@ begin
   los enumerados).}
   for Node in Prog.Declarations do begin
     if Node.NodeType = ntTypeDecl then begin
-        VisitNode(Node);
+        VisitNode(TTypeDecl(Node).Definit);
     end;
   end;
 
