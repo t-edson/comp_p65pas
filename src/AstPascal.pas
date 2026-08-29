@@ -721,7 +721,8 @@ type  //Definiciones previas para declaraciones de tipos
       FTypeName: string;
     public
       property TypeName: string read FTypeName write FTypeName;
-//      function HasSubtypes: boolean;
+      function IsNamed: Boolean; inline;
+      function IsInline: Boolean; inline;
     public  //Inicialización y depuración
       constructor Create(ANodeType: TASTNodeType; const ATypeName: string;
           const ASrcPos: TSrcPos);
@@ -769,9 +770,9 @@ type  //Definiciones previas para declaraciones de tipos
   TVariantBranchList = specialize TFPGObjectList<TVariantBranch>;
 type  //Nodos de definiciones de tipos
   //Definición de tipos pedefinidos (integer, byte, boolean, etc.)
-  {Este nodo representa a una supuesta definición de los tipos básicos, que se supone ya
-  están definidos. No se creará por código.}
   TSimpleTypeDef = class(TTypeDef)
+    {Este nodo representa a una supuesta definición de los tipos básicos, que se supone ya
+    están definidos. No se pueden crear desde Pascal.}
   public  //Inicialización y depuración
     constructor Create(const ATypeName: string; const ASrcPos: TSrcPos);
     function ToString: string; override;
@@ -783,8 +784,11 @@ type  //Nodos de definiciones de tipos
     Este es el tipo referenciado directamente: <tipo_alias> = <tipo_base>.
     Solo es necesario una cadena, porque esta definición es de tipo alias}
     FBaseType: String;   //Nombre del tipo base (ej: 'integer', 'TPersona').
+    //Referencia a la definición del tipo. Se asigna en el análisis semántico.
+    FDefinition: TTypeDef;
   public
     property BaseType: String read FBaseType write FBaseType;
+    property Definition: TTypeDef read FDefinition write FDefinition;
   public  //Inicialización y depuración
     constructor Create(ABaseType: String; const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -1765,6 +1769,18 @@ begin
     Result := Format('TypeRef: %s', [FName])
   else
     Result := 'TypeRef: (unknown)';
+end;
+function TTypeDef.IsNamed: Boolean;
+{Indica si la definición de tipo es una solo un identificador que referencia a una
+declaración externa de tipo. Algo como "integer" o "mitipo".}
+begin
+  Exit(NodeType = ntAliasTypeDef);
+end;
+function TTypeDef.IsInline: Boolean;
+{Indica si la definición de tipo es estructruada o compleja. Algo como: "array of ... " o
+"record ... end" }
+begin
+  Exit(NodeType <> ntAliasTypeDef);
 end;
 // TTypeDef
 constructor TTypeDef.Create(ANodeType: TASTNodeType; const ATypeName: string;
