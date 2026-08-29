@@ -970,17 +970,20 @@ begin
 end;
 procedure TSemanticAnalyzer.VisitArrayTypeDef(ArrayType: TArrayTypeDef);
 var
-  ElemType: TTypeDef;
+  ElemTypeDef: TTypeDef;
   i: Integer;
   Range: TArrayRange;
 begin
   //Verifica tipo de elementos
-  ElemType := ResolveTypeRef(ArrayType.ElemTypeRef);
-  if ElemType = nil then begin
+  ElemTypeDef := ResolveTypeRef(ArrayType.ElemTypeRef);
+  if ElemTypeDef = nil then begin
     Error('Tipo de elemento desconocido: ' + ArrayType.ElemTypeRef.Name, ArrayType.ElemTypeRef.SrcPos);
   end else begin
-    //*** Se debe verificar si el tipo ElemType tiene subtipos que deben visitarse también.
-    VisitNode(ElemType);  //Analiza tipos anidados
+    //Verificar si ElemTypeDef tiene subtipos que deben visitarse también.
+    if ArrayType.ElemTypeRef.IsInline then begin
+      //SOlo analiza las definiciones INLINE.
+      VisitNode(ElemTypeDef);  //Analiza tipos anidados
+    end;
   end;
 
   //Verifica rangos de índices
@@ -998,15 +1001,21 @@ var
   Branch: TVariantBranch;
   astNode: TASTNode;
   Field : TVarDecl;
-  TypeDef: TTypeDef;
+  FieldTypeDef: TTypeDef;
 begin
   //Analiza los campos del registro
   for astNode in RecordType.Fields do begin
     if astNode.NodeType = ntVarDecl then begin
       Field := TVarDecl(astNode);
-      TypeDef := ResolveTypeRef(Field.TypeRef);
-      if TypeDef = nil then
+      FieldTypeDef := ResolveTypeRef(Field.TypeRef);
+      if FieldTypeDef = nil then begin
           Error('Tipo desconocido para el campo: ' + Field.Name, Field.SrcPos);
+      end else begin
+        if Field.TypeRef.IsInline then begin
+          //SOlo analiza las definiciones INLINE.
+          VisitNode(FieldTypeDef);  //Analiza tipos anidados
+        end;
+      end;
     end;
   end;
   //Analiza variantes
@@ -1021,8 +1030,8 @@ begin
       for astNode in Branch.Fields do begin
         if astNode.NodeType = ntVarDecl then begin
           Field := TVarDecl(astNode);
-          TypeDef := ResolveTypeRef(Field.TypeRef);
-          if TypeDef = nil then
+          FieldTypeDef := ResolveTypeRef(Field.TypeRef);
+          if FieldTypeDef = nil then
               Error('Tipo desconocido para el campo: ' + Field.Name, Field.SrcPos);
         end;
       end;
