@@ -39,7 +39,6 @@ type  //Tipos de nodos
     ntForwardDecl,    //Declaración FORWARD
     ntTypeDecl,       //Declaración de tipo
     //Nodos auxiliares para declaraciones de tipos
-    ntTypeRef,        //Referencia a un tipo
     ntArrayRange,     //Rango de arreglo (1..10)
     ntVariantBranch,  //Una rama de los casos RECORD con variantes.
     //Nodos de definiciones de tipos
@@ -81,7 +80,6 @@ type  //Declaraciones y clases base para el AST
   TTypeDef = class;
   TTypeDecl = class;
   TRecordTypeDef = class;
-  TTypeRef = class;
 
   // Listas genéricas especializadas
   TASTNodeList = specialize TFPGObjectList<TASTNode>;
@@ -592,7 +590,12 @@ type  //Nodos de declaraciones
   private
     FIsParameter: Boolean;    //Indica que esta declaración es de un parámetro.
     FParamType: TParamType;   //Tipo del parámetro.
-    FTypeRef  : TTypeRef;     //Referencia al tipo de la variable declarada.
+    FTypeDef  : TTypeDef;     //Referencia al tipo de la variable declarada.
+    {Bandera para indicar que este nodo es propietario del tipo "FTypeDef" y, en
+    consecuencia, debe responsabilizarse de destruirlo. Esta variable es necesaria porque
+    las declaraciones de la forma: VAR a,b,c: <tipo estructurado>
+    comparten un mismo objeto "TTypeDef" y solo uno debe destruirlo.}
+    FTypeOwner: boolean;
   public
     Name      : string;       //Nombre de la variable
     hasAdic   : Byte;         {Valor que define el tipo de parámetro adicional. Por
@@ -602,8 +605,9 @@ type  //Nodos de declaraciones
     initVal   : TExpression;  //La expresión que define el valor inicial
     absAddr   : TExpression;  {Reference to the AST expression that returns the absolute
                                address where the variable should be located.}
+    property TypeOwner: boolean read FTypeOwner write FTypeOwner;
   public   //Campos para el tipo
-    property TypeRef: TTypeRef read FTypeRef write FTypeRef;
+    property TypeDef: TTypeDef read FTypeDef write FTypeDef;
   public  //Manejo de parámetros
     property IsParameter: Boolean read FIsParameter write FIsParameter;
     property ParamType: TParamType read FParamType write FParamType;
@@ -616,11 +620,11 @@ type  //Nodos de declaraciones
   TConstDecl = class(TASTNode)
   private
     FName     : string;       //Nombre de la constante
-    FTypeRef  : TTypeRef;     //Referencia al tipo de la constante.
+    FTypeDef  : TTypeDef;     //Referencia al tipo de la constante.
     FValue    : TExpression;  //La expresión que define el valor
   public
     property Name: string read FName;
-    property TypeRef: TTypeRef read FTypeRef write FTypeRef;
+    property TypeDef: TTypeDef read FTypeDef write FTypeDef;
     property Value: TExpression read FValue;
     function HasType: Boolean;
   public  //Inicialización y depuración
@@ -631,12 +635,12 @@ type  //Nodos de declaraciones
   // Declaración de procedimientos o funciones
   TProcFunctDecl = class(TCodeContainer)
   private
-    FReturnTypeRef: TTypeRef;        //Referencia al tipo de retorno. También se usa como
+    FReturnTypeDef: TTypeDef;        //Referencia al tipo de retorno. También se usa como
                                      //bandera para identificar a las funciones.
     FIsMethod     : Boolean;         //Bandera para indicar que es método.
     FRecordType   : TRecordTypeDef; //Referencia al tipo RECORD, cuando es un método.
   public
-    property ReturnTypeRef: TTypeRef read FReturnTypeRef write FReturnTypeRef;
+    property ReturnTypeDef: TTypeDef read FReturnTypeDef write FReturnTypeDef;
     function IsFunction: Boolean; inline;
     property IsMethod: Boolean read FIsMethod write FIsMethod;
     property RecordType: TRecordTypeDef read FRecordType write FRecordType;
@@ -650,50 +654,17 @@ type  //Nodos de declaraciones
   private
     //Nombre del tipo: TYPE <nombre_del_tipo> = ...
     FName: string;
-    {Definición del tipo. También se podría usar un TTypeRef, pero complicaría más el
-    manejo. Además, se espera que la declaración de un tipo contenga siempre una
+    {Definición del tipo. Se espera que la declaración de un tipo contenga siempre una
     definición, aún cuando se trate de un Alias}
-    FDefinit: TTypeDef;
+    FDefinition: TTypeDef;
   public
     property Name: string read FName write FName;
-    property Definit: TTypeDef read FDefinit write FDefinit;
+    property Definition: TTypeDef read FDefinition write FDefinition;
     constructor Create(const ATypeName: string; const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
   end;
 type  //Definiciones previas para declaraciones de tipos
-  {Clase para representar a las referencias a tipos. Normalmente, en el código fuente, las
-  referencias a tipos son identificadores, como "integer" o "TMitipo", pero pueden ser
-  también declaraciones INLINE de tipos estructurados como "ARRAY[0..5] OF byte". Este
-  nodo permite representar ambos casos.}
-  TTypeRef = class(TASTNode)
-  private
-    {Nombre del tipo, cuando es un tipo con identificador. Algo como "byte", "word"
-    o "mi_tipo". Se usa para referencias a tipos simples o alias.}
-    FName: string;
-    {Referencia al tipo cuando el tipo es INLINE y definido en la misma declaración
-    de la variable. Algo como: var1: ARRAY[1..3] OF Byte;}
-    FTypeDef  : TTypeDef;
-    {Bandera para indicar que este nodo es propietario del tipo "FTypeDef" y, en
-    consecuencia, debe responsabilizarse de destruirlo. Esta variable es necesaria porque
-    las declaraciones de la forma: VAR a,b,c: <tipo estructurado>
-    comparten un mismo objeto "TTypeDef" y solo uno debe destruirlo.}
-    FTypeOwner: boolean;
-    {Enlace a la definición. Se resuelve en el análisis semántico.}
-    FDefinit: TTypeDef;
-  public
-    property Name: string read FName write FName;
-    property TypeDef: TTypeDef read FTypeDef write FTypeDef;
-    //property TypeOwner: boolean read FTypeOwner write FTypeOwner;
-    property Definit: TTypeDef read FDefinit write FDefinit;
-    function IsInline: Boolean; inline;
-    function IsNamed: Boolean; inline;
-  public  //Inicialización
-    constructor Create(const AName: string; const ASrcPos: TSrcPos);
-    constructor Create(ATypeDef: TTypeDef; const ASrcPos: TSrcPos; ATypeOwner: boolean);
-    destructor Destroy; override;
-    function ToString: string; override;
-  end;
 
   //Clase base para todas las definiciones de tipo (alias o INLINE).
   {Una definición de tipo se encuentra en:
@@ -785,6 +756,7 @@ type  //Nodos de definiciones de tipos
     Solo es necesario una cadena, porque esta definición es de tipo alias}
     FBaseType: String;   //Nombre del tipo base (ej: 'integer', 'TPersona').
     //Referencia a la definición del tipo. Se asigna en el análisis semántico.
+    //Debe ser solo una referencia. No se es propietario de este tipo.
     FDefinition: TTypeDef;
   public
     property BaseType: String read FBaseType write FBaseType;
@@ -827,11 +799,11 @@ type  //Nodos de definiciones de tipos
   TArrayTypeDef = class(TTypeDef)
   private
     FIndexRanges: TArrayRangeList;  //Dimensiones del arreglo
-    FElemTypeRef: TTypeRef;  //Referencia al tipo de elemento del arreglo.
+    FElemTypeDef: TTypeDef;  //Referencia al tipo de elemento del arreglo.
   public
     procedure AddRange(Range: TArrayRange);
     property IndexRanges: TArrayRangeList read FIndexRanges;
-    property ElemTypeRef: TTypeRef read FElemTypeRef write FElemTypeRef;
+    property ElemTypeDef: TTypeDef read FElemTypeDef write FElemTypeDef;
   public  //Inicialización y depuración
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -1628,8 +1600,8 @@ constructor TVarDecl.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntVarDecl, ASrcPos);
   Name       := AName;
-  {El campo FTypeRef se creará e inicializará en el Parser}
-  //FTypeRef := nil;
+  {El campo FTypeDef se creará e inicializará en el Parser}
+  //FTypeDef := nil;
   hasAdic    := DEC_NONE;  //Indica que no hay parñametros adicionales en la declaración
   FParamType := ptyNone;
   //FIsParameter := False;  //No es necesario
@@ -1642,14 +1614,16 @@ destructor TVarDecl.Destroy;
 begin
   absAddr.Free;     //Destruye si se ha usado
   initVal.Free;     //Destruye si se ha usado
-  FTypeRef.Free;    //Debería estar creado siempre o podría usarse como bandera.
+  if FTypeOwner then begin     //Es porpietario del tipo
+    FTypeDef.Free;
+  end;
   inherited Destroy;
 end;
 function TVarDecl.ToString: string;
 begin
   Result := 'VarDecl: Name=' + Name +
-  ', TypeName=' + FTypeRef.Name + ', TypeDef=' ;
-  if TypeRef.TypeDef=Nil then Result += '<Nil>' else Result += TypeRef.TypeDef.FTypeName;
+  ', TypeName=' + FTypeDef.TypeName + ', TypeDef=' ;
+  if TypeDef=Nil then Result += '<Nil>' else Result += TypeDef.FTypeName;
   if FIsParameter then begin
     Result := Result + ' (parameter';
     if FParamType = ptyVar then
@@ -1660,58 +1634,58 @@ end;
 // TConstDecl
 function TConstDecl.HasType: Boolean;
 begin
-  //Se usa "FTypeRef" como bandera.
-  Result := FTypeRef<>nil;
+  //Se usa "FTypeDef" como bandera.
+  Result := FTypeDef<>nil;
 end;
 constructor TConstDecl.Create(const AName: string; AValue: TExpression;
                               const ASrcPos: TSrcPos);
 begin
   inherited Create(ntConstDecl, ASrcPos);
   FName := AName;
-  //FTypeRef := nil;
+  //FTypeDef := nil;
   FValue := AValue;
 end;
 destructor TConstDecl.Destroy;
 begin
   FValue.Free;
-  FTypeRef.Free;    //Destruye si se ha creado.
+  FTypeDef.Free;    //Destruye si se ha creado.
   inherited;
 end;
 function TConstDecl.ToString: string;
 begin
   Result := Format('ConstDecl: %s', [FName]);
   if HasType then
-    Result := Result + Format(': %s', [FTypeRef.ToString]);
+    Result := Result + Format(': %s', [FTypeDef.ToString]);
   Result := Result + Format(' = %s', [FValue.ToString]);
 end;
 // TProcFunctDecl
 function TProcFunctDecl.IsFunction: Boolean;
 {Indica si este nodo es una función.}
 begin
-  //Cuando es función, debe tener creado su FReturnTypeRef.
-  Exit(FReturnTypeRef <> Nil);
+  //Cuando es función, debe tener creado su FReturnTypeDef.
+  Exit(FReturnTypeDef <> Nil);
 end;
 constructor TProcFunctDecl.Create(const AName: string; const ASrcPos: TSrcPos; AIsForward: Boolean);
 begin
   inherited Create(ntProcFunctDecl, AIsForward);
   FSrcPos := ASrcPos;
   FName := AName;
-  {El campo FReturnTypeRef se creará e inicializará en el Parser, cuando se determine que
+  {El campo FReturnTypeDef se creará e inicializará en el Parser, cuando se determine que
   este nodo es una función}
-  //FReturnTypeRef := nil;
+  //FReturnTypeDef := nil;
   //FIsMethod := False;
   //FRecordType := nil;
 end;
 destructor TProcFunctDecl.Destroy;
 begin
-  FReturnTypeRef.Free;   //Lo destruye, solo si se ha creado.
+  FReturnTypeDef.Free;   //Lo destruye, solo si se ha creado.
   inherited Destroy;
 end;
 function TProcFunctDecl.ToString: string;
 begin
   Result := Format('Procedure: %s', [FName]);
   if IsFunction then
-    Result := Result + Format(' returns %s', [FReturnTypeRef.Name]);
+    Result := Result + Format(' returns %s', [FReturnTypeDef.TypeName]);
   if Parameters.Count > 0 then
     Result := Result + Format(' (%d params)', [Parameters.Count]);
   if FDeclarations <> nil then
@@ -1723,53 +1697,7 @@ begin
 end;
 {$endregion}
 {$region "Definiciones previas para declaraciones de tipos"}
-// TTypeRef
-function TTypeRef.IsInline: Boolean;
-{Indica que no es una referencia al tipo, sino una declaración anónima de tipo.}
-begin
-  Result := FTypeDef <> nil;
-end;
-function TTypeRef.IsNamed: Boolean;
-{Indica es una referencia a tipo con un identificador.}
-begin
-  Result := FName <> '';
-end;
-constructor TTypeRef.Create(const AName: string; const ASrcPos: TSrcPos);
-{COnstructor para las referencias a tipo que son solo identificadores como "integer" o
-"TMitipo".}
-begin
-  FNodeType := ntTypeRef;     //FIja tipo de nodo
-  FName := AName;             //FIja nombre del tipo
-  //varDecl.TypeDef := Nil;   //No es necesario actualizar
-  FSrcPos := ASrcPos;
-end;
-constructor TTypeRef.Create(ATypeDef: TTypeDef; const ASrcPos: TSrcPos;
-  ATypeOwner: boolean);
-begin
-  {Constructor para las referencias a tipo que son definiciones INLINE como "array[0..4]
-  of byte".}
-  FNodeType := ntTypeRef;     //FIja tipo de nodo
-  FTypeDef := ATypeDef;       //Referencia al tipo INLINE
-  FTypeOwner := ATypeOwner;   //Indica si debe encargarse de liberarlo
-  FSrcPos := ASrcPos;
-end;
-destructor TTypeRef.Destroy;
-begin
-  if FTypeOwner then begin
-    //Este nodo es el propietario del tipo. Lo destruimos.
-    TypeDef.Destroy;
-  end;
-  inherited;
-end;
-function TTypeRef.ToString: string;
-begin
-  if IsInline then
-    Result := 'TypeRef: inline (' + FTypeDef.ToString + ')'
-  else if IsNamed then
-    Result := Format('TypeRef: %s', [FName])
-  else
-    Result := 'TypeRef: (unknown)';
-end;
+// TtypeDef
 function TTypeDef.IsNamed: Boolean;
 {Indica si la definición de tipo es una solo un identificador que referencia a una
 declaración externa de tipo. Algo como "integer" o "mitipo".}
@@ -1782,7 +1710,6 @@ function TTypeDef.IsInline: Boolean;
 begin
   Exit(NodeType <> ntAliasTypeDef);
 end;
-// TTypeDef
 constructor TTypeDef.Create(ANodeType: TASTNodeType; const ATypeName: string;
                             const ASrcPos: TSrcPos);
 begin
@@ -1801,14 +1728,14 @@ begin
 end;
 destructor TTypeDecl.Destroy;
 begin
-  FDefinit.Free;    //Destruye si se ha creado (que es lo normal)
+  FDefinition.Free;    //Destruye si se ha creado (que es lo normal)
   inherited Destroy;
 end;
 function TTypeDecl.ToString: string;
 begin
   Result := 'TTypeDecl: Name=' + FName + LineEnding + 'Definition: ' + LineEnding;
-  if FDefinit = Nil then Result += '<Nil>'
-  else Result += FDefinit.ToString;
+  if FDefinition = Nil then Result += '<Nil>'
+  else Result += FDefinition.ToString;
 end;
 // TArrayRange
 constructor TArrayRange.Create(ALowExpr, AHighExpr: TExpression;
@@ -1930,14 +1857,14 @@ constructor TArrayTypeDef.Create(const ASrcPos: TSrcPos);
 begin
   inherited Create(ntArrayTypeDef, '', ASrcPos);
   FIndexRanges := TArrayRangeList.Create(True);
-  {El campo FElemTypeRef se creará e inicializará en el Parser, cuando se determine que
+  {El campo FElemTypeDef se creará e inicializará en el Parser, cuando se determine que
   este nodo es una función}
-  //FElemTypeRef := nil;
+  //FElemTypeDef := nil;
 end;
 destructor TArrayTypeDef.Destroy;
 begin
   FIndexRanges.Free;
-  FElemTypeRef.Free;   //Lo destruye, si se ha creado.
+  FElemTypeDef.Free;   //Lo destruye, si se ha creado.
   inherited;
 end;
 function TArrayTypeDef.ToString: string;
@@ -1945,7 +1872,7 @@ var
   typName: String;
 begin
   Result := Format('ArrayType: [%d dims] of %s',
-                   [FIndexRanges.Count, FElemTypeRef.ToString]);
+                   [FIndexRanges.Count, FElemTypeDef.ToString]);
 end;
 // TRecordTypeDef
 constructor TRecordTypeDef.Create(const ASrcPos: TSrcPos);
@@ -1972,7 +1899,7 @@ constructor TPointerTypeDef.Create(const ATargetTypeName: string;
 begin
   inherited Create(ntPointerTypeDef, '', ASrcPos);
   FTargetTypeName := ATargetTypeName;
-  FTargetTypeDef := nil;
+  //FTargetTypeDef := nil;
 end;
 destructor TPointerTypeDef.Destroy;
 begin

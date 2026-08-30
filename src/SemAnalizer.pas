@@ -76,9 +76,6 @@ type
   end;
 
   //Analizador semántico
-
-  { TSemanticAnalyzer }
-
   TSemanticAnalyzer = class
   private
     msg: TMessageManager;    //Referencia al gestor de mensajes
@@ -115,7 +112,7 @@ type
   private  //Resolución de tipos
     function ResolveType(const TypeName: string): TTypeDef;
     function GetFundamentalType(TypeDef: TTypeDef): TTypeDef;
-    function ResolveTypeRef(TypeRef: TTypeRef): TTypeDef;
+    function ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
     function GetTypeOf(Expr: TExpression): TTypeDef;
     function AreTypesCompatible(T1, T2: TTypeDef): Boolean;
     function IsNumericType(TypeDef: TTypeDef): Boolean;
@@ -353,7 +350,7 @@ begin
     // Comparar nombres (opcional)
     if Param1.Name <> Param2.Name then Exit(False);
     // Comparar tipos
-    if Param1.TypeRef.Name <> Param2.TypeRef.Name then Exit(False);
+    if Param1.TypeDef.TypeName <> Param2.TypeDef.TypeName then Exit(False);
     // Comparar tipo de parámetro (var, const, out)
     if Param1.ParamType <> Param2.ParamType then
       Exit(False);
@@ -424,7 +421,7 @@ begin
     if TRecordTypeDef(RecordType).Fields[i].NodeType = ntVarDecl then begin
       FieldDecl := TVarDecl(TRecordTypeDef(RecordType).Fields[i]);
       Sym := TSymbol.Create(FieldDecl.Name, skField);
-      Sym.DataType := ResolveType(FieldDecl.TypeRef.Name);
+      Sym.DataType := ResolveType(FieldDecl.TypeDef.TypeName);
       Sym.Declaration := FieldDecl;
       NewScope.Declare(Sym);
     end;
@@ -468,43 +465,47 @@ definición INLINE).
 }
 var
   AliasTypeDef: TAliasTypeDef;
+  BaseTypeDef: TTypeDef;
 begin
   //Si es un alias, resolver el tipo base
   if TypeDef.NodeType = ntAliasTypeDef then begin
+    //Es un alias, hay que resolver el nombre.
     AliasTypeDef := TAliasTypeDef(TypeDef);
-    Result := ResolveType(AliasTypeDef.BaseType);
+    BaseTypeDef := ResolveType(AliasTypeDef.BaseType);
+    //Puede que la definición enocntrada no sea fundamental.
+    Result := GetFundamentalType(BaseTypeDef);
+  end else if TypeDef.NodeType = ntSubranTypeDef then begin
+    Result := TSubranTypeDef(TypeDef).BaseType;
   end else begin
     Result := TypeDef;
   end;
 end;
-function TSemanticAnalyzer.ResolveTypeRef(TypeRef: TTypeRef): TTypeDef;
-{Resuelve el tipo de un objeto TTypeRef en la tabla de símbolos. También actualiza el
-campo "Declaration" del TTypeRef.
+function TSemanticAnalyzer.ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
+{Resuelve el campo "Definition" de un objeto TTypeDef, usando la tabla de símbolos, cuando
+el TTypeDef es un alias.
+Devuelve una referencia a la definición del tipo.
 Si no logra resolver el tipo, devuelve NIL.}
 var
   SymType: TSymbol;
+  AliasTypeDef: TAliasTypeDef;
 begin
-  if TypeRef.Name <> '' then begin
+  if TypeDef.NodeType = ntAliasTypeDef then begin  //Es alias
+    AliasTypeDef := TAliasTypeDef(TypeDef);
     //Busca el tipo por nombre
-    SymType := FCurrentScope.LookupRecursive(UpperCase(TypeRef.Name));
+    SymType := FCurrentScope.LookupRecursive(UpperCase(AliasTypeDef.BaseType));
     if (SymType <> nil) and (SymType.Kind = skType) then begin
       Result := SymType.DataType;
-      //Si es un alias, resolvemos el tipo base
-      if Result.NodeType = ntAliasTypeDef then begin
-        Result := GetFundamentalType(Result);  //*** Podría optimizarse
-      end;
-      TypeRef.Definit := Result;
+      //Resolvemos el tipo base
+      Result := GetFundamentalType(Result);
+      //Actualiza la definición
+      TAliasTypeDef(TypeDef).Definition := Result;
     end else begin
-      //Error('Tipo desconocido: ' + TypeRef.Name, TypeRef.SrcPos);
+      //Error('Tipo desconocido: ' + TypeDef.Name, TypeDef.SrcPos);
       Result := Nil;
     end;
-  end else if TypeRef.TypeDef <> nil then begin
-    //El tipo es INLINE. Está creado en TypeRef.TypeDef
-    Result := TypeRef.TypeDef;
-    TypeRef.Definit := Result;
-  end else begin   //No debería pasar
-    //Error('Tipo no especificado.', TypeRef.SrcPos);
-    Result := Nil;
+  end else begin
+    //Debe ser definición INLINE.
+    Result := TypeDef;   //La definición es el mismo tipo (arreglo, registro, ...).
   end;
 end;
 function TSemanticAnalyzer.GetTypeOf(Expr: TExpression): TTypeDef;
@@ -583,7 +584,7 @@ begin
           FieldDecl := TVarDecl(Fields[i]);
           if CompareText(FieldDecl.Name, FieldAccess.FieldName)=0 then begin
             //Encontró el campo, lee su tipo
-            Result := FieldDecl.TypeRef.Definit;  //Ya debe estar actualizado
+            Result := FieldDecl.TypeDef;  //Ya debe estar actualizado
             Break;
           end;
         end;
@@ -597,7 +598,7 @@ begin
       if ArrayVarType.NodeType <> ntArrayTypeDef then Exit(nil);  //Valida que sea arreglo
       ArrayType := TArrayTypeDef(ArrayVarType);    //Convierte a TArrayTypeDef
       // Resuelve el tipo de los elementos
-      Result := ArrayType.ElemTypeRef.Definit;
+      Result := ArrayType.ElemTypeDef;
     end;
     ntPointerLiteral:
       Result := ResolveType('POINTER');
@@ -606,26 +607,15 @@ begin
   end;
 end;
 function TSemanticAnalyzer.AreTypesCompatible(T1, T2: TTypeDef): Boolean;
-  function GetBaseType(TypeDef: TTypeDef): TTypeDef;
-  begin
-    if TypeDef.NodeType = ntSubranTypeDef then begin
-      Result := TSubranTypeDef(TypeDef).BaseType;
-    end else begin
-      Result := TypeDef;
-    end;
-  end;
 var
   Base1, Base2: TTypeDef;
 begin
-  if (T1 = nil) or (T2 = nil) then
-    Exit(False);
-
-  if T1 = T2 then
-    Exit(True);
+  if (T1 = nil) or (T2 = nil) then Exit(False);
+  if T1 = T2 then Exit(True);
 
   // Obtener tipos base
-  Base1 := GetBaseType(T1);
-  Base2 := GetBaseType(T2);
+  Base1 := GetFundamentalType(T1);
+  Base2 := GetFundamentalType(T2);
   if (Base1 = nil) or (Base2 = nil) then
     Exit(False);
 
@@ -728,9 +718,9 @@ begin
     Exit;
   end;
   //Resuelve tipo
-  TypeDef := ResolveTypeRef(VarDecl.TypeRef);
+  TypeDef := ResolveTypeDef(VarDecl.TypeDef);
   if TypeDef = Nil then
-     Error('Tipo desconocido: ' + VarDecl.TypeRef.Name, VarDecl.TypeRef.SrcPos);
+     Error('Tipo desconocido: ' + VarDecl.TypeDef.TypeName, VarDecl.TypeDef.SrcPos);
   //Crea símbolo
   Sym := TSymbol.Create(VarDecl.Name, skVariable);
   Sym.DataType := TypeDef;
@@ -749,7 +739,7 @@ begin
   end;
   // Resolver tipo
   if ConstDecl.HasType then begin
-    TypeDef := ResolveTypeRef(ConstDecl.TypeRef);
+    TypeDef := ResolveTypeDef(ConstDecl.TypeDef);
   end else begin
     // Inferir tipo del valor
     if ConstDecl.Value <> nil then
@@ -808,9 +798,9 @@ begin
   end;
   //Tipo de retorno para funciones
   if ProcFunctDecl.IsFunction then begin
-    Sym.ReturnType := ResolveTypeRef(ProcFunctDecl.ReturnTypeRef);
+    Sym.ReturnType := ResolveTypeDef(ProcFunctDecl.ReturnTypeDef);
     if Sym.ReturnType = nil then
-      Error('Tipo de retorno desconocido para: ' + ProcFunctDecl.Name, ProcFunctDecl.ReturnTypeRef.SrcPos);
+      Error('Tipo de retorno desconocido para: ' + ProcFunctDecl.Name, ProcFunctDecl.ReturnTypeDef.SrcPos);
   end;
   FCurrentScope.Declare(Sym);
 end;
@@ -827,7 +817,7 @@ begin
   end;
   //Registra e nombre del tipo
   Sym := TSymbol.Create(TypeDecl.Name, skType);
-  Sym.DataType := TypeDecl.Definit;
+  Sym.DataType := TypeDecl.Definition;
   Sym.Declaration := TypeDecl;
   FCurrentScope.Declare(Sym);
 end;
@@ -862,7 +852,7 @@ begin
   // Verificar inicialización
   if VarDecl.initVal <> nil then begin
     InitType := GetTypeOf(VarDecl.initVal);
-    VarType := VarDecl.TypeRef.Definit;
+    VarType := VarDecl.TypeDef;
     if not AreTypesCompatible(VarType, InitType) then
       Error('Tipo de inicialización incompatible para: ' + VarDecl.Name, VarDecl.SrcPos);
   end;
@@ -901,7 +891,7 @@ begin
       for i := 0 to ProcFunctDecl.Parameters.Count - 1 do begin
         Param := TVarDecl(ProcFunctDecl.Parameters[i]);
         // Resolver tipo del parámetro
-        ParamType := ResolveTypeRef(Param.TypeRef);
+        ParamType := ResolveTypeDef(Param.TypeDef);
         if ParamType = nil then
           Error('Tipo desconocido para parámetro: ' + Param.Name, Param.SrcPos);
         //Registra parámetro
@@ -922,7 +912,7 @@ begin
       for Field in ProcFunctDecl.RecordType.Fields do begin
         if Field is TVarDecl then begin
           FieldSym := TSymbol.Create(TVarDecl(Field).Name, skField);
-          FieldSym.DataType := ResolveType(TVarDecl(Field).TypeRef.Name);
+          FieldSym.DataType := ResolveType(TVarDecl(Field).TypeDef.TypeName);
           FieldSym.Declaration := Field;
           FCurrentScope.Declare(FieldSym);
         end;
@@ -947,7 +937,7 @@ definiciones de los tipos, porque la valiación de duplicidad en los nombres, ya
 RegisterTypeDecl().}
 begin
   //Definiciones de Tipos
-  VisitNode(TypeDecl.Definit);
+  VisitNode(TypeDecl.Definition);
 end;
 //Definiciones de tipos
 procedure TSemanticAnalyzer.VisitTypeDef(TypeDef: TTypeDef);
@@ -975,12 +965,12 @@ var
   Range: TArrayRange;
 begin
   //Verifica tipo de elementos
-  ElemTypeDef := ResolveTypeRef(ArrayType.ElemTypeRef);
+  ElemTypeDef := ResolveTypeDef(ArrayType.ElemTypeDef);
   if ElemTypeDef = nil then begin
-    Error('Tipo de elemento desconocido: ' + ArrayType.ElemTypeRef.Name, ArrayType.ElemTypeRef.SrcPos);
+    Error('Tipo de elemento desconocido: ' + ArrayType.ElemTypeDef.TypeName, ArrayType.ElemTypeDef.SrcPos);
   end else begin
     //Verificar si ElemTypeDef tiene subtipos que deben visitarse también.
-    if ArrayType.ElemTypeRef.IsInline then begin
+    if ArrayType.ElemTypeDef.IsInline then begin
       //SOlo analiza las definiciones INLINE.
       VisitNode(ElemTypeDef);  //Analiza tipos anidados
     end;
@@ -1007,11 +997,11 @@ begin
   for astNode in RecordType.Fields do begin
     if astNode.NodeType = ntVarDecl then begin
       Field := TVarDecl(astNode);
-      FieldTypeDef := ResolveTypeRef(Field.TypeRef);
+      FieldTypeDef := ResolveTypeDef(Field.TypeDef);
       if FieldTypeDef = nil then begin
           Error('Tipo desconocido para el campo: ' + Field.Name, Field.SrcPos);
       end else begin
-        if Field.TypeRef.IsInline then begin
+        if Field.TypeDef.IsInline then begin
           //SOlo analiza las definiciones INLINE.
           VisitNode(FieldTypeDef);  //Analiza tipos anidados
         end;
@@ -1030,7 +1020,7 @@ begin
       for astNode in Branch.Fields do begin
         if astNode.NodeType = ntVarDecl then begin
           Field := TVarDecl(astNode);
-          FieldTypeDef := ResolveTypeRef(Field.TypeRef);
+          FieldTypeDef := ResolveTypeDef(Field.TypeDef);
           if FieldTypeDef = nil then
               Error('Tipo desconocido para el campo: ' + Field.Name, Field.SrcPos);
         end;
@@ -1281,7 +1271,7 @@ begin
     ValueType := GetTypeOf(ExitStmt.ReturnValue);
     Func := GetCurrentFunction;
     if Func <> nil then begin
-      ReturnType := Func.ReturnTypeRef.Definit;
+      ReturnType := Func.ReturnTypeDef;
       if ReturnType = nil then
         Error('No se puede determinar el tipo de retorno de la función', ExitStmt.SrcPos)
       else if not AreTypesCompatible(ReturnType, ValueType) then
@@ -1428,7 +1418,7 @@ begin
         VisitNode(FuncCall.Arguments[i]);
         ArgType := GetTypeOf(FuncCall.Arguments[i]);
         Param := TVarDecl(Sym.Parameters[i]);
-        ParamType := ResolveTypeRef(Param.TypeRef);
+        ParamType := ResolveTypeDef(Param.TypeDef);
         if not AreTypesCompatible(ParamType, ArgType) then
           Error('Tipo de argumento incompatible para parámetro ' + IntToStr(i+1) + ' de ' +
                 FuncCall.Name, FuncCall.Arguments[i].SrcPos);
@@ -1581,7 +1571,7 @@ begin
 
     //Definiciones de tipos
     ntSimpleTypeDef : VisitTypeDef(TTypeDef(Node));
-    ntSubranTypeDef : VisitTypeDef(TTypeDef(Node));
+    ntSubranTypeDef : VisitSubrangeTypeDef(TSubranTypeDef(Node));
     ntEnumTypeDef   : VisitEnumTypeDef(TEnumTypeDef(Node));
     ntArrayTypeDef  : VisitArrayTypeDef(TArrayTypeDef(Node));
     ntRecordTypeDef : VisitRecordTypeDef(TRecordTypeDef(Node));
@@ -1651,7 +1641,7 @@ begin
   los enumerados).}
   for Node in Prog.Declarations do begin
     if Node.NodeType = ntTypeDecl then begin
-        VisitNode(TTypeDecl(Node).Definit);
+        VisitNode(TTypeDecl(Node).Definition);
     end;
   end;
 
@@ -1780,7 +1770,8 @@ begin
   Sym.Parameters := TASTNodeList.Create(True);
   //Parámetros: argumentos variables (array of const)
   Param := TVarDecl.Create('Args', DummyPos);
-  Param.TypeRef := TTypeRef.Create('ARRAY_OF_CONST', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('ARRAY_OF_CONST', DummyPos);
+  Param.TypeOwner := True;
   Param.IsParameter := True;
   Sym.Parameters.Add(Param);
   FGlobalScope.Declare(Sym);
@@ -1791,7 +1782,8 @@ begin
   Sym.Parameters := TASTNodeList.Create(True);
   //Parámetros: argumentos variables (array of const)
   Param := TVarDecl.Create('Args', DummyPos);
-  Param.TypeRef := TTypeRef.Create('ARRAY_OF_CONST', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('ARRAY_OF_CONST', DummyPos);
+  Param.TypeOwner := True;
   Param.IsParameter := True;
   Sym.Parameters.Add(Param);
   FGlobalScope.Declare(Sym);
@@ -1802,7 +1794,8 @@ begin
   Sym.Parameters := TASTNodeList.Create(True);
   //Parámetros: argumentos variables (array of const)
   Param := TVarDecl.Create('Args', DummyPos);
-  Param.TypeRef := TTypeRef.Create('ARRAY_OF_CONST', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('ARRAY_OF_CONST', DummyPos);
+  Param.TypeOwner := True;
   Param.IsParameter := True;
   Sym.Parameters.Add(Param);
   FGlobalScope.Declare(Sym);
@@ -1813,7 +1806,8 @@ begin
   Sym.Parameters := TASTNodeList.Create(True);
   //Parámetros: argumentos variables (array of const)
   Param := TVarDecl.Create('Args', DummyPos);
-  Param.TypeRef := TTypeRef.Create('ARRAY_OF_CONST', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('ARRAY_OF_CONST', DummyPos);
+  Param.TypeOwner := True;
   Param.IsParameter := True;
   Sym.Parameters.Add(Param);
   FGlobalScope.Declare(Sym);

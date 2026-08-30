@@ -738,7 +738,8 @@ begin
     for i := idxVarIni to varContainer.Count-1 do begin
       //Todos estos ítems deben ser los que hemos agregados
       varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
-      varDecl.TypeRef := TTypeRef.Create(lex.token, lex.GetSrcPos);  //Tipo simple
+      varDecl.TypeDef := TAliasTypeDef.Create(lex.token, lex.GetSrcPos);  //Tipo simple
+      varDecl.TypeOwner := True;
     end;
     Next;   //Consume el identificador de tipo
   end else begin //Debe ser una definición Inline: record ... end
@@ -757,9 +758,11 @@ begin
         end;
         //Ponemos, como propietario del tipo, solo a la primera declaración, para evitar
         //que varios objetos intenten destruirlo.
-        varDecl.TypeRef := TTypeRef.Create(typeDef, TypeDefPos, True);
+        varDecl.TypeDef := typeDef;
+        varDecl.TypeOwner := True;
       end else begin
-        varDecl.TypeRef := TTypeRef.Create(typeDef, TypeDefPos, False);
+        varDecl.TypeDef := typeDef;
+        varDecl.TypeOwner := False;
       end;
     end;
   end;
@@ -934,7 +937,7 @@ begin
   if tokIdent = tiOF then Next;   //Es opcional en P65Pas
   //Lee tipo de los elementos (puede ser cualquier tipo).
   if tokIdent = tiIDENTIF then begin
-    ArrayType.ElemTypeRef := TTypeRef.Create(lex.token, lex.GetSrcPos);
+    ArrayType.ElemTypeDef := TAliasTypeDef.Create(lex.token, lex.GetSrcPos);
     Next;
   end else begin
     // Definición Inline: array[1..10] of record ... end)
@@ -944,7 +947,7 @@ begin
       ArrayType.Destroy;
       Exit(nil);
     end;
-    ArrayType.ElemTypeRef := TTypeRef.Create(TypeDef, TypeDefPos, True);
+    ArrayType.ElemTypeDef := TypeDef;
   end;
   Result := ArrayType;
 end;
@@ -971,7 +974,8 @@ Si se encuentra algún error, se devuelve NIL.}
     if tokIdent = tiIDENTIF then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
       //Creamos la variable selector con su tipo.
       varDecl := TVarDecl.Create(selectorName, SrcPos);
-      varDecl.TypeRef := TTypeRef.Create(lex.token, lex.GetSrcPos);  //Solo tipos simples
+      varDecl.TypeDef := TAliasTypeDef.Create(lex.token, lex.GetSrcPos);  //Solo tipos simples
+      varDecl.TypeOwner := True;
       Next;
     end else begin //Debe ser una definición Inline: record ... end
       TypeDefPos := lex.GetSrcPos;
@@ -981,7 +985,8 @@ Si se encuentra algún error, se devuelve NIL.}
         Exit;
       end;
       varDecl := TVarDecl.Create(selectorName, SrcPos);
-      varDecl.TypeRef := TTypeRef.Create(typeDef, TypeDefPos, True);
+      varDecl.TypeDef := typeDef;
+      varDecl.TypeOwner := True;
     end;
     if not ConsumeTok(tiOf, 'Se esperaba "of".') then Exit;
     RecordType.VarSelector := varDecl;  //De la detrucción de "varDecl" se encargará RecordType.
@@ -1234,7 +1239,6 @@ var
   SrcPos, TypeDefPos: TSrcPos;
   ConstDecl: TConstDecl;
   TypeDef: TTypeDef;
-  TypeRef: TTypeRef;
 begin
   Next;  //Pasa al siguiente token.
   // Parsear constantes hasta que se acaben
@@ -1251,7 +1255,7 @@ begin
       Next;  // Consume ':'
       //Lee el tipo
       if tokIdent = tiIDENTIF then begin
-        TypeRef := TTypeRef.Create(lex.token, lex.GetSrcPos);
+        TypeDef := TAliasTypeDef.Create(lex.token, lex.GetSrcPos);
         Next;
       end else begin
         TypeDefPos := lex.GetSrcPos;
@@ -1259,25 +1263,24 @@ begin
         if HayError then begin
           Break;
         end;
-        TypeRef := TTypeRef.Create(TypeDef, TypeDefPos, True);
       end;
       //Continua con la asignación del valor.
       if not ConsumeTok(tiEQUAL, 'Se esperaba "=" en la declaración.') then begin
-        TypeRef.Destroy;
-        TypeRef := Nil;
+        TypeDef.Destroy;
+        TypeDef := Nil;
         Break;
       end;
       // Parsear el valor de la constante
       ConstValue := ParseExpression;  //Puede ser cualquier expresión constante
       if HayError then begin
         ConstValue.Free;
-        TypeRef.Destroy;
-        TypeRef := Nil;
+        TypeDef.Destroy;
+        TypeDef := Nil;
         Break;
       end;
       //Crea la declaración de constante y la agrega
       ConstDecl := TConstDecl.Create(ConstName, ConstValue, SrcPos);
-      ConstDecl.TypeRef := TypeRef;
+      ConstDecl.TypeDef := TypeDef;
       declars.Add(ConstDecl);
     end else if tokIdent = tiEQUAL then begin  //Constante simple
       Next;  // Consume '='
@@ -1347,7 +1350,7 @@ begin
       end;
     end;
     Proc := TProcFunctDecl.Create(procName, SrcPos, True);
-    if isFunction then Proc.ReturnTypeRef := TTypeRef.Create(retTypeName, retTypePos);
+    if isFunction then Proc.ReturnTypeDef := TAliasTypeDef.Create(retTypeName, retTypePos);
     Proc.Parameters := Params;  //Puede ser NIL.
     Proc.IsAssembler := IsAssembler;
     declars.Add(Proc);
@@ -1355,7 +1358,7 @@ begin
     {Es declaración con cuerpo. Puede ser dentro del programa principal, dentro de la
     sección de implementación o dentro de un RECORD.}
     Proc := TProcFunctDecl.Create(procName, SrcPos, False);
-    if isFunction then Proc.ReturnTypeRef := TTypeRef.Create(retTypeName, retTypePos);
+    if isFunction then Proc.ReturnTypeDef := TAliasTypeDef.Create(retTypeName, retTypePos);
     Proc.Parameters := Params;  //Puede ser NIL.
     Proc.IsMethod := (location = locRecord);   //Identifica a los métodos
     if IsAssembler or (tokIdent=tiASM) then begin
@@ -1416,13 +1419,13 @@ begin
     TypeDecl := TTypeDecl.Create(TypeName, TypePos);
     {Crea la definición del tipo. Notar que si es una declaración simple como: "MiTipo" o
     "integer", se creará un tipo "Alias".}
-    TypeDecl.Definit := ParseTypeDefinition;
+    TypeDecl.Definition := ParseTypeDefinition;
     if HayError then begin
       TypeDecl.Destroy;
       Break;
     end;
-    TypeDecl.Definit.TypeName := TypeName;  //Guarda una copia del nombre en su definción.
-    TypeDecl.Definit.Parent := TypeDecl;  //Guarda referencia a su declaracón padre
+    TypeDecl.Definition.TypeName := TypeName;  //Guarda una copia del nombre en su definción.
+    TypeDecl.Definition.Parent := TypeDecl;  //Guarda referencia a su declaracón padre
     declars.Add(TypeDecl);      //Agrega la declaración
     if tokIdent = tiSEMIC then  // ";"
       Next
