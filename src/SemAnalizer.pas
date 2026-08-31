@@ -483,22 +483,27 @@ end;
 function TSemanticAnalyzer.ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
 {Resuelve el campo "Definition" de un objeto TTypeDef, usando la tabla de símbolos, cuando
 el TTypeDef es un alias.
-Devuelve una referencia a la definición del tipo.
+Devuelve una referencia a la definición fundamental del tipo.
 Si no logra resolver el tipo, devuelve NIL.}
 var
   SymType: TSymbol;
   AliasTypeDef: TAliasTypeDef;
+  TypeDecl: TTypeDecl;
 begin
   if TypeDef.NodeType = ntAliasTypeDef then begin  //Es alias
     AliasTypeDef := TAliasTypeDef(TypeDef);
     //Busca el tipo por nombre
     SymType := FCurrentScope.LookupRecursive(UpperCase(AliasTypeDef.BaseType));
     if (SymType <> nil) and (SymType.Kind = skType) then begin
-      Result := SymType.DataType;
       //Resolvemos el tipo base
-      Result := GetFundamentalType(Result);
-      //Actualiza la definición
-      TAliasTypeDef(TypeDef).Definition := Result;
+      TypeDef := GetFundamentalType(SymType.DataType);
+      //Actualiza la definición fundamental.
+      AliasTypeDef.Definition := TypeDef;
+      //Actualiza la declaración
+      //if (TypeDef.Parent<>Nil) and (TASTNode(TypeDef.Parent).NodeType = ntTypeDecl) then begin
+      //  TypeDecl := TTypeDecl(TypeDef.Parent);
+      //  AliasTypeDef.Declaration := TypeDecl;
+      //end;
     end else begin
       //Error('Tipo desconocido: ' + TypeDef.Name, TypeDef.SrcPos);
       Result := Nil;

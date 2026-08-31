@@ -752,14 +752,24 @@ type  //Nodos de definiciones de tipos
   TAliasTypeDef = class(TTypeDef)
   private
     {Referencia al tipo base.
-    Este es el tipo referenciado directamente: <tipo_alias> = <tipo_base>.
+    Este es el nombre del tipo referenciado directamente: <tipo_alias> = <tipo_base>.
     Solo es necesario una cadena, porque esta definición es de tipo alias}
     FBaseType: String;   //Nombre del tipo base (ej: 'integer', 'TPersona').
-    //Referencia a la definición del tipo. Se asigna en el análisis semántico.
-    //Debe ser solo una referencia. No se es propietario de este tipo.
+    {Referencia a la declaración del tipo.
+    Se asigna en el análisis semántico.
+    Tosos los tipos indicados en FBaseType (mitipo, TCadena, ..), salvo los del sistema
+    (byte, integer, string, ...) deben tener una declaración.
+    Debe ser solo una referencia. No se es propietario de este nodo.}
+    FDeclaration: TTypeDecl;
+    {Referencia a la definición fundamental del tipo.
+    Se resuelve en el análisis semántico.
+    La definición fundamental de un tipo solo puede ser un tipo del sistema (byte,
+    integer, string, ...) o un tipo estructurado (array ... of ..., record ... end).
+    Debe ser solo una referencia. No se es propietario de este nodo.}
     FDefinition: TTypeDef;
   public
     property BaseType: String read FBaseType write FBaseType;
+    property Declaration: TTypeDecl read FDeclaration write FDeclaration;
     property Definition: TTypeDef read FDefinition write FDefinition;
   public  //Inicialización y depuración
     constructor Create(ABaseType: String; const ASrcPos: TSrcPos);
