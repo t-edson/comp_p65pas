@@ -674,6 +674,9 @@ type  //Definiciones previas para declaraciones de tipos
     - Valor devuelto de una función:  ": byte"
     - Campos de un RECORD: ": tipodecampo"
   }
+
+  { TTypeDef }
+
   TTypeDef = class(TASTnode)
     private
       {Nombre del tipo.
@@ -694,6 +697,7 @@ type  //Definiciones previas para declaraciones de tipos
       property TypeName: string read FTypeName write FTypeName;
       function IsNamed: Boolean; inline;
       function IsInline: Boolean; inline;
+      function GetFinalDef: TTypeDef; inline;
     public  //Inicialización y depuración
       constructor Create(ANodeType: TASTNodeType; const ATypeName: string;
           const ASrcPos: TSrcPos);
@@ -763,14 +767,15 @@ type  //Nodos de definiciones de tipos
     FDeclaration: TTypeDecl;
     {Referencia a la definición fundamental del tipo.
     Se resuelve en el análisis semántico.
-    La definición fundamental de un tipo solo puede ser un tipo del sistema (byte,
-    integer, string, ...) o un tipo estructurado (array ... of ..., record ... end).
+    La definición final de un tipo, se obtiene resolviendo los alias encadenados, hasta
+    llegar a la definición final. Solo puede ser un tipo del sistema (byte, integer,
+    string, ...) o un tipo estructurado (array ... of ..., record ... end).
     Debe ser solo una referencia. No se es propietario de este nodo.}
-    FDefinition: TTypeDef;
+    FFinalDef: TTypeDef;
   public
     property BaseType: String read FBaseType write FBaseType;
     property Declaration: TTypeDecl read FDeclaration write FDeclaration;
-    property Definition: TTypeDef read FDefinition write FDefinition;
+    property FinalDef: TTypeDef read FFinalDef write FFinalDef;
   public  //Inicialización y depuración
     constructor Create(ABaseType: String; const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -1719,6 +1724,18 @@ function TTypeDef.IsInline: Boolean;
 "record ... end" }
 begin
   Exit(NodeType <> ntAliasTypeDef);
+end;
+function TTypeDef.GetFinalDef: TTypeDef;
+{Devuelve la definición final del tipo.}
+begin
+  if NodeType = ntAliasTypeDef then begin
+    //Es un tipo alias.
+    //Devolvemos "FinalDef", que debe haberse resuelto en el análisis semántico.
+    Exit(TAliasTypeDef(Self).FinalDef);
+  end else begin
+    //Los tipos INLINE son su misma definición final
+    Exit(Self);
+  end;
 end;
 constructor TTypeDef.Create(ANodeType: TASTNodeType; const ATypeName: string;
                             const ASrcPos: TSrcPos);
