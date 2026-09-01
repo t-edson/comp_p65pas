@@ -113,7 +113,9 @@ type
     function ResolveType(const TypeName: string): TTypeDef;
     function GetFinalTypeDef(TypeDef: TTypeDef): TTypeDef;
     function ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
+    public
     function GetTypeOf(Expr: TExpression): TTypeDef;
+    private
     function AreTypesCompatible(T1, T2: TTypeDef): Boolean;
     function IsNumericType(TypeDef: TTypeDef): Boolean;
     function IsOrdinalType(TypeDef: TTypeDef): Boolean;
@@ -154,7 +156,7 @@ type
     procedure VisitFunctionCall(FuncCall: TFunctionCall);
     procedure VisitFieldAccess(FieldAccess: TFieldAccess);
     procedure VisitPointerDeref(PointerDeref: TPointerDeref);
-    procedure VisitArrayIndex(ArrayIndex: TArrayRef);
+    procedure VisitArrayRef(ArrayRef: TArrayRef);
     procedure VisitArrayLiteral(ArrayLit: TArrayLiteral);
     procedure VisitRecordLiteral(RecordLit: TRecordLiteral);
     procedure VisitPointerLiteral(PointerLit: TPointerLiteral);
@@ -1275,12 +1277,13 @@ procedure TSemanticAnalyzer.VisitVariableRef(VarRef: TVariableRef);
 var
   Sym: TSymbol;
 begin
+  //Busca el nombre de la variable.
   Sym := FCurrentScope.LookupRecursive(VarRef.Name);
   if Sym = nil then begin
     Error('Variable no declarada: ' + VarRef.Name, VarRef.SrcPos);
     Exit;
   end;
-  //Enlaza a la declaración
+  //Enlaza a la declaración.
   VarRef.Declaration := TVarDecl(Sym.Declaration);
 end;
 procedure TSemanticAnalyzer.VisitNumberLiteral(NumLit: TNumberLiteral);
@@ -1477,38 +1480,35 @@ begin
       Error('^ solo puede aplicarse a punteros', PointerDeref.SrcPos);
   end;
 end;
-procedure TSemanticAnalyzer.VisitArrayIndex(ArrayIndex: TArrayRef);
+procedure TSemanticAnalyzer.VisitArrayRef(ArrayRef: TArrayRef);
 var
-  ArrayType, IdxType: TTypeDef;
+  ArrayVarType, IdxType: TTypeDef;
   i: Integer;
 begin
-  // Analizar la variable arreglo
-  VisitNode(ArrayIndex.ArrayVar);
-  ArrayType := GetTypeOf(ArrayIndex.ArrayVar);
-
-  if ArrayType = nil then begin
-    Error('No se puede determinar el tipo del arreglo', ArrayIndex.ArrayVar.SrcPos);
+  //Analiza el nodo de la variable arreglo.
+  VisitNode(ArrayRef.ArrayVar);
+  //Determina el tipo del arreglo base
+  ArrayVarType := GetTypeOf(ArrayRef.ArrayVar);
+  if ArrayVarType = nil then begin
+    Error('No se puede determinar el tipo del arreglo', ArrayRef.ArrayVar.SrcPos);
     Exit;
   end;
-
-  // Verificar que sea un arreglo
-  if not (ArrayType.NodeType = ntArrayTypeDef) then begin
-    Error('[] solo puede aplicarse a arreglos', ArrayIndex.SrcPos);
+  //Verificar que sea un arreglo
+  if not (ArrayVarType.NodeType = ntArrayTypeDef) then begin
+    Error('[] solo puede aplicarse a arreglos', ArrayRef.SrcPos);
     Exit;
   end;
-
-  // Verificar número de índices
-  if ArrayIndex.Indices.Count <> TArrayTypeDef(ArrayType).IndexRanges.Count then
+  //Verifica número de índices
+  if ArrayRef.Indices.Count <> TArrayTypeDef(ArrayVarType).IndexRanges.Count then
     Error('Número incorrecto de índices para el arreglo (esperaba ' +
-          IntToStr(TArrayTypeDef(ArrayType).IndexRanges.Count) + ', tiene ' +
-          IntToStr(ArrayIndex.Indices.Count) + ')', ArrayIndex.SrcPos);
-
-  // Analizar índices
-  for i := 0 to ArrayIndex.Indices.Count - 1 do begin
-    VisitNode(ArrayIndex.Indices[i]);
-    IdxType := GetTypeOf(ArrayIndex.Indices[i]);
+          IntToStr(TArrayTypeDef(ArrayVarType).IndexRanges.Count) + ', tiene ' +
+          IntToStr(ArrayRef.Indices.Count) + ')', ArrayRef.SrcPos);
+  //Analiza índices
+  for i := 0 to ArrayRef.Indices.Count - 1 do begin
+    VisitNode(ArrayRef.Indices[i]);
+    IdxType := GetTypeOf(ArrayRef.Indices[i]);
     if not IsOrdinalType(IdxType) then
-      Warning('El índice debe ser de tipo ordinal', ArrayIndex.Indices[i].SrcPos);
+      Warning('El índice debe ser de tipo ordinal', ArrayRef.Indices[i].SrcPos);
   end;
 end;
 procedure TSemanticAnalyzer.VisitArrayLiteral(ArrayLit: TArrayLiteral);
@@ -1579,7 +1579,7 @@ begin
     ntProcFunctCall : VisitFunctionCall(TFunctionCall(Node));
     ntFieldAccess   : VisitFieldAccess(TFieldAccess(Node));
     ntPointerDeref  : VisitPointerDeref(TPointerDeref(Node));
-    ntArrayRef      : VisitArrayIndex(TArrayRef(Node));
+    ntArrayRef      : VisitArrayRef(TArrayRef(Node));
     ntArrayLiteral  : VisitArrayLiteral(TArrayLiteral(Node));
     ntRecordLiteral : VisitRecordLiteral(TRecordLiteral(Node));
     ntPointerLiteral: VisitPointerLiteral(TPointerLiteral(Node));
@@ -1616,10 +1616,10 @@ begin
   //Registra primero las declaraciones globales
   RegisterDeclarations(Prog.Declarations);
 
-  {Analizar las declaraciones de tipos para registrar sus símbolos (como los valores de
-  los enumerados).}
+  {Analizar las declaraciones de tipos y variables para registrar sus símbolos (como los
+  valores de los enumerados).}
   for Node in Prog.Declarations do begin
-    if Node.NodeType = ntTypeDecl then begin
+    if Node.NodeType in [ntTypeDecl, ntVarDecl] then begin
         VisitNode(TTypeDecl(Node).Definition);
     end;
   end;

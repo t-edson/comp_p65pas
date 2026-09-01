@@ -341,13 +341,13 @@ type  //Nodos de expresiones
   // Acceso a arreglo: variable[index]
   TArrayRef = class(TExpression)
   private
-    FArrayVar: TExpression;    //La variable arreglo o expresión
+    FArrayVar: TExpression;     //La variable arreglo o expresión
     FIndices: TExpressionList;  //Lista de índices (multidimensional)
   public
     procedure AddIndex(Index: TExpression);
     property ArrayVar: TExpression read FArrayVar;
     property Indices: TExpressionList read FIndices;
-
+  public  //Inicialización y depuración
     constructor Create(AArrayVar: TExpression; const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
@@ -1044,9 +1044,9 @@ begin
 end;
 function TVariableRef.ToString: string;
 begin
-  Result := Format('VarRef: %s', [FName]);
+  Result := Format('TVariableRef: %s', [FName]);
   if FDeclaration <> nil then
-    Result := Result + ' -> ' + FDeclaration.Name;
+    Result += LineEnding + 'TypeDef:' + LineEnding + FDeclaration.TypeDef.ToString;
 end;
 // TNumberLiteral
 function TNumberLiteral.IsInteger: Boolean;
@@ -1338,8 +1338,8 @@ begin
 end;
 function TArrayRef.ToString: string;
 begin
-  Result := Format('ArrayIndex: %s (%d indices)',
-                   [FArrayVar.ToString, FIndices.Count]);
+  Result := 'TArrayRef: <_item()>';
+  //Result += LineEnding + 'TypeDef:' + LineEnding + FArrayVar.???;
 end;
 {$endregion}
 {$region "Nodos de sentencias"}
@@ -1831,7 +1831,16 @@ begin
 end;
 function TAliasTypeDef.ToString: string;
 begin
-  Result := Format('Alias: %s = %s', [FTypeName, FBaseType]);
+  Result := 'TAliasTypeDef:' + LineEnding +
+  Format('%s = %s', [FTypeName, FBaseType]) + LineEnding;
+  if Declaration=Nil then
+    Result += 'Declaration: <Nil>'+ LineEnding
+  else
+    Result += 'Declaration:' + Declaration.ToString + LineEnding;
+  if FinalDef=Nil then
+    Result += 'FinalDef: <Nil>' + LineEnding
+  else
+    Result += 'FinalDef:' + FinalDef.ToString + LineEnding;
 end;
 // TSubranTypeDef
 constructor TSubranTypeDef.Create(ALowExpr, AHighExpr: TExpression;
