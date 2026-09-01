@@ -109,9 +109,14 @@ type  //Declaraciones y clases base para el AST
     //writeln() para espaciar .
     FFormatWidth: Integer;     // -1 = sin formato
     FFormatDecimals: Integer;  // -1 = sin decimales
+    {Referencia (no se es propietario) a la definición del tipo de la expresión.
+    Se actualiza en el análisis semántico.}
+    FExpTypeDef: TTypeDef;
   public
     property FormatWidth: Integer read FFormatWidth write FFormatWidth;
     property FormatDecimals: Integer read FFormatDecimals write FFormatDecimals;
+    property ExpTypeDef: TTypeDef read FExpTypeDef write FExpTypeDef;
+  public  //Información sobre la expresión
     function HasFormat: Boolean;
     function HasDecimals: Boolean;
     function ValueStr: String;

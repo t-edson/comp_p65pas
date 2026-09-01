@@ -130,7 +130,7 @@ type
     procedure VisitConstDecl(ConstDecl: TConstDecl);
     procedure VisitProcDecl(ProcFunctDecl: TProcFunctDecl);
     //Definiciones de tipos
-    procedure VisitTypeDef(TypeDef: TTypeDef);
+    procedure VisitAliasTypeDef(TypeDef: TTypeDef);
     procedure VisitArrayTypeDef(ArrayType: TArrayTypeDef);
     procedure VisitRecordTypeDef(RecordType: TRecordTypeDef);
     procedure VisitEnumTypeDef(EnumType: TEnumTypeDef);
@@ -532,14 +532,7 @@ begin
     ntStringLiteral:
       Result := ResolveType('STRING');
     ntVariableRef: begin
-      Sym := FCurrentScope.LookupRecursive(TVariableRef(Expr).Name);
-      if Sym <> nil then begin
-        Result := Sym.DataType;
-        // Enlazar la referencia a su declaración
-        TVariableRef(Expr).Declaration := TVarDecl(Sym.Declaration);
-      end else begin
-        Result := nil;
-      end;
+      Result := Expr.ExpTypeDef;  //La expresión ya debe haber sido visitada
     end;
     ntBinaryOp: begin
       //Por ahora, se usará el tipo del operando izquierdo, pero, formalmente, debe haber
@@ -563,43 +556,13 @@ begin
         Result := nil;
     end;
     ntFieldAccess: begin
-      //El tipo de un campo es el tipo declarado en el registro
-      //Obtiene el tipo del registro (la parte izquierda de <Registro>.<campo>)
-      FieldAccess := TFieldAccess(Expr); //Objeto TFieldAccess
-      RecordVarType := GetTypeOf(FieldAccess.RecordVar);
-      if RecordVarType = nil then begin
-        Result := nil;
-        Exit;
-      end;
-      RecordVarType := RecordVarType.GetFinalDef;   //La definición final, debe ser un RECORD.
-      //Validar que sea un RECORD
-      if RecordVarType.NodeType <> ntRecordTypeDef then begin
-        Result := nil;
-        Exit;
-      end;
-      //Busca el campo en el registro
-      Fields := TRecordTypeDef(RecordVarType).Fields;
-      Result := nil;
-      for i := 0 to Fields.Count - 1 do begin
-        if Fields[i].NodeType = ntVarDecl then begin
-          FieldDecl := TVarDecl(Fields[i]);
-          if CompareText(FieldDecl.Name, FieldAccess.FieldName)=0 then begin
-            //Encontró el campo, lee su tipo
-            Result := FieldDecl.TypeDef;  //Ya debe estar actualizado
-            Break;
-          end;
-        end;
-      end;
-      //Si no se encontró el campo, "Result" queda en NIL.
+      Result := Expr.ExpTypeDef;  //La expresión ya debe haber sido visitada
     end;
     ntArrayRef: begin
-      //El tipo de un arreglo es el tipo de sus elementos
-      ArrayVarType := GetTypeOf(TArrayRef(Expr).ArrayVar);  //Obtiene el tipo del arreglo
-      if ArrayVarType = nil then Exit(nil);      //Valida que exista
-      if ArrayVarType.NodeType <> ntArrayTypeDef then Exit(nil);  //Valida que sea arreglo
-      ArrayType := TArrayTypeDef(ArrayVarType);    //Convierte a TArrayTypeDef
-      // Resuelve el tipo de los elementos
-      Result := ArrayType.ElemTypeDef;
+      Result := Expr.ExpTypeDef;  //La expresión ya debe haber sido visitada
+    end;
+    ntPointerDeref: begin
+      Result := Expr.ExpTypeDef;  //La expresión ya debe haber sido visitada
     end;
     ntPointerLiteral:
       Result := ResolveType('POINTER');
@@ -617,6 +580,7 @@ begin
 
   //Obtenemos los tipos base
   Base1 := T1.GetFinalDef;
+  if Base1 = Nil then Exit(false);
   if Base1.NodeType = ntSubranTypeDef then Base1 := TSubranTypeDef(Base1).BaseType;
   Base2 := T2.GetFinalDef;
   if Base2 = Nil then Exit(false);
@@ -784,15 +748,15 @@ begin
       Error('Procedimiento/Función duplicado: ' + ProcFunctDecl.Name, ProcFunctDecl.SrcPos);
       Exit;
     end;
-    end;
-  // Crear símbolo
+  end;
+  //Es un símbolo (proc/función) nuevo. Hay que crearlo.
   if ProcFunctDecl.IsFunction then
     Sym := TSymbol.Create(ProcFunctDecl.Name, skFunction)
   else
     Sym := TSymbol.Create(ProcFunctDecl.Name, skProcedure);
   Sym.Declaration := ProcFunctDecl;
   Sym.IsForward := ProcFunctDecl.IsForward;
-  // Registrar parámetros (solo para validación, no se declaran en el ámbito global)
+  //Registrar parámetros (solo para validación, no se declaran en el ámbito global)
   if ProcFunctDecl.Parameters <> nil then begin
     Sym.Parameters := TASTNodeList.Create(False);   //No debe liberar los nodos parámetro, porque ya los hace el AST.
     for i := 0 to ProcFunctDecl.Parameters.Count - 1 do begin
@@ -864,7 +828,6 @@ begin
     if not AreTypesCompatible(VarType, InitType) then
       Error('Tipo de inicialización incompatible para: ' + VarDecl.Name, VarDecl.SrcPos);
   end;
-
   // Verificar ABSOLUTE
   if VarDecl.hasAdic = DEC_ABSOL then begin
     if VarDecl.absAddr = nil then
@@ -893,17 +856,17 @@ begin
   FCurrentProcedure := ProcFunctDecl;
   EnterScope;
   try
-    // Registrar parámetros en el ámbito local
+    //Registrar los parámetros en el ámbito local.
     if ProcFunctDecl.Parameters <> nil then begin
       for i := 0 to ProcFunctDecl.Parameters.Count - 1 do begin
         Param := TVarDecl(ProcFunctDecl.Parameters[i]);
-        //Registra parámetro
+        //Registra el parámetro
         Sym := TSymbol.Create(Param.Name, skParameter);
         Sym.DataType := Param.TypeDef;
         Sym.Declaration := Param;
         FCurrentScope.Declare(Sym);
-        // Resolver tipo del parámetro
-        ResolveTypeDef(Param.TypeDef);
+        //Visita para validar y resolver los tipos.
+        VisitNode(Param.TypeDef);
       end;
     end;
     //Validamos si estamos en un método
@@ -945,7 +908,7 @@ begin
   VisitNode(TypeDecl.Definition);
 end;
 //Definiciones de tipos
-procedure TSemanticAnalyzer.VisitTypeDef(TypeDef: TTypeDef);
+procedure TSemanticAnalyzer.VisitAliasTypeDef(TypeDef: TTypeDef);
 {Visita declaraciones de tipos sismples.}
 begin
   //El tipo ya fue registrado en la tabla de símbolos. Solo falta resolver la definición
@@ -960,12 +923,8 @@ var
 begin
   //Verifica tipo de elementos
   ElemTypeDef := ArrayType.ElemTypeDef;
-  ResolveTypeDef(ElemTypeDef);  //Por si es un alias
-  //Verificar si ElemTypeDef tiene subtipos que deben visitarse también.
-  if ElemTypeDef.IsInline then begin
-    //SOlo analiza las definiciones INLINE.
-    VisitNode(ElemTypeDef);  //Analiza tipos anidados
-  end;
+  //Visita para validar y resolver los tipos alias directos o anidados.
+  VisitNode(ElemTypeDef);
 
   //Verifica rangos de índices
   for i := 0 to ArrayType.IndexRanges.Count - 1 do begin
@@ -987,11 +946,8 @@ begin
   for astNode in RecordType.Fields do begin
     if astNode.NodeType = ntVarDecl then begin
       Field := TVarDecl(astNode);
-      ResolveTypeDef(Field.TypeDef);  //Resuelve los alias
-      if Field.TypeDef.IsInline then begin
-        //Solo analiza las definiciones INLINE.
-        VisitNode(Field.TypeDef);  //Analiza tipos anidados
-      end;
+      //Visita para validar y resolver los tipos alias directos o anidados.
+      VisitNode(Field.TypeDef);
     end;
   end;
   //Analiza variantes
@@ -1006,8 +962,8 @@ begin
       for astNode in Branch.Fields do begin
         if astNode.NodeType = ntVarDecl then begin
           Field := TVarDecl(astNode);
-          ResolveTypeDef(Field.TypeDef);  //Resuelve los alias
-
+          //Visita para validar y resolver los tipos alias directos o anidados.
+          VisitNode(Field.TypeDef);
         end;
       end;
     end;
@@ -1162,25 +1118,23 @@ var
   ControlType: TTypeDef;
   Sym: TSymbol;
 begin
-  // Verificar variable de control
-  if ForLoop.ControlVar <> nil then
-  begin
+  //Verificar la variable de control
+  if ForLoop.ControlVar <> nil then begin
     Sym := FCurrentScope.LookupRecursive(ForLoop.ControlVar.Name);
-    if Sym = nil then
+    if Sym = nil then begin
       Error('Variable de control no declarada: ' + ForLoop.ControlVar.Name, ForLoop.ControlVar.SrcPos)
-    else
-    begin
+    end else begin
       ControlType := Sym.DataType;
-      if not IsOrdinalType(ControlType) then
+      if not IsOrdinalType(ControlType.GetFinalDef) then
         Error('La variable de control debe ser de tipo ordinal', ForLoop.ControlVar.SrcPos);
     end;
   end;
 
-  // Analizar expresiones
+  //Analiza expresiones
   VisitNode(ForLoop.StartExpr);
   VisitNode(ForLoop.EndExpr);
 
-  // Analizar cuerpo
+  //Analiza cuerpo
   if ForLoop.Body <> nil then
     VisitBlock(ForLoop.Body);
 end;
@@ -1285,6 +1239,8 @@ begin
   end;
   //Enlaza a la declaración.
   VarRef.Declaration := TVarDecl(Sym.Declaration);
+  //Actualiza el tipo de la expresión
+  VarRef.ExpTypeDef := Sym.DataType;
 end;
 procedure TSemanticAnalyzer.VisitNumberLiteral(NumLit: TNumberLiteral);
 begin
@@ -1403,7 +1359,7 @@ begin
         VisitNode(FuncCall.Arguments[i]);
         ArgType := GetTypeOf(FuncCall.Arguments[i]);
         Param := TVarDecl(Sym.Parameters[i]);
-        ResolveTypeDef(Param.TypeDef);
+        ResolveTypeDef(Param.TypeDef);   //*** ¿Es necesario? ¿No sería VisitNode()?
         if not AreTypesCompatible(Param.TypeDef, ArgType) then begin
           Error('Tipo de argumento incompatible para parámetro ' + IntToStr(i+1) + ' de ' +
                 FuncCall.Name, FuncCall.Arguments[i].SrcPos);
@@ -1440,9 +1396,9 @@ var
   FieldDecl: TVarDecl;
   RecordTypeDef: TRecordTypeDef;
 begin
-  //Analiza la variable registro
-  //VisitNode(FieldAccess.RecordVar);
-  RecordVarType := GetTypeOf(FieldAccess.RecordVar);
+  //Analiza la variable registro y resuelve tipos
+  VisitNode(FieldAccess.RecordVar);
+  RecordVarType := FieldAccess.RecordVar.ExpTypeDef;
   if RecordVarType = nil then begin
     Error('No se puede determinar el tipo del registro', FieldAccess.RecordVar.SrcPos);
     Exit;
@@ -1457,6 +1413,7 @@ begin
       if RecordTypeDef.Fields[i].NodeType = ntVarDecl then begin
         FieldDecl := TVarDecl(RecordTypeDef.Fields[i]);
         if FieldDecl.Name = FieldAccess.FieldName then begin
+          FieldAccess.ExpTypeDef := FieldDecl.TypeDef;  //Actualiza el tipo
           FoundField := True;
           Break;
         end;
@@ -1470,14 +1427,17 @@ end;
 procedure TSemanticAnalyzer.VisitPointerDeref(PointerDeref: TPointerDeref);
 var
   PtrType: TTypeDef;
+  PointerTypeDef: TPointerTypeDef;
 begin
   VisitNode(PointerDeref.Pointer);
-  PtrType := GetTypeOf(PointerDeref.Pointer);
-
-  if PtrType <> nil then
-  begin
-    if not (PtrType.NodeType = ntPointerTypeDef) then
+  PtrType := PointerDeref.Pointer.ExpTypeDef;
+  if PtrType <> nil then begin
+    PtrType := PtrType.GetFinalDef;   //Por si es un alias a puntero
+    if not (PtrType.NodeType = ntPointerTypeDef) then begin
       Error('^ solo puede aplicarse a punteros', PointerDeref.SrcPos);
+    end;
+    PointerTypeDef := TPointerTypeDef(PtrType);
+    PointerDeref.ExpTypeDef := PointerTypeDef.TargetTypeDef;
   end;
 end;
 procedure TSemanticAnalyzer.VisitArrayRef(ArrayRef: TArrayRef);
@@ -1493,11 +1453,14 @@ begin
     Error('No se puede determinar el tipo del arreglo', ArrayRef.ArrayVar.SrcPos);
     Exit;
   end;
+  ArrayVarType := ArrayVarType.GetFinalDef;   //Por si es un alias del arreglo.
   //Verificar que sea un arreglo
-  if not (ArrayVarType.NodeType = ntArrayTypeDef) then begin
+  if ArrayVarType.NodeType <> ntArrayTypeDef then begin
     Error('[] solo puede aplicarse a arreglos', ArrayRef.SrcPos);
     Exit;
   end;
+  //Actualiza el tipo de la expresión, para que no tenga que buscarse de nuevo.
+  ArrayRef.ExpTypeDef := TArrayTypeDef(ArrayVarType).ElemTypeDef;
   //Verifica número de índices
   if ArrayRef.Indices.Count <> TArrayTypeDef(ArrayVarType).IndexRanges.Count then
     Error('Número incorrecto de índices para el arreglo (esperaba ' +
@@ -1551,14 +1514,14 @@ begin
     ntProcFunctDecl : VisitProcDecl(TProcFunctDecl(Node));
     ntTypeDecl      : VisitTypeDecl(TTypeDecl(Node));
     //Definiciones de tipos
-    ntSimpleTypeDef : VisitTypeDef(TTypeDef(Node));
+    ntSimpleTypeDef : ;
     ntSubranTypeDef : VisitSubrangeTypeDef(TSubranTypeDef(Node));
     ntEnumTypeDef   : VisitEnumTypeDef(TEnumTypeDef(Node));
     ntArrayTypeDef  : VisitArrayTypeDef(TArrayTypeDef(Node));
     ntRecordTypeDef : VisitRecordTypeDef(TRecordTypeDef(Node));
     ntPointerTypeDef: VisitPointerTypeDef(TPointerTypeDef(Node));
-    ntAliasTypeDef  : VisitTypeDef(TTypeDef(Node));
-    ntProcedTypeDef : VisitTypeDef(TTypeDef(Node));  //*** Falta implementar
+    ntAliasTypeDef  : VisitAliasTypeDef(TTypeDef(Node));
+    ntProcedTypeDef : ;  //*** Falta implementar
     //Sentencias
     ntAssignment    : VisitAssignment(TAssignment(Node));
     ntIfStatement   : VisitIfStatement(TIfStatement(Node));
@@ -1616,8 +1579,8 @@ begin
   //Registra primero las declaraciones globales
   RegisterDeclarations(Prog.Declarations);
 
-  {Analizar las declaraciones de tipos y variables para registrar sus símbolos (como los
-  valores de los enumerados).}
+  {Analizar primero las declaraciones de tipos y variables para registrar sus símbolos
+  (como los valores de los enumerados).}
   for Node in Prog.Declarations do begin
     if Node.NodeType in [ntTypeDecl, ntVarDecl] then begin
         VisitNode(TTypeDecl(Node).Definition);
