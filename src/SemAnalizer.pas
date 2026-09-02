@@ -780,8 +780,7 @@ realizará posteriormente, en la visita a la declaración.}
 var
   Sym: TSymbol;
 begin
-  if TypeDecl.Name = '' then
-    Exit; // Tipo anónimo (inline)
+  if TypeDecl.Name = '' then Exit; // Tipo anónimo (inline)
   //Verifica duplicado
   if FCurrentScope.Lookup(TypeDecl.Name) <> nil then begin
     Error('Tipo duplicado: ' + TypeDecl.Name, TypeDecl.SrcPos);
@@ -1053,13 +1052,8 @@ procedure TSemanticAnalyzer.VisitPointerTypeDef(PointerType: TPointerTypeDef);
 var
   TargetType: TTypeDef;
 begin
-  // Verificar tipo apuntado
-  if PointerType.TargetTypeName <> '' then
-  begin
-    TargetType := ResolveType(PointerType.TargetTypeName);
-    if TargetType = nil then
-      Error('Tipo apuntado desconocido: ' + PointerType.TargetTypeName, PointerType.SrcPos);
-  end;
+  //Visita para validar y resolver los tipos alias directos o anidados.
+  VisitNode(PointerType.TargetTypeDef);
 end;
 {$endregion}
 {$region "Visitantes de sentencias"}

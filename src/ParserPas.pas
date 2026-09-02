@@ -891,12 +891,11 @@ Opcionalmente, y aunque no es estándar en Pascal, se acepta también la forma:
 [<valor_ini>..<valor_fin>] OF <tipo>;
 }
 var
-  ArrayType: TArrayTypeDef;
+  ArrayTypeDef: TArrayTypeDef;
   LowExpr, HighExpr: TExpression;
   TypeDef: TTypeDef;
-  TypeDefPos: TSrcPos;
 begin
-  ArrayType := TArrayTypeDef.Create(lex.GetSrcPos);
+  ArrayTypeDef := TArrayTypeDef.Create(lex.GetSrcPos);
   if tokIdent = tiARRAY then Next;     //Consume ARRAY, pero se acepta también que vaya "["
   if tokIdent = tiBRACK_OP then begin    //Es un arreglo estático: ARRAY[1..3] OF ...
     Next;     //Consume "[".
@@ -908,48 +907,47 @@ begin
         HighExpr := ParseFactor;
         if HayError then begin
           LowExpr.Free;
-          ArrayType.Free;
+          ArrayTypeDef.Free;
           Exit(nil);
         end;
-        ArrayType.AddRange(TArrayRange.Create(LowExpr, HighExpr, lex.GetSrcPos));
+        ArrayTypeDef.AddRange(TArrayRange.Create(LowExpr, HighExpr, lex.GetSrcPos));
       end else if tokIdent = tiBRACK_CL then begin
         //Es una definición corta: ARRAY[5] OF ...
         HighExpr := Nil;   //Indica de esta forma que es la forma simplificada
         //LowExpr := TNumberLiteral.Create(0, lex.GetSrcPos);   //Índice menor = 0
-        ArrayType.AddRange(TArrayRange.Create(LowExpr, HighExpr, lex.GetSrcPos));
+        ArrayTypeDef.AddRange(TArrayRange.Create(LowExpr, HighExpr, lex.GetSrcPos));
       end else begin   //Sigue otra cosa
         GenError('Se esperaba ".." o "]" en el rango del arreglo');
         LowExpr.Free;
-        ArrayType.Free;
+        ArrayTypeDef.Free;
         Exit(nil);
       end;
       if tokIdent = tiCOMMA then Next else Break;   //Valida si sigue otra dimensión
     end;
     if not ConsumeTok(tiBRACK_CL, 'Se esperaba "]"') then begin
-      ArrayType.Free;
+      ArrayTypeDef.Free;
       Exit(nil);
     end;
   end;
   //if not ConsumeTok(tiOF, 'Se esperaba "of"') then begin
-  //  ArrayType.Free;
+  //  ArrayTypeDef.Free;
   //  Exit(nil);
   //end;
   if tokIdent = tiOF then Next;   //Es opcional en P65Pas
   //Lee tipo de los elementos (puede ser cualquier tipo).
   if tokIdent = tiIDENTIF then begin
-    ArrayType.ElemTypeDef := TAliasTypeDef.Create(lex.token, lex.GetSrcPos);
+    ArrayTypeDef.ElemTypeDef := TAliasTypeDef.Create(lex.token, lex.GetSrcPos);
     Next;
   end else begin
     // Definición Inline: array[1..10] of record ... end)
-    TypeDefPos := lex.GetSrcPos;
     TypeDef := ParseTypeDefinition;  //Llamada recursiva
     if HayError then begin
-      ArrayType.Destroy;
+      ArrayTypeDef.Destroy;
       Exit(nil);
     end;
-    ArrayType.ElemTypeDef := TypeDef;
+    ArrayTypeDef.ElemTypeDef := TypeDef;
   end;
-  Result := ArrayType;
+  Result := ArrayTypeDef;
 end;
 function TParserPas.ParseRecordTypeDef: TRecordTypeDef;
 {Analiza la definición de un tipo RECORD y devuelve un objeto "TRecordTypeDef" con la
@@ -1056,13 +1054,17 @@ begin
 end;
 function TParserPas.ParsePointerType: TPointerTypeDef;
 var
-  TargetTypeName: string;
+  TypeDef: TTypeDef;
+  PointerTypeDef: TPointerTypeDef;
 begin
   Next;   //Consume "^"
-  if not ConsumeIdent(TargetTypeName, 'Se esperaba el tipo al que apunta el puntero') then begin
-    Exit(Nil);
+  TypeDef := ParseTypeDefinition;  //Llamada recursiva
+  if HayError then begin
+    Exit(nil);
   end;
-  Result := TPointerTypeDef.Create(TargetTypeName, lex.GetSrcPos);
+  PointerTypeDef := TPointerTypeDef.Create(lex.GetSrcPos);
+  PointerTypeDef.TargetTypeDef := TypeDef;
+  Result := PointerTypeDef;
 end;
 function TParserPas.ParseProceduralType: TProcedTypeDef;
 var

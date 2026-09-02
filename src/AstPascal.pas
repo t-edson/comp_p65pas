@@ -846,13 +846,11 @@ type  //Nodos de definiciones de tipos
   // ============================================================
   TPointerTypeDef = class(TTypeDef)
   private
-    FTargetTypeName: string;
     FTargetTypeDef: TTypeDef;  // Para tipos definidos inline
   public
-    property TargetTypeName: string read FTargetTypeName;
     property TargetTypeDef: TTypeDef read FTargetTypeDef write FTargetTypeDef;
   public  //Inicialización y depuración
-    constructor Create(const ATargetTypeName: string; const ASrcPos: TSrcPos);
+    constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
   end;
@@ -1935,11 +1933,9 @@ begin
   Result := Format('Record: %d fields', [Fields.Count]);
 end;
 // TPointerTypeDef
-constructor TPointerTypeDef.Create(const ATargetTypeName: string;
-  const ASrcPos: TSrcPos);
+constructor TPointerTypeDef.Create(const ASrcPos: TSrcPos);
 begin
   inherited Create(ntPointerTypeDef, '', ASrcPos);
-  FTargetTypeName := ATargetTypeName;
   //FTargetTypeDef := nil;
 end;
 destructor TPointerTypeDef.Destroy;
@@ -1949,7 +1945,7 @@ begin
 end;
 function TPointerTypeDef.ToString: string;
 begin
-  Result := Format('Pointer: ^%s', [FTargetTypeName]);
+  Result := Format('Pointer: ^%s', [FTargetTypeDef.ToString]);
 end;
 // TProcedTypeDef
 constructor TProcedTypeDef.Create(AIsFunction: Boolean; const ASrcPos: TSrcPos);
