@@ -833,7 +833,6 @@ end;
 function TParserPas.ParseSubrangeType: TSubranTypeDef;
 var
   LowExpr, HighExpr: TExpression;
-  BaseTypeName: String;
 begin
   LowExpr := ParseFactor;
   if HayError then begin
@@ -933,18 +932,12 @@ begin
   //end;
   if tokIdent = tiOF then Next;   //Es opcional en P65Pas
   //Lee tipo de los elementos (puede ser cualquier tipo).
-  if tokIdent = tiIDENTIF then begin
-    ArrayTypeDef.ElemTypeDef := TAliasTypeDef.Create(lex.token, lex.GetSrcPos);
-    Next;
-  end else begin
-    // Definición Inline: array[1..10] of record ... end)
-    TypeDef := ParseTypeDefinition;  //Llamada recursiva
-    if HayError then begin
-      ArrayTypeDef.Destroy;
-      Exit(nil);
-    end;
-    ArrayTypeDef.ElemTypeDef := TypeDef;
+  TypeDef := ParseTypeDefinition;
+  if HayError then begin
+    ArrayTypeDef.Destroy;
+    Exit(nil);
   end;
+  ArrayTypeDef.ElemTypeDef := TypeDef;
   Result := ArrayTypeDef;
 end;
 function TParserPas.ParseRecordTypeDef: TRecordTypeDef;
@@ -957,7 +950,7 @@ Si se encuentra algún error, se devuelve NIL.}
     selectorName: string;
     varDecl: TVarDecl;
     branch: TVariantBranch;
-    SrcPos, TypeDefPos: TSrcPos;
+    SrcPos: TSrcPos;
     typeDef: TTypeDef;
   begin
     //Es la sección variante del RECORD
@@ -967,23 +960,13 @@ Si se encuentra algún error, se devuelve NIL.}
     if not ConsumeIdent(selectorName, 'Se esperaba un identificador.') then Exit;
     if not ConsumeTok(tiCOLON, 'Se esperaba ":".') then Exit;
     //Leemos el tipo
-    if tokIdent = tiIDENTIF then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
-      //Creamos la variable selector con su tipo.
-      varDecl := TVarDecl.Create(selectorName, SrcPos);
-      varDecl.TypeDef := TAliasTypeDef.Create(lex.token, lex.GetSrcPos);  //Solo tipos simples
-      varDecl.TypeOwner := True;
-      Next;
-    end else begin //Debe ser una definición Inline: record ... end
-      TypeDefPos := lex.GetSrcPos;
-      typeDef := ParseTypeDefinition;
-      if HayError then begin
-        typeDef.Free; //Por si acaso
-        Exit;
-      end;
-      varDecl := TVarDecl.Create(selectorName, SrcPos);
-      varDecl.TypeDef := typeDef;
-      varDecl.TypeOwner := True;
+    typeDef := ParseTypeDefinition;
+    if HayError then begin
+      Exit;
     end;
+    varDecl := TVarDecl.Create(selectorName, SrcPos);
+    varDecl.TypeDef := typeDef;
+    varDecl.TypeOwner := True;
     if not ConsumeTok(tiOf, 'Se esperaba "of".') then Exit;
     RecordType.VarSelector := varDecl;  //De la detrucción de "varDecl" se encargará RecordType.
     //Analizamos las ramas
@@ -1056,7 +1039,7 @@ var
   PointerTypeDef: TPointerTypeDef;
 begin
   Next;   //Consume "^"
-  TypeDef := ParseTypeDefinition;  //Llamada recursiva
+  TypeDef := ParseTypeDefinition;
   if HayError then begin
     Exit(nil);
   end;
@@ -1249,15 +1232,9 @@ begin
     if tokIdent = tiCOLON then begin    //Constante con tipo
       Next;  // Consume ':'
       //Lee el tipo
-      if tokIdent = tiIDENTIF then begin
-        TypeDef := TAliasTypeDef.Create(lex.token, lex.GetSrcPos);
-        Next;
-      end else begin
-        TypeDefPos := lex.GetSrcPos;
-        TypeDef := ParseTypeDefinition;
-        if HayError then begin
-          Break;
-        end;
+      TypeDef := ParseTypeDefinition;
+      if HayError then begin
+        Break;
       end;
       //Continua con la asignación del valor.
       if not ConsumeTok(tiEQUAL, 'Se esperaba "=" en la declaración.') then begin
