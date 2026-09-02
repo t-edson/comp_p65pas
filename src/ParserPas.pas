@@ -731,38 +731,18 @@ begin
   until false;
   if not ConsumeTok(tiCOLON, 'Se esperaba ":" después de la variable(s).') then
     Exit(0);   //No es necesario limpiar nada adicional
-  //Lee el tipo y completa esa información en las variables creadas.
-  if tokIdent = tiIDENTIF then begin  //Debe ser un tipo simple: byte, mi_tipo, ...
-    //Actualiza el tipo en todas las variables creadas.
-    for i := idxVarIni to varContainer.Count-1 do begin
-      //Todos estos ítems deben ser los que hemos agregados
-      varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
-      varDecl.TypeDef := TAliasTypeDef.Create(lex.token, lex.GetSrcPos);  //Tipo simple
-      varDecl.TypeOwner := True;
-    end;
-    Next;   //Consume el identificador de tipo
-  end else begin //Debe ser una definición Inline: record ... end
-    typeDef := Nil;
-    //Actualiza el tipo en todas las variables creadas, haciendo que todas las variables
-    //creadas en un solo bloque, apunten al mismo tipo definido "typeDef".
-    for i := idxVarIni to varContainer.Count-1 do begin
-      //Todos estos ítems deben ser los que hemos agregados
-      varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
-      if typeDef = Nil then begin
-        typeDef := ParseTypeDefinition;
-        if HayError then begin
-          typeDef.Free; //Por si acaso
-          Exit(0);
-        end;
-        //Ponemos, como propietario del tipo, solo a la primera declaración, para evitar
-        //que varios objetos intenten destruirlo.
-        varDecl.TypeDef := typeDef;
-        varDecl.TypeOwner := True;
-      end else begin
-        varDecl.TypeDef := typeDef;
-        varDecl.TypeOwner := False;
-      end;
-    end;
+  //Lee el tipo que se aplicará a todas las variables del bloque.
+  typeDef := ParseTypeDefinition;
+  if HayError then begin
+    Exit(0);
+  end;
+  //Crea las variables (Debe haber al menos una).
+  for i := idxVarIni to varContainer.Count-1 do begin
+    //Todos estos ítems deben ser los que hemos agregados
+    varDecl := TVarDecl(varContainer[i]);   //Todas deben ser TVarDecl
+    varDecl.TypeDef := typeDef;
+    if i = idxVarIni then
+      varDecl.TypeOwner := True;  //Solo la primera variable es propietaria del tipo
   end;
   //Devuelve la cantidad de variables agregadas
   Exit(varContainer.Count - idxVarIni);
