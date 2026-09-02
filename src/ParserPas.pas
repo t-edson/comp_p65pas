@@ -387,7 +387,7 @@ Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve
 var
   SrcPos: TSrcPos;
   token: String;
-  functCall: TFunctionCall;
+  functCall: TProcFunctCall;
   BaseExpr: TExpression;
 begin
   token := lex.token;       //Guarda nombre del identificador.
@@ -395,7 +395,7 @@ begin
   Next;  //Pasamos al siguiente token para validar otros casos
   if tokIdent = tiPAREN_OP then begin  // "("
     //Sigue "(", debe ser una llamada a función o procedimiento.
-    functCall := TFunctionCall.Create(token, SrcPos);
+    functCall := TProcFunctCall.Create(token, SrcPos);
     // Parsear argumentos
     Next;  //Pasamos el "("
     if tokIdent = tiPAREN_CL then begin  // ")", No hay parámetros
@@ -713,7 +713,6 @@ var
   i, idxVarIni: Integer;
   typeDef: TTypeDef;
   varDecl: TVarDecl;
-  TypeDefPos: TSrcPos;
 begin
   //Explora la lista de identificadores y crea las variables.
   idxVarIni := varContainer.Count;  //Guardamos el índice de la primera variable.
@@ -743,7 +742,6 @@ begin
     end;
     Next;   //Consume el identificador de tipo
   end else begin //Debe ser una definición Inline: record ... end
-    TypeDefPos := lex.GetSrcPos;
     typeDef := Nil;
     //Actualiza el tipo en todas las variables creadas, haciendo que todas las variables
     //creadas en un solo bloque, apunten al mismo tipo definido "typeDef".

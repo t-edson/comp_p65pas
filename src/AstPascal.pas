@@ -74,7 +74,7 @@ type  //Declaraciones y clases base para el AST
   TStringLiteral = class;
   TBinaryOp = class;
   TUnaryOp = class;
-  TFunctionCall = class;
+  TProcFunctCall = class;
   TCaseBranch = class;
   TProcFunctDecl = class;
   TTypeDef = class;
@@ -300,7 +300,7 @@ type  //Nodos de expresiones
     destructor Destroy; override;
   end;
   // Llamada a función
-  TFunctionCall = class(TExpression)
+  TProcFunctCall = class(TExpression)
   private
     FName: string;
     FArguments: TExpressionList;
@@ -1265,8 +1265,8 @@ function TUnaryOp.ToString: string;
 begin
   Result := Format('UnaryOp: %s', [FOp]);
 end;
-// TFunctionCall
-constructor TFunctionCall.Create(const AName: string; const ASrcPos: TSrcPos);
+// TProcFunctCall
+constructor TProcFunctCall.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntProcFunctCall, ASrcPos);
   FName := AName;
@@ -1274,17 +1274,17 @@ begin
   FDeclaration := nil;
   FIsProcedure := False;
 end;
-destructor TFunctionCall.Destroy;
+destructor TProcFunctCall.Destroy;
 begin
   FArguments.Free;
   inherited;
 end;
-procedure TFunctionCall.AddArgument(Arg: TExpression);
+procedure TProcFunctCall.AddArgument(Arg: TExpression);
 begin
   Arg.Parent := Self;
   FArguments.Add(Arg);
 end;
-function TFunctionCall.ToString: string;
+function TProcFunctCall.ToString: string;
 begin
   Result := Format('FunctionCall: %s (%d args)', [FName, FArguments.Count]);
 end;
