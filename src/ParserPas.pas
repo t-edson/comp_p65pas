@@ -1101,16 +1101,11 @@ function TParserPas.ParseTypeDefinition: TTypeDef;
 {Analiza la definición de un tipo, simple o estructurado. Devuelve un nodo "TTypeDef" con
 la estructura del tipo analizado.
 Si se produce algún error, devuelve NIL.}
-var
-  SrcPos: TSrcPos;
-  BaseType: string;
 begin
-  SrcPos := lex.GetSrcPos;
   case tokIdent of
     tiIDENTIF: begin         //integer, byte, TPersona, etc.
-      BaseType := lex.token; //Nombre del tipo base
+      Result := TAliasTypeDef.Create(lex.token, lex.GetSrcPos);
       Next;
-      Result := TAliasTypeDef.Create(BaseType, SrcPos);
     end;
     tiLitNumbI: begin        //Subrango:  = 1..10
       Result := ParseSubrangeType;
@@ -1137,7 +1132,7 @@ begin
       Result := ParseProceduralType;
     end;
   else
-    GenError('Definición de tipo no reconocida', SrcPos);
+    GenError('Definición de tipo no reconocida', lex.GetSrcPos);
     Result := nil;
   end;
 end;
