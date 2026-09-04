@@ -59,8 +59,8 @@ type  //Tipos de nodos
 type  //Declaraciones y clases base para el AST
   // Dirección del bucle FOR
   TForDirection = (
-    fdUpTo,    // to (ascendente)
-    fdDownTo   // downto (descendente)
+    fdUpTo,    //To (ascendente)
+    fdDownTo   //Downto (descendente)
   );
 
   // Declaración forward de clases

@@ -24,13 +24,13 @@ type
   TSymbol = class
   private
     FName: string;
-    FKind: TSymbolKind;
-    FDataType: TTypeDef;
-    FDeclaration: TASTNode;
+    FKind: TSymbolKind;          //Tipo de símbolo.
+    FDataType: TTypeDef;         //Definición del tipo del símbolo.
+    FDeclaration: TASTNode;      //Referencia al nodo donde se declara el símbolo.
     FScope: TScope;
     FIsForward: Boolean;
     FIsIntrinsic: Boolean;
-    FParameters: TASTNodeList;
+    FParameters: TASTNodeList;   //Lista de parámetros
     FReturnType: TTypeDef;
     FIsDataTypeOwner: Boolean;   //Indica si es propietario del objeto FDataType
     FIsReturnTypeOwner: Boolean; //Indica si es propietario del objeto FReturnType
