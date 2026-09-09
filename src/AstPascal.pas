@@ -14,6 +14,7 @@ type  //Tipos de nodos
     ntFieldInitializer,//Inicializador de campo: nombre: 'Juan'
     ntRecordLiteral, //Literal de registro: (nombre: 'Juan'; edad: 30)
     ntPointerLiteral,//Literal de puntero: Nil o $100
+    ntSetLiteral,    //Literal de conjunto: [1, 2, 3]
     ntBinaryOp,      //Operación binaria. Ej. En "a+b", la operación binaria es el "+".
     ntUnaryOp,       //Operación unaria (un operando). Ej. -x, not a.
     ntProcFunctCall, //Llamada a procedimiento o función: max(a, b). Cuando es un procedimiento, sería un nodo de sentencia.
@@ -49,7 +50,8 @@ type  //Tipos de nodos
     ntArrayTypeDef,   //Tipo arreglo
     ntRecordTypeDef,  //Tipo RECORD
     ntPointerTypeDef, //Puntero
-    ntProcedTypeDef,  //Tipos procedurales: = proocedure(a: integer; b: integer);
+    ntSetTypeDef,     //Definición de tipo conjunto: set of byte
+    ntProcedTypeDef,  //Tipos procedurales: = procedure(a: integer; b: integer);
     //Nodos estructurales
     ntUnitRef,        //Referencia a unidades: USES unit1, unit2, ...
     ntProgram,        //Nodo raíz del programa completo: program MiPrograma;
@@ -994,16 +996,6 @@ procedure TCodeContainer.AddParameter(Param: TVarDecl);
 begin
   Param.IsParameter := True;
   Parameters.Add(Param);
-end;
-procedure TProgram.Clear;
-{Limpia al árbol de sintaxis del programa o subprograma, y lo deja listo para iniciar el
-llenado}
-begin
-  FUsedUnits.Clear;
-  //Limpiar declaraciones (eliminar todos los elementos)
-  FDeclarations.Clear;
-  //Limpiar cuerpo principal (eliminar todas las instrucciones)
-  FBody.Statements.Clear;
 end;
 constructor TCodeContainer.Create(ANodeType: TASTNodeType; AIsForward: Boolean);
 begin
@@ -2019,6 +2011,16 @@ begin
   inherited;
 end;
 // TProgram
+procedure TProgram.Clear;
+{Limpia al árbol de sintaxis del programa o subprograma, y lo deja listo para iniciar el
+llenado}
+begin
+  FUsedUnits.Clear;
+  //Limpiar declaraciones (eliminar todos los elementos)
+  FDeclarations.Clear;
+  //Limpiar cuerpo principal (eliminar todas las instrucciones)
+  FBody.Statements.Clear;
+end;
 constructor TProgram.Create;
 begin
   inherited Create(ntProgram, False);
