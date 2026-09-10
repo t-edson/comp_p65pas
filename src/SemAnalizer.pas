@@ -1008,12 +1008,10 @@ begin
      (SubrangeType.HighExpr.NodeType = ntNumberLiteral) then begin
     //Los límites son números, el tipo base es INTEGER.
     SubrangeType.BaseType := ResolveType('INTEGER');
-    SubrangeType.BaseTypeName := 'INTEGER';
   end else if (SubrangeType.LowExpr.NodeType = ntStringLiteral) and
               (SubrangeType.HighExpr.NodeType = ntStringLiteral) then begin
     //Los límites son caracteres ('a'..'z'), el tipo base es CHAR.
     SubrangeType.BaseType := ResolveType('CHAR');
-    SubrangeType.BaseTypeName := 'CHAR';
   end else begin
     //Valida consistencia de tipos del rango
     LowType := GetTypeOf(SubrangeType.LowExpr);
@@ -1038,7 +1036,6 @@ begin
     end;
     //Se usa el mismo tipo de los límites para el tipo base
     SubrangeType.BaseType := LowType;
-    SubrangeType.BaseTypeName := LowType.TypeName;
   end;
   //Valida el orden
   if CompareExpressions(SubrangeType.LowExpr, SubrangeType.HighExpr) > 0 then begin

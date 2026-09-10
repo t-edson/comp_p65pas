@@ -259,6 +259,18 @@ type  //Nodos de expresiones
     constructor Create(AAddress: Integer; const ASrcPos: TSrcPos); overload;  // dirección literal
     function ToString: string; override;
   end;
+  // Literal de conjunto: [1, 2, 3, 5..10]
+  TSetLiteral = class(TExpression)
+  private
+    FValues: TExpressionList;     // Lista de elementos (pueden ser rangos)
+  public
+    procedure AddValue(Value: TExpression);
+    property Values: TExpressionList read FValues;
+  public  //Inicialización y depuración
+    constructor Create(const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    function ToString: string; override;
+  end;
   // Referencia a variable
   TVariableRef = class(TExpression)
   private
@@ -681,9 +693,6 @@ type  //Definiciones previas para declaraciones de tipos
     - Valor devuelto de una función:  ": byte"
     - Campos de un RECORD: ": tipodecampo"
   }
-
-  { TTypeDef }
-
   TTypeDef = class(TASTnode)
     private
       {Nombre del tipo.
@@ -794,12 +803,10 @@ type  //Nodos de definiciones de tipos
     FLowExpr: TExpression;    //Límite inferior del rango
     FHighExpr: TExpression;   //Límite superior del rango
     FBaseType: TTypeDef;      //Tipo base (integer, char, etc.)
-    FBaseTypeName: string;    //Nombre del tipo base
   public
     property LowExpr: TExpression read FLowExpr;
     property HighExpr: TExpression read FHighExpr;
     property BaseType: TTypeDef read FBaseType write FBaseType;
-    property BaseTypeName: string read FBaseTypeName write FBaseTypeName;
   public  //Inicialización y depuración
     constructor Create(ALowExpr, AHighExpr: TExpression; const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -851,6 +858,22 @@ type  //Nodos de definiciones de tipos
     FTargetTypeDef: TTypeDef;  // Para tipos definidos inline
   public
     property TargetTypeDef: TTypeDef read FTargetTypeDef write FTargetTypeDef;
+  public  //Inicialización y depuración
+    constructor Create(const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    function ToString: string; override;
+  end;
+  // Tipo conjunto (set of byte)
+  TSetTypeDef = class(TTypeDef)
+  private
+    FBaseType: TTypeDef;     //Tipo base del conjunto (byte, char, etc.)
+    FMinValue: Int64;        //Valor mínimo (para optimización)
+    FMaxValue: Int64;        //Valor máximo (para optimización)
+  public
+    property BaseType: TTypeDef read FBaseType write FBaseType;
+    property MinValue: Int64 read FMinValue write FMinValue;
+    property MaxValue: Int64 read FMaxValue write FMaxValue;
+    function IsValidElement(Value: Int64): Boolean;
   public  //Inicialización y depuración
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -1218,6 +1241,26 @@ constructor TPointerLiteral.Create(AAddress: Integer; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntPointerLiteral, ASrcPos);
   FAddress := AAddress;
+end;
+// TSetLiteral
+procedure TSetLiteral.AddValue(Value: TExpression);
+begin
+  FValues.Add(Value);
+  Value.Parent := Self;
+end;
+constructor TSetLiteral.Create(const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntSetLiteral, ASrcPos);
+  FValues := TExpressionList.Create(True);
+end;
+destructor TSetLiteral.Destroy;
+begin
+  FValues.Destroy;
+  inherited;
+end;
+function TSetLiteral.ToString: string;
+begin
+  Result := Format('SetLiteral: [%d elements]', [FValues.Count]);
 end;
 // TBinaryOp
 constructor TBinaryOp.Create(const AOp: string; ALeft, ARight: TExpression;
@@ -1855,9 +1898,7 @@ function TSubranTypeDef.ToString: string;
 begin
   Result := Format('Subrange: %s..%s',
                    [FLowExpr.ToString, FHighExpr.ToString]);
-  if FBaseTypeName <> '' then
-    Result := Result + Format(' base %s', [FBaseTypeName])
-  else if FBaseType <> nil then
+  if FBaseType <> nil then
     Result := Result + Format(' base %s', [FBaseType.FTypeName]);
 end;
 // TEnumTypeDef
@@ -1938,6 +1979,27 @@ end;
 function TPointerTypeDef.ToString: string;
 begin
   Result := Format('Pointer: ^%s', [FTargetTypeDef.ToString]);
+end;
+// TSetTypeDef
+function TSetTypeDef.IsValidElement(Value: Int64): Boolean;
+begin
+  Result := (Value >= FMinValue) and (Value <= FMaxValue);
+end;
+constructor TSetTypeDef.Create(const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntSetTypeDef, '', ASrcPos);
+  FMinValue := 0;
+  FMaxValue := 255;  // Por defecto, byte
+end;
+destructor TSetTypeDef.Destroy;
+begin
+  FBaseType.Free;    //Destruimos si se creó.
+  inherited;
+end;
+function TSetTypeDef.ToString: string;
+begin
+  Result := Format('SetTypeDef: set of %s', [FBaseType.TypeName]);
+  Result := Result + Format(' [%d..%d]', [FMinValue, FMaxValue]);
 end;
 // TProcedTypeDef
 constructor TProcedTypeDef.Create(AIsFunction: Boolean; const ASrcPos: TSrcPos);
