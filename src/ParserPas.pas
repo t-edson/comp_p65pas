@@ -79,6 +79,8 @@ private   //Métodos auxiliares para las declaraciones
   function ParseArrayTypeDef: TArrayTypeDef;
   function ParseRecordTypeDef: TRecordTypeDef;
   function ParsePointerType: TPointerTypeDef;
+  function ParseSetType: TSetTypeDef;
+  function ParseFileType: TFileTypeDef;
   function ParseProceduralType: TProcedTypeDef;
   function ParseTypeDefinition: TTypeDef;
 private   //Declaraciones
@@ -1027,6 +1029,44 @@ begin
   PointerTypeDef.TargetTypeDef := TypeDef;
   Result := PointerTypeDef;
 end;
+function TParserPas.ParseSetType: TSetTypeDef;
+var
+  TypeDef: TTypeDef;
+  SetTypeDef: TSetTypeDef;
+begin
+  Next;   //Consume "SET"
+  if tokIdent<>tiOF then begin
+    GenError('Se esperaba "OF".', lex.GetSrcPos);
+    Exit(Nil);
+  end;
+  Next;   //Consume "OF"
+  TypeDef := ParseTypeDefinition;
+  if HayError then begin
+    Exit(Nil);
+  end;
+  SetTypeDef := TSetTypeDef.Create(lex.GetSrcPos);
+  SetTypeDef.BaseType := TypeDef;
+  Result := SetTypeDef;
+end;
+function TParserPas.ParseFileType: TFileTypeDef;
+var
+  TypeDef: TTypeDef;
+  FileTypeDef: TFileTypeDef;
+begin
+  Next;   //Consume "FILE"
+  if tokIdent<>tiOF then begin
+    GenError('Se esperaba "OF".', lex.GetSrcPos);
+    Exit(Nil);
+  end;
+  Next;   //Consume "OF"
+  TypeDef := ParseTypeDefinition;
+  if HayError then begin
+    Exit(Nil);
+  end;
+  FileTypeDef := TFileTypeDef.Create(lex.GetSrcPos);
+  FileTypeDef.BaseType := TypeDef;
+  Result := FileTypeDef;
+end;
 function TParserPas.ParseProceduralType: TProcedTypeDef;
 var
   ProcType: TProcedTypeDef;
@@ -1090,6 +1130,12 @@ begin
     end;
     tiPOINTER: begin         //Puntero: = ^integer
       Result := ParsePointerType;
+    end;
+    tiSET: begin             //Conjunto: set of ...;
+      Result := ParseSetType;
+    end;
+    tiFILE: begin             //Conjunto: file of ...;
+      Result := ParseFileType;
     end;
     tiPROCED, tiFUNCT: begin //TipProc := PROCEDURE();
       Result := ParseProceduralType;

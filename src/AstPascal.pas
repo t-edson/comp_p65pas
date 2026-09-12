@@ -51,6 +51,7 @@ type  //Tipos de nodos
     ntRecordTypeDef,  //Tipo RECORD
     ntPointerTypeDef, //Puntero
     ntSetTypeDef,     //Definición de tipo conjunto: set of byte
+    ntFileTypeDef,    //Definición de tipo archivo: file of byte
     ntProcedTypeDef,  //Tipos procedurales: = procedure(a: integer; b: integer);
     //Nodos estructurales
     ntUnitRef,        //Referencia a unidades: USES unit1, unit2, ...
@@ -855,7 +856,7 @@ type  //Nodos de definiciones de tipos
   // ============================================================
   TPointerTypeDef = class(TTypeDef)
   private
-    FTargetTypeDef: TTypeDef;  // Para tipos definidos inline
+    FTargetTypeDef: TTypeDef;  //Tipo a donde apunta al puntero.
   public
     property TargetTypeDef: TTypeDef read FTargetTypeDef write FTargetTypeDef;
   public  //Inicialización y depuración
@@ -874,6 +875,19 @@ type  //Nodos de definiciones de tipos
     property MinValue: Int64 read FMinValue write FMinValue;
     property MaxValue: Int64 read FMaxValue write FMaxValue;
     function IsValidElement(Value: Int64): Boolean;
+  public  //Inicialización y depuración
+    constructor Create(const ASrcPos: TSrcPos);
+    destructor Destroy; override;
+    function ToString: string; override;
+  end;
+  // Tipo archivo (file of byte)
+  TFileTypeDef = class(TTypeDef)
+  private
+    FBaseType: TTypeDef;     //Tipo base del archivo (byte, char, etc.)
+  public
+    property BaseType: TTypeDef read FBaseType write FBaseType;
+    function IsTypedFile: Boolean;
+    function IsTextFile: Boolean;
   public  //Inicialización y depuración
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -1173,7 +1187,7 @@ begin
 end;
 destructor TArrayLiteral.Destroy;
 begin
-  FValues.Free;
+  FValues.Destroy;
   inherited;
 end;
 // TFieldInitializer
@@ -2000,6 +2014,28 @@ function TSetTypeDef.ToString: string;
 begin
   Result := Format('SetTypeDef: set of %s', [FBaseType.TypeName]);
   Result := Result + Format(' [%d..%d]', [FMinValue, FMaxValue]);
+end;
+// TFileTypeDef
+function TFileTypeDef.IsTypedFile: Boolean;
+begin
+  Result := FBaseType <> nil;
+end;
+function TFileTypeDef.IsTextFile: Boolean;
+begin
+  Result := (FBaseType = nil) or (FBaseType.TypeName = 'char');
+end;
+constructor TFileTypeDef.Create(const ASrcPos: TSrcPos);
+begin
+  inherited Create(ntFileTypeDef, '', ASrcPos);
+end;
+destructor TFileTypeDef.Destroy;
+begin
+  FBaseType.Free;    //Destruimos si se creó.
+  inherited Destroy;
+end;
+function TFileTypeDef.ToString: string;
+begin
+  Result := Format('FileTypeDef: file of %s', [FBaseType.TypeName]);
 end;
 // TProcedTypeDef
 constructor TProcedTypeDef.Create(AIsFunction: Boolean; const ASrcPos: TSrcPos);
