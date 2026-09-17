@@ -1,11 +1,10 @@
 program muestra; 
-//uses unit1, unit2;
 type
-//  TColor = (Rojo, Verde, Azul);
   TConjunto = set of byte;
 var 
-  a, b, c: array[0..4] of byte;
+  con : TConjunto;
 begin
+  con := [1, 2, 3];
 //  col := Rojo;
 //arr3[0]:=3;
 //  writeln('PROGRAMA');

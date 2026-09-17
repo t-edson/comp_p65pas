@@ -63,11 +63,12 @@ protected //Métodos auxiliares para el parser
   function ConsumeTok(tokId: TTokenIdent; const msgErr: string): boolean; inline;
   function ConsumeIdent(out token: string; const msgErr: string): boolean; inline;
 private   //Expresiones
+  procedure ParseConstantList(constants: TExpressionList);
   function ParseNumberLiteral: TNumberLiteral;
   function ParseIdentifier: TExpression;
   function ParseStringLiteral: TStringLiteral;
-  function ParseArrayLiteral: TArrayLiteral;
   function ParseRecordLiteral(firstIdent: string): TRecordLiteral;
+  function ParseSetLiteral: TSetLiteral;
   function ParseFactor: TExpression;
   function ParseTerm: TExpression;
   function ParseSimpleExpression: TExpression;
@@ -95,7 +96,6 @@ private   //Instrucciones
   procedure ParseWhileLoop(var Block: TBlock);
   procedure ParseForLoop(var Block: TBlock);
   procedure ParseRepeatUntil(var Block: TBlock);
-  procedure ParseCaseSelector(constants: TExpressionList);
   function ParseCaseBranch: TCaseBranch;
   procedure ParseCaseStatement(var Block: TBlock);
   procedure ParseWithStatement(var Block: TBlock);
@@ -305,6 +305,52 @@ begin
 end;
 {$endregion}
 {$region "Expresiones"}
+procedure TParserPas.ParseConstantList(constants: TExpressionList);
+{Analiza una lista de constates, y actualiza la lista "constants" con los valores
+encontrados.
+El selector puede ser:
+- Una constante como 1 o 'A'. En este caso, se devuelve una expresion constante.
+- Un rango como 5..10 o 'a'..'z'. En este caso, se devuelve una expresión de tipo
+  TValueRange.
+- La unión de los casos anteriores: 1, 3, 5..10, 15. En este caso, se devuelve una
+  expresion, por cada caso encontrado.
+}
+var
+  LowExpr, HighExpr: TExpression;
+  ExprRange: TExpression;
+begin
+  while not HayError do begin
+    //Parsea el límite inferior (o el valor único si no es un rango).
+    LowExpr := ParseExpression;
+    if HayError then begin
+      LowExpr.Free;
+      Exit;
+    end;
+    // Verificar si es un rango: 1..10
+    if tokIdent = tiDOTDOT then begin
+      Next;  // Consumir '..'
+      //Parsea el límite superior
+      HighExpr := ParseExpression();
+      if HayError then begin
+        LowExpr.Free;
+        HighExpr.Free;
+        Exit;
+      end;
+      //Es un rango, como '8..15'
+      ExprRange := TValueRange.Create(LowExpr, HighExpr, lex.GetSrcPos);
+      constants.Add(ExprRange);
+    end else begin
+      //Es una constante individual
+      constants.Add(LowExpr);
+    end;
+    //Verificar si hay más elementos en la lista
+    if tokIdent = tiCOMMA then
+      Next  // Consumir coma y continuar
+    else
+      Break;  // No hay más elementos
+  end;
+  //Si llegó aquí es porque no hubo errores.
+end;
 function TParserPas.ParseNumberLiteral: TNumberLiteral;
 var
   Value: Integer;
@@ -436,44 +482,6 @@ begin
   Result := TStringLiteral.Create(lex.token, SrcPos);
   Next;
 end;
-function TParserPas.ParseArrayLiteral: TArrayLiteral;
-var
-  SrcPos: TSrcPos;
-  ArrayLit: TArrayLiteral;
-  Value: TExpression;
-begin
-  SrcPos := lex.GetSrcPos;
-  Next;  // Consumir '['
-  ArrayLit := TArrayLiteral.Create(SrcPos);
-  // Verificar si está vacío: []
-  if tokIdent = tiBRACK_CL then begin
-    Next;  // Consumir ']'
-    Result := ArrayLit;
-    Exit;
-  end;
-  // Parsear valores
-  while not HayError do begin
-    Value := ParseExpression;
-    if HayError then begin
-      ArrayLit.Free;
-      Exit(Nil);
-    end;
-    ArrayLit.AddValue(Value);
-    // Verificar si hay más elementos
-    if tokIdent = tiCOMMA then
-      Next  // Consumir ',' y continuar
-    else
-      Break;  // No hay más elementos
-  end;
-  // Verificar cierre ']'
-  if tokIdent <> tiBRACK_CL then begin
-    GenError('Se esperaba "]" para cerrar el literal.');
-    ArrayLit.Free;
-    Exit(Nil);
-  end;
-  Next;  // Consumir ']'
-  Result := ArrayLit;
-end;
 function TParserPas.ParseRecordLiteral(firstIdent: string): TRecordLiteral;
 {Analiza un literal de registro (RECORD), de la forma: "(a: valor; b: valor)" y devuelve
 un objeto TRecordLiteral.
@@ -520,6 +528,41 @@ begin
   end;
   Next;  // Consumir ')'
   Result := RecordLit;
+end;
+function TParserPas.ParseSetLiteral: TSetLiteral;
+{Analiza un literal de conjunto de la forma:
+  []                    → conjunto vacío
+  [1]                   → un elemento
+  [1, 2, 3]             → varios elementos
+  [1..10]               → un rango
+  [1, 3..5, 7]          → mezcla de elementos y rangos
+Devuelve un TSetLiteral. Si hay error, devuelve NIL.
+El token actual debe ser tiBRACK_OP ([).}
+var
+  SrcPos: TSrcPos;
+  SetLit: TSetLiteral;
+begin
+  SrcPos := lex.GetSrcPos;
+  Next;  //Consumir '['
+  SetLit := TSetLiteral.Create(SrcPos);
+  //Verificar si está vacío: []
+  if tokIdent = tiBRACK_CL then begin
+    Next;  // Consumir ']'
+    Result := SetLit;
+    Exit;
+  end;
+  //Analiza elementos
+  ParseConstantList(SetLit.Values);
+  if HayError then begin
+    SetLit.Free;
+    Exit(Nil);
+  end;
+  // Verificar cierre ']'
+  if not ConsumeTok(tiBRACK_CL, 'Se esperaba "]" para cerrar el conjunto.') then begin
+    SetLit.Free;
+    Exit(Nil);
+  end;
+  Result := SetLit;
 end;
 function TParserPas.ParseFactor: TExpression;
 {Analiza un operando, o factor, que puede ser de diversos tipos.
@@ -594,8 +637,8 @@ begin
       GenError('Se esperaba ")"');
     end;
     Next;
-  end else if tokIdent = tiBRACK_OP then begin
-    Result := ParseArrayLiteral;
+  end else if tokIdent = tiBRACK_OP then begin  //'['
+    Result := ParseSetLiteral;
   end else if tokIdent = tiNIL then begin
     Next;
     Result := TPointerLiteral.Create(SrcPos);   //Crea NIL
@@ -664,7 +707,7 @@ begin
   Left := ParseSimpleExpression;  //Toma expresiones que sean suma de términos.
   if HayError then Exit(Left);  //En este caso deberái devolver NIL.
   // Operadores relacionales
-  if tokIdent in [tiEQUAL, tiLESS, tiGREAT, tiNOT_EQ, tiLESS_E, tiGREAT_E] then begin
+  if tokIdent in [tiEQUAL, tiLESS, tiGREAT, tiNOT_EQ, tiLESS_E, tiGREAT_E, tiIN] then begin
     Op := lex.token;
     SrcPos := lex.GetSrcPos;
     Next;
@@ -889,12 +932,12 @@ begin
           ArrayTypeDef.Free;
           Exit(nil);
         end;
-        ArrayTypeDef.AddRange(TArrayRange.Create(LowExpr, HighExpr, lex.GetSrcPos));
+        ArrayTypeDef.AddRange(TValueRange.Create(LowExpr, HighExpr, lex.GetSrcPos));
       end else if tokIdent = tiBRACK_CL then begin
         //Es una definición corta: ARRAY[5] OF ...
         HighExpr := Nil;   //Indica de esta forma que es la forma simplificada
         //LowExpr := TNumberLiteral.Create(0, lex.GetSrcPos);   //Índice menor = 0
-        ArrayTypeDef.AddRange(TArrayRange.Create(LowExpr, HighExpr, lex.GetSrcPos));
+        ArrayTypeDef.AddRange(TValueRange.Create(LowExpr, HighExpr, lex.GetSrcPos));
       end else begin   //Sigue otra cosa
         GenError('Se esperaba ".." o "]" en el rango del arreglo');
         LowExpr.Free;
@@ -956,7 +999,7 @@ Si se encuentra algún error, se devuelve NIL.}
     while not HayError and (tokIdent <> tiEND) do begin
       branch := TVariantBranch.Create(lex.GetSrcPos);
       //Analizamos el selector:
-      ParseCaseSelector(branch.SelectorValues);
+      ParseConstantList(branch.SelectorValues);
       if HayError then begin
         branch.Destroy;
         Exit;
@@ -1574,64 +1617,18 @@ begin
   if not HayError then
     Block.AddStatement(TRepeatUntil.Create(Body, Condition, SrcPos));
 end;
-procedure TParserPas.ParseCaseSelector(constants: TExpressionList);
-{Analiza la sección del selector de una sentencia CASE, y actualiza la lista "constants"
-con los valores del selector.
-El selector puede ser:
-- Una constante como 1 o 'A'. En este caso, se devuelve una expresion constante en la
-  lista "constants".
-- Un rango como 5..10 o 'a'..'z'. En este caso, se devuelve una operación binaria ".." en
-  la lista "constants".
-- La unión de los casos anteriores: 1, 3, 5..10, 15. En este caso, se devuelve una
-  expresion, por cada caso encontrado, en la lista "constants".
-}
-var
-  LowExpr, HighExpr: TExpression;
-  Expr: TBinaryOp;
-begin
-  while not HayError do begin
-    // Parsear el límite inferior
-    LowExpr := ParseFactor;
-    if HayError then begin
-      LowExpr.Free;
-      Exit;
-    end;
-    // Verificar si es un rango: 1..10
-    if tokIdent = tiDOTDOT then begin
-      Next;  // Consumir '..'
-      // Parsear el límite superior
-      HighExpr := ParseFactor;
-      if HayError then begin
-        LowExpr.Free;
-        HighExpr.Free;
-        Exit;
-      end;
-      //Por ahora, al rango lo representamos como una expresión TBinaryOp con operador '..'
-      Expr := TBinaryOp.Create('..', LowExpr, HighExpr, lex.GetSrcPos);
-      constants.Add(Expr);
-    end else begin
-      // Es una constante individual
-      constants.Add(LowExpr);
-    end;
-    // Verificar si hay más elementos en la lista
-    if tokIdent = tiCOMMA then
-      Next  // Consumir coma y continuar
-    else
-      Break;  // No hay más elementos
-  end;
-  //Si llegó aquí es porque no hubo errores.
-  // Verificar ':'
-  if not ConsumeTok(tiCOLON, 'Se esperaba ":".') then begin
-    Exit;
-  end;
-end;
 function TParserPas.ParseCaseBranch: TCaseBranch;
 var
   Branch: TCaseBranch;
 begin
   Branch := TCaseBranch.Create(lex.GetSrcPos);
-  ParseCaseSelector(Branch.Constants);
+  ParseConstantList(Branch.Constants);
   if HayError then begin
+    Branch.Free;
+    Exit(Nil);
+  end;
+  //Verifica ':'
+  if not ConsumeTok(tiCOLON, 'Se esperaba ":".') then begin
     Branch.Free;
     Exit(Nil);
   end;

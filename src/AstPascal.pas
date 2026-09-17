@@ -40,7 +40,7 @@ type  //Tipos de nodos
     ntForwardDecl,    //Declaración FORWARD
     ntTypeDecl,       //Declaración de tipo
     //Nodos auxiliares para declaraciones de tipos
-    ntArrayRange,     //Rango de arreglo (1..10)
+    ntValueRange,     //Rango de valores: 1..10
     ntVariantBranch,  //Una rama de los casos RECORD con variantes.
     //Nodos de definiciones de tipos
     ntSimpleTypeDef,  //Tipo simple, ya predefinido por el sistema.
@@ -461,8 +461,10 @@ type  //Nodos de sentencias
   // Rama de CASE (constante: instrucción)
   TCaseBranch = class(TASTNode)
   private
-    FConstants: TExpressionList;  // Lista de constantes
-    FStatement: TBlock;           // Instrucción a ejecutar
+    //Lista de constantes. Pueden ser TNumberLiteral, TStringLiteral, TValueRange, etc.
+    FConstants: TExpressionList;
+    //Instrucción a ejecutar.
+    FStatement: TBlock;
   public
     procedure AddConstant(ConstExpr: TExpression);
     property Constants: TExpressionList read FConstants;
@@ -721,8 +723,11 @@ type  //Definiciones previas para declaraciones de tipos
       function ToString: string; override;
     end;
 
-  // Rango de arreglo (1..10, 'a'..'z', etc.)
-  TArrayRange = class(TASTNode)
+  // Rango de valores: 1..10, 'a'..'z', etc.
+  TValueRange = class(TExpression)
+  {Se deriva esta clase de TExpression para poder usarse en listas TExpressionList, junto
+  a expresiones simples, así, se podrá soportar las listas como: [1, 2, 3..5, 6] que se
+  usan en los conjuntos.}
   private
     FLowExpr: TExpression;   // Límite inferior
     FHighExpr: TExpression;  // Límite superior
@@ -734,7 +739,7 @@ type  //Definiciones previas para declaraciones de tipos
     destructor Destroy; override;
     function ToString: string; override;
   end;
-  TArrayRangeList = specialize TFPGObjectList<TArrayRange>;
+  TValueRangeList = specialize TFPGObjectList<TValueRange>;
   //Definición de campo de RECORD. No se usa. Se está usando TVarDecl para los campos.
   //TFieldDef = class(TASTNode)
   //end;
@@ -828,11 +833,11 @@ type  //Nodos de definiciones de tipos
   //Arreglo (array[1..10] of TPersona)
   TArrayTypeDef = class(TTypeDef)
   private
-    FIndexRanges: TArrayRangeList;  //Dimensiones del arreglo
+    FIndexRanges: TValueRangeList;  //Dimensiones del arreglo
     FElemTypeDef: TTypeDef;  //Referencia al tipo de elemento del arreglo.
   public
-    procedure AddRange(Range: TArrayRange);
-    property IndexRanges: TArrayRangeList read FIndexRanges;
+    procedure AddRange(Range: TValueRange);
+    property IndexRanges: TValueRangeList read FIndexRanges;
     property ElemTypeDef: TTypeDef read FElemTypeDef write FElemTypeDef;
   public  //Inicialización y depuración
     constructor Create(const ASrcPos: TSrcPos);
@@ -1816,23 +1821,23 @@ begin
   if FDefinition = Nil then Result += '<Nil>'
   else Result += FDefinition.ToString;
 end;
-// TArrayRange
-constructor TArrayRange.Create(ALowExpr, AHighExpr: TExpression;
+// TValueRange
+constructor TValueRange.Create(ALowExpr, AHighExpr: TExpression;
   const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntArrayRange, ASrcPos);
+  inherited Create(ntValueRange, ASrcPos);
   FLowExpr := ALowExpr;
   FHighExpr := AHighExpr;
 end;
-destructor TArrayRange.Destroy;
+destructor TValueRange.Destroy;
 begin
   FLowExpr.Free;   //Libera si se ha creado
   FHighExpr.Free;  //Libera si se ha creado
   inherited;
 end;
-function TArrayRange.ToString: string;
+function TValueRange.ToString: string;
 begin
-  Result := 'ArrayRange';
+  Result := Format('ValueRange: %s..%s', [FLowExpr.ToString, FHighExpr.ToString]);
 end;
 // TVariantBranch
 constructor TVariantBranch.Create(const ASrcPos: TSrcPos);
@@ -1935,14 +1940,14 @@ begin
   inherited;
 end;
 // TArrayTypeDef
-procedure TArrayTypeDef.AddRange(Range: TArrayRange);
+procedure TArrayTypeDef.AddRange(Range: TValueRange);
 begin
   FIndexRanges.Add(Range);
 end;
 constructor TArrayTypeDef.Create(const ASrcPos: TSrcPos);
 begin
   inherited Create(ntArrayTypeDef, '', ASrcPos);
-  FIndexRanges := TArrayRangeList.Create(True);
+  FIndexRanges := TValueRangeList.Create(True);
   {El campo FElemTypeDef se creará e inicializará en el Parser, cuando se determine que
   este nodo es una función}
   //FElemTypeDef := nil;

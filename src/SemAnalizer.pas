@@ -76,6 +76,9 @@ type
   end;
 
   //Analizador semántico
+
+  { TSemanticAnalyzer }
+
   TSemanticAnalyzer = class
   private
     msg: TMessageManager;    //Referencia al gestor de mensajes
@@ -136,6 +139,7 @@ type
     procedure VisitEnumTypeDef(EnumType: TEnumTypeDef);
     procedure VisitSubrangeTypeDef(SubrangeType: TSubranTypeDef);
     procedure VisitPointerTypeDef(PointerType: TPointerTypeDef);
+    procedure VisitSetTypeDef(SetType: TSetTypeDef);
   private  //Visitantes de sentencias
     procedure VisitAssignment(Assign: TAssignment);
     procedure VisitIfStatement(IfStmt: TIfStatement);
@@ -147,19 +151,20 @@ type
     procedure VisitWithStatement(WithStmt: TWithStatement);
     procedure VisitExitStatement(ExitStmt: TExitStatement);
   private  //Visitantes de expresiones
-    procedure VisitVariableRef(VarRef: TVariableRef);
     procedure VisitNumberLiteral(NumLit: TNumberLiteral);
     procedure VisitBooleanLiteral(BoolLit: TBooleanLiteral);
     procedure VisitStringLiteral(StrLit: TStringLiteral);
+    procedure VisitArrayLiteral(ArrayLit: TArrayLiteral);
+    procedure VisitRecordLiteral(RecordLit: TRecordLiteral);
+    procedure VisitPointerLiteral(PointerLit: TPointerLiteral);
+    procedure VisitSetLiteral(SetLit: TSetLiteral);
+    procedure VisitVariableRef(VarRef: TVariableRef);
     procedure VisitBinaryOp(BinOp: TBinaryOp);
     procedure VisitUnaryOp(UnaryOp: TUnaryOp);
     procedure VisitFunctionCall(ProcFuncCall: TProcFunctCall);
     procedure VisitFieldAccess(FieldAccess: TFieldAccess);
     procedure VisitPointerDeref(PointerDeref: TPointerDeref);
     procedure VisitArrayRef(ArrayRef: TArrayRef);
-    procedure VisitArrayLiteral(ArrayLit: TArrayLiteral);
-    procedure VisitRecordLiteral(RecordLit: TRecordLiteral);
-    procedure VisitPointerLiteral(PointerLit: TPointerLiteral);
   private  //Visitantes de nodos principales
     procedure VisitNode(Node: TASTNode);
     procedure VisitBlock(Block: TBlock);
@@ -916,7 +921,7 @@ procedure TSemanticAnalyzer.VisitArrayTypeDef(ArrayType: TArrayTypeDef);
 var
   ElemTypeDef: TTypeDef;
   i: Integer;
-  Range: TArrayRange;
+  Range: TValueRange;
 begin
   //Verifica tipo de elementos
   ElemTypeDef := ArrayType.ElemTypeDef;
@@ -1049,6 +1054,11 @@ var
 begin
   //Visita para validar y resolver los tipos alias directos o anidados.
   VisitNode(PointerType.TargetTypeDef);
+end;
+procedure TSemanticAnalyzer.VisitSetTypeDef(SetType: TSetTypeDef);
+begin
+  //Visita para validar y resolver los tipos alias directos o anidados.
+  VisitNode(SetType.BaseType);
 end;
 {$endregion}
 {$region "Visitantes de sentencias"}
@@ -1216,6 +1226,59 @@ begin
 end;
 {$endregion}
 {$region "Visitantes de expresiones"}
+procedure TSemanticAnalyzer.VisitNumberLiteral(NumLit: TNumberLiteral);
+begin
+  //Nada que verificar, los literales son siempre correctos.
+  //Solo resolvemos el tipo
+  if NumLit.IsInteger then
+    NumLit.ExpTypeDef := ResolveType('INTEGER')
+  else
+    NumLit.ExpTypeDef := ResolveType('REAL');
+end;
+procedure TSemanticAnalyzer.VisitBooleanLiteral(BoolLit: TBooleanLiteral);
+begin
+  //Nada que verificar.
+  BoolLit.ExpTypeDef := ResolveType('BOOLEAN')
+end;
+procedure TSemanticAnalyzer.VisitStringLiteral(StrLit: TStringLiteral);
+begin
+  //Nada que verificar
+  StrLit.ExpTypeDef := ResolveType('STRING')
+end;
+procedure TSemanticAnalyzer.VisitArrayLiteral(ArrayLit: TArrayLiteral);
+var
+  i: Integer;
+begin
+  for i := 0 to ArrayLit.Values.Count - 1 do
+    VisitNode(ArrayLit.Values[i]);
+end;
+procedure TSemanticAnalyzer.VisitRecordLiteral(RecordLit: TRecordLiteral);
+var
+  i: Integer;
+  Init: TFieldInitializer;
+begin
+  for i := 0 to RecordLit.FieldInitializers.Count - 1 do begin
+    Init := RecordLit.FieldInitializers[i];
+    VisitNode(Init.Value);
+  end;
+end;
+procedure TSemanticAnalyzer.VisitPointerLiteral(PointerLit: TPointerLiteral);
+begin
+  // nil es válido para cualquier puntero
+  // Las direcciones literales se verifican en el contexto
+end;
+procedure TSemanticAnalyzer.VisitSetLiteral(SetLit: TSetLiteral);
+var
+  i: Integer;
+begin
+  //Visita y valida cada uno de los elementos
+  for i := 0 to SetLit.Values.Count - 1 do
+    VisitNode(SetLit.Values[i]);
+  //Se asume que el tipo del
+  //SetLit.ExpTypeDef := ???;
+  //Validar el tipo de cada elemento
+  //???
+end;
 procedure TSemanticAnalyzer.VisitVariableRef(VarRef: TVariableRef);
 var
   Sym: TSymbol;
@@ -1236,25 +1299,6 @@ begin
     //Debería ser una variable
     VarRef.ExpTypeDef := Sym.DataType;
   end;
-end;
-procedure TSemanticAnalyzer.VisitNumberLiteral(NumLit: TNumberLiteral);
-begin
-  //Nada que verificar, los literales son siempre correctos.
-  //Solo resolvemos el tipo
-  if NumLit.IsInteger then
-    NumLit.ExpTypeDef := ResolveType('INTEGER')
-  else
-    NumLit.ExpTypeDef := ResolveType('REAL');
-end;
-procedure TSemanticAnalyzer.VisitBooleanLiteral(BoolLit: TBooleanLiteral);
-begin
-  //Nada que verificar.
-  BoolLit.ExpTypeDef := ResolveType('BOOLEAN')
-end;
-procedure TSemanticAnalyzer.VisitStringLiteral(StrLit: TStringLiteral);
-begin
-  //Nada que verificar
-  StrLit.ExpTypeDef := ResolveType('STRING')
 end;
 procedure TSemanticAnalyzer.VisitBinaryOp(BinOp: TBinaryOp);
 var
@@ -1509,29 +1553,6 @@ begin
     end;
   end;
 end;
-procedure TSemanticAnalyzer.VisitArrayLiteral(ArrayLit: TArrayLiteral);
-var
-  i: Integer;
-begin
-  for i := 0 to ArrayLit.Values.Count - 1 do
-    VisitNode(ArrayLit.Values[i]);
-end;
-procedure TSemanticAnalyzer.VisitRecordLiteral(RecordLit: TRecordLiteral);
-var
-  i: Integer;
-  Init: TFieldInitializer;
-begin
-  for i := 0 to RecordLit.FieldInitializers.Count - 1 do
-  begin
-    Init := RecordLit.FieldInitializers[i];
-    VisitNode(Init.Value);
-  end;
-end;
-procedure TSemanticAnalyzer.VisitPointerLiteral(PointerLit: TPointerLiteral);
-begin
-  // nil es válido para cualquier puntero
-  // Las direcciones literales se verifican en el contexto
-end;
 {$endregion}
 {$region "Visitantes de nodos principales}
 procedure TSemanticAnalyzer.VisitNode(Node: TASTNode);
@@ -1555,6 +1576,7 @@ begin
     ntArrayTypeDef  : VisitArrayTypeDef(TArrayTypeDef(Node));
     ntRecordTypeDef : VisitRecordTypeDef(TRecordTypeDef(Node));
     ntPointerTypeDef: VisitPointerTypeDef(TPointerTypeDef(Node));
+    ntSetTypeDef    : VisitSetTypeDef(TSetTypeDef(Node));
     ntAliasTypeDef  : VisitAliasTypeDef(TTypeDef(Node));
     ntProcedTypeDef : ;  //*** Falta implementar
     //Sentencias
@@ -1568,19 +1590,20 @@ begin
     ntWithStatement : VisitWithStatement(TWithStatement(Node));
     ntExitStatement : VisitExitStatement(TExitStatement(Node));
     //Expresiones
-    ntVariableRef   : VisitVariableRef(TVariableRef(Node));
     ntNumberLiteral : VisitNumberLiteral(TNumberLiteral(Node));
     ntBooleanLiteral: VisitBooleanLiteral(TBooleanLiteral(Node));
     ntStringLiteral : VisitStringLiteral(TStringLiteral(Node));
+    ntArrayLiteral  : VisitArrayLiteral(TArrayLiteral(Node));
+    ntRecordLiteral : VisitRecordLiteral(TRecordLiteral(Node));
+    ntPointerLiteral: VisitPointerLiteral(TPointerLiteral(Node));
+    ntSetLiteral    : VisitSetLiteral(TSetLiteral(Node))  ;
+    ntVariableRef   : VisitVariableRef(TVariableRef(Node));
     ntBinaryOp      : VisitBinaryOp(TBinaryOp(Node));
     ntUnaryOp       : VisitUnaryOp(TUnaryOp(Node));
     ntProcFunctCall : VisitFunctionCall(TProcFunctCall(Node));
     ntFieldAccess   : VisitFieldAccess(TFieldAccess(Node));
     ntPointerDeref  : VisitPointerDeref(TPointerDeref(Node));
     ntArrayRef      : VisitArrayRef(TArrayRef(Node));
-    ntArrayLiteral  : VisitArrayLiteral(TArrayLiteral(Node));
-    ntRecordLiteral : VisitRecordLiteral(TRecordLiteral(Node));
-    ntPointerLiteral: VisitPointerLiteral(TPointerLiteral(Node));
   end;
 end;
 procedure TSemanticAnalyzer.VisitBlock(Block: TBlock);
