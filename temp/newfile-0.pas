@@ -1,10 +1,11 @@
 program muestra; 
 type
   TConjunto = set of byte;
+  TSubrango = 1.3..4;
 var 
   con : TConjunto;
 begin
-  con := [1, 2, 3];
+//  con := [1, 2, 3];
 //  col := Rojo;
 //arr3[0]:=3;
 //  writeln('PROGRAMA');

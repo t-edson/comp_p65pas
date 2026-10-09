@@ -1028,33 +1028,52 @@ procedure TSemanticAnalyzer.VisitSubrangeTypeDef(SubrangeType: TSubranTypeDef);
 var
   LowType, HighType: TTypeDef;
   val1, val2: Int64;
+  expr1, expr2: TExpression;
 begin
+  expr1 := SubrangeType.LowExpr;
+  expr2 := SubrangeType.HighExpr;
   //Analizar límites
-  VisitNode(SubrangeType.LowExpr);
-  VisitNode(SubrangeType.HighExpr);
+  VisitNode(expr1);
+  VisitNode(expr2);
   //Detectar el tipo base del subrango
-  if (SubrangeType.LowExpr.NodeType = ntNumberLiteral) and
-     (SubrangeType.HighExpr.NodeType = ntNumberLiteral) then begin
-    //Los límites son números, el tipo base es INTEGER.
+  if (expr1.NodeType = ntNumberLiteral) and (expr2.NodeType = ntNumberLiteral) then begin
+    //Asigna el tipo base por defecto para los números enteros.
     SubrangeType.BaseType := ResolveType('INTEGER');
-    val1 := TNumberLiteral(SubrangeType.LowExpr).IntValue;
-    val2 := TNumberLiteral(SubrangeType.HighExpr).IntValue;
+    //Valida el tipo de números de los límites
+    if TNumberLiteral(expr1).Kind <> nkInteger then begin
+      Error('Se esperaba una expresión entera.', expr1.SrcPos);
+      Exit;
+    end;
+    if TNumberLiteral(expr2).Kind <> nkInteger then begin
+      Error('Se esperaba una expresión entera.', expr2.SrcPos);
+      Exit;
+    end;
+    val1 := TNumberLiteral(expr1).IntValue;
+    val2 := TNumberLiteral(expr2).IntValue;
     SubrangeType.NValues := val2 - val1 + 1;
-  end else if (SubrangeType.LowExpr.NodeType = ntStringLiteral) and
-              (SubrangeType.HighExpr.NodeType = ntStringLiteral) then begin
+  end else if (expr1.NodeType = ntStringLiteral) and (expr2.NodeType = ntStringLiteral) then begin
     //Los límites son caracteres ('a'..'z'), el tipo base es CHAR.
-                SubrangeType.BaseType := ResolveType('CHAR');
-    val1 := ord(TStringLiteral(SubrangeType.LowExpr).Value[1]);
-    val2 := ord(TStringLiteral(SubrangeType.HighExpr).Value[1]);
+    SubrangeType.BaseType := ResolveType('CHAR');
+    //Valida que las cadenas de los límites tengan la longitud apropiada
+    if length(TStringLiteral(expr1).Value) <> 1 then begin
+      Error('Se esperaba un caracter.', expr1.SrcPos);
+      Exit;
+    end;
+    if length(TStringLiteral(expr2).Value) <> 1 then begin
+      Error('Se esperaba un caracter.', expr2.SrcPos);
+      Exit;
+    end;
+    val1 := ord(TStringLiteral(expr1).Value[1]);
+    val2 := ord(TStringLiteral(expr2).Value[1]);
     SubrangeType.NValues := val2 - val1 + 1;
   end else begin
     //Valida consistencia de tipos del rango
-    LowType := GetTypeOf(SubrangeType.LowExpr);
+    LowType := GetTypeOf(expr1);
     if LowType = nil then begin
       Error('No se puede determinar el tipo de límite inferior', SubrangeType.SrcPos);
       Exit;
     end;
-    HighType := GetTypeOf(SubrangeType.HighExpr);
+    HighType := GetTypeOf(expr2);
     if HighType = nil then begin
       Error('No se puede determinar el tipo del límite superior', SubrangeType.SrcPos);
       Exit;
