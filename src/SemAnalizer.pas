@@ -76,9 +76,6 @@ type
   end;
 
   //Analizador semántico
-
-  { TSemanticAnalyzer }
-
   TSemanticAnalyzer = class
   private
     msg: TMessageManager;    //Referencia al gestor de mensajes
@@ -113,13 +110,14 @@ type
     procedure EnterWithScope(RecordVar: TExpression);
     procedure ExitWithScope;
   private  //Resolución de tipos
+    function GetOrdinalValue(Expr1: TExpression): Integer;
     function ResolveType(const TypeName: string): TTypeDef;
     function GetFinalTypeDef(TypeDef: TTypeDef): TTypeDef;
     function ResolveTypeDef(TypeDef: TTypeDef): TTypeDef;
     public
     function GetTypeOf(Expr: TExpression): TTypeDef;
     private
-    function AreTypesCompatible(T1, T2: TTypeDef): Boolean;
+    function AreTypesCompatible(TypeDef1, TypeDef2: TTypeDef): Boolean;
     function IsNumericType(TypeDef: TTypeDef): Boolean;
     function IsOrdinalType(TypeDef: TTypeDef): Boolean;
   private  //Registro de símbolos
@@ -140,16 +138,6 @@ type
     procedure VisitSubrangeTypeDef(SubrangeType: TSubranTypeDef);
     procedure VisitPointerTypeDef(PointerType: TPointerTypeDef);
     procedure VisitSetTypeDef(SetType: TSetTypeDef);
-  private  //Visitantes de sentencias
-    procedure VisitAssignment(Assign: TAssignment);
-    procedure VisitIfStatement(IfStmt: TIfStatement);
-    procedure VisitWhileLoop(WhileLoop: TWhileLoop);
-    procedure VisitRepeatUntil(RepeatUntil: TRepeatUntil);
-    procedure VisitForLoop(ForLoop: TForLoop);
-    procedure VisitCaseStatement(CaseStmt: TCaseStatement);
-    procedure VisitCaseBranch(CaseBranch: TCaseBranch);
-    procedure VisitWithStatement(WithStmt: TWithStatement);
-    procedure VisitExitStatement(ExitStmt: TExitStatement);
   private  //Visitantes de expresiones
     procedure VisitNumberLiteral(NumLit: TNumberLiteral);
     procedure VisitBooleanLiteral(BoolLit: TBooleanLiteral);
@@ -165,6 +153,16 @@ type
     procedure VisitFieldAccess(FieldAccess: TFieldAccess);
     procedure VisitPointerDeref(PointerDeref: TPointerDeref);
     procedure VisitArrayRef(ArrayRef: TArrayRef);
+  private  //Visitantes de sentencias
+    procedure VisitAssignment(Assign: TAssignment);
+    procedure VisitIfStatement(IfStmt: TIfStatement);
+    procedure VisitWhileLoop(WhileLoop: TWhileLoop);
+    procedure VisitRepeatUntil(RepeatUntil: TRepeatUntil);
+    procedure VisitForLoop(ForLoop: TForLoop);
+    procedure VisitCaseStatement(CaseStmt: TCaseStatement);
+    procedure VisitCaseBranch(CaseBranch: TCaseBranch);
+    procedure VisitWithStatement(WithStmt: TWithStatement);
+    procedure VisitExitStatement(ExitStmt: TExitStatement);
   private  //Visitantes de nodos principales
     procedure VisitNode(Node: TASTNode);
     procedure VisitBlock(Block: TBlock);
@@ -182,22 +180,6 @@ type
 
 implementation
 
-function CompareExpressions(Expr1, Expr2: TExpression): Integer;
-var
-  Val1, Val2: Int64;
-begin
-  // Simplificado: asumimos que son literales numéricos o de caracteres
-  // En una implementación real, necesitarías evaluar las expresiones
-  if (Expr1.NodeType = ntNumberLiteral) and (Expr2.NodeType = ntNumberLiteral) then begin
-    Val1 := TNumberLiteral(Expr1).IntValue;
-    Val2 := TNumberLiteral(Expr2).IntValue;
-    if Val1 < Val2 then Result := -1
-    else if Val1 > Val2 then Result := 1
-    else Result := 0;
-  end else begin
-    Result := 0;  // No se puede comparar
-  end;
-end;
 {$region "TSymbol y TScope"}
 { TSymbol }
 constructor TSymbol.Create(const AName: string; AKind: TSymbolKind);
@@ -448,6 +430,32 @@ begin
 end;
 {$endregion}
 {$region "Resolución de tipos"}
+function TSemanticAnalyzer.GetOrdinalValue(Expr1: TExpression): Integer;
+{Esta rutina hace el parte del trabajo de un evaluador de expresiones}
+var
+  car: Char;
+begin
+  if Expr1.NodeType = ntNumberLiteral then begin
+    //Los literales numéricos tienen ya actualizado su valor
+    Exit(TNumberLiteral(Expr1).IntValue);
+  end else if Expr1.NodeType = ntStringLiteral then begin
+    //Solo los char tienen un valor ordinal
+    car := TStringLiteral(Expr1).Value[1];
+    Exit(ord(car));
+  end else if Expr1.NodeType = ntSubranTypeDef then begin
+    {Técnicamente, no existe literal subrango (solo números o caarcetres) a menos que sea
+    una variable. De ser así, no es una expresión constante que se pueda evaluar}
+//    if TSubranTypeDef(Expr1).BaseType = ResolveType('INTEGER') then begin
+//    end else if TSubranTypeDef(Expr1).BaseType = ResolveType('CHAR') then begin
+//    end else begin
+//    end;
+    Error('Se esperaba una expresión constante', Expr1.SrcPos);
+  end else if Expr1.NodeType = ntEnumTypeDef then begin
+
+  end else begin
+    Result := 0;  // No se puede comparar
+  end;
+end;
 function TSemanticAnalyzer.ResolveType(const TypeName: string): TTypeDef;
 {Resuelve un tipo por su nombre en la tabla de símbolos}
 var
@@ -559,26 +567,26 @@ begin
       Result := nil;
   end;
 end;
-function TSemanticAnalyzer.AreTypesCompatible(T1, T2: TTypeDef): Boolean;
+function TSemanticAnalyzer.AreTypesCompatible(TypeDef1, TypeDef2: TTypeDef): Boolean;
 {Analiza la compatibilidad de tipos para asignación o comparación}
 var
   Base1, Base2: TTypeDef;
 begin
-  if (T1 = nil) or (T2 = nil) then Exit(False);
-  if T1 = T2 then Exit(True);
+  if (TypeDef1 = nil) or (TypeDef2 = nil) then Exit(False);
+  if TypeDef1 = TypeDef2 then Exit(True);
 
   //Obtenemos los tipos base
-  Base1 := T1.GetFinalDef;
+  Base1 := TypeDef1.GetFinalDef;
   if Base1 = Nil then Exit(false);
   if Base1.NodeType = ntSubranTypeDef then Base1 := TSubranTypeDef(Base1).BaseType;
 
-  Base2 := T2.GetFinalDef;
+  Base2 := TypeDef2.GetFinalDef;
   if Base2 = Nil then Exit(false);
   if Base2.NodeType = ntSubranTypeDef then Base2 := TSubranTypeDef(Base2).BaseType;
 
   if Base1 = Base2 then Exit(True);
 
-  // === TIPOS SIMPLES ===
+  //=== Tipos Simples ===
   if (Base1.NodeType = ntSimpleTypeDef) and (Base2.NodeType = ntSimpleTypeDef) then begin
     // Numéricos: todos compatibles entre sí
     if IsNumericType(Base1) and IsNumericType(Base2) then
@@ -601,11 +609,11 @@ begin
       end;
   end;
 
-  // === ENUMERADOS ===
+  //=== Enumerados ===
   if (Base1.NodeType = ntEnumTypeDef) and (Base2.NodeType = ntEnumTypeDef) then
     Exit(Base1 = Base2);
 
-  // === ARREGLOS ===
+  //=== Arreglos ===
   //if (Base1.NodeType = ntArrayTypeDef) and (Base2.NodeType = ntArrayTypeDef) then begin
   //  Arr1 := TArrayTypeDef(Base1);
   //  Arr2 := TArrayTypeDef(Base2);
@@ -614,21 +622,47 @@ begin
   //    Exit(AreTypesCompatible(GetElementType(Arr1), GetElementType(Arr2)));
   //end;
 
-  // === RECORDS ===
+  //=== Records ===
   if (Base1.NodeType = ntRecordTypeDef) and (Base2.NodeType = ntRecordTypeDef) then
     Exit(Base1 = Base2);
 
-  // === PUNTEROS ===
+  //=== Punteros ===
   //if (Base1.NodeType = ntPointerTypeDef) and (Base2.NodeType = ntPointerTypeDef) then begin
   //  Ptr1 := TPointerTypeDef(Base1);
   //  Ptr2 := TPointerTypeDef(Base2);
   //  Exit(AreTypesCompatible(GetTargetType(Ptr1), GetTargetType(Ptr2)));
   //end;
 
-  // === SUBRANGOS ===
+  //=== Subrangos ===
   if (Base1.NodeType = ntSubranTypeDef) and (Base2.NodeType = ntSubranTypeDef) then
     Exit(True);  // Todos los subrangos son compatibles entre sí
 
+  //=== Conjuntos ===
+  if Base1.NodeType = ntSetTypeDef then begin
+//     //A la izquierda tenemos un conjunto
+//    if Base2.NodeType = ntSetTypeDef then begin
+//      //A la derecha tenemos otro conjunto.
+//      for i := 0 to SetLit.Values.Count - 1 do begin
+//        Elem := SetLit.Values[i];
+//        if Elem.NodeType = ntValueRange then begin
+//          // Es un rango: verificar que ambos extremos sean compatibles con el tipo base
+//          Range := TValueRange(Elem);
+//          if not IsExpressionCompatibleWithSetBase(Range.LowExpr, TargetSetType) then
+//            Error('Elemento fuera del rango del conjunto', Range.LowExpr.SrcPos);
+//          if not IsExpressionCompatibleWithSetBase(Range.HighExpr, TargetSetType) then
+//            Error('Elemento fuera del rango del conjunto', Range.HighExpr.SrcPos);
+//        end else begin
+//          //Es un elemento simple
+//          if not IsExpressionCompatibleWithSetBase(Elem, TargetSetType) then
+//            Error('Elemento incompatible con el conjunto', Elem.SrcPos);
+//        end;
+//      end;
+//    end else if Base2.NodeType = ntSetLiteral then begin
+//      //A la derecha tenemos un literal de conjunto.
+//
+//    end;
+  end;
+  //No se encuentra compatibilidad
   Result := False;
 end;
 function TSemanticAnalyzer.IsNumericType(TypeDef: TTypeDef): Boolean;
@@ -662,13 +696,10 @@ begin
               (TypeDef.TypeName = 'CHAR');
     Exit;
   end;
-
   if TypeDef.NodeType = ntEnumTypeDef then
     Exit(True);
-
   if TypeDef.NodeType = ntSubranTypeDef then
     Exit(True);
-
   Result := False;
 end;
 {$endregion}
@@ -977,18 +1008,10 @@ var
   ValueName: String;
   Sym: TSymbol;
 begin
-  // Verificar valores duplicados
-//  for i := 0 to EnumType.Values.Count - 1 do begin
-//    for j := i + 1 to EnumType.Values.Count - 1 do
-//    begin
-//      if EnumType.Values[i] = EnumType.Values[j] then
-//        Error('Valor de enumerado duplicado: ' + EnumType.Values[i], EnumType.SrcPos);
-//    end;
-//  end;
-  //Registrar cada valor del enumerado como símbolo.
+  //Registra cada valor del enumerado como símbolo.
   for i := 0 to EnumType.Values.Count - 1 do begin
     ValueName := EnumType.Values[i];
-    // Verificar duplicado
+    //Verifica duplicado
     if FCurrentScope.Lookup(ValueName) <> nil then begin
       Error('Valor de enumerado duplicado: ' + ValueName, EnumType.SrcPos)
     end else begin
@@ -1004,6 +1027,7 @@ end;
 procedure TSemanticAnalyzer.VisitSubrangeTypeDef(SubrangeType: TSubranTypeDef);
 var
   LowType, HighType: TTypeDef;
+  val1, val2: Int64;
 begin
   //Analizar límites
   VisitNode(SubrangeType.LowExpr);
@@ -1013,10 +1037,16 @@ begin
      (SubrangeType.HighExpr.NodeType = ntNumberLiteral) then begin
     //Los límites son números, el tipo base es INTEGER.
     SubrangeType.BaseType := ResolveType('INTEGER');
+    val1 := TNumberLiteral(SubrangeType.LowExpr).IntValue;
+    val2 := TNumberLiteral(SubrangeType.HighExpr).IntValue;
+    SubrangeType.NValues := val2 - val1 + 1;
   end else if (SubrangeType.LowExpr.NodeType = ntStringLiteral) and
               (SubrangeType.HighExpr.NodeType = ntStringLiteral) then begin
     //Los límites son caracteres ('a'..'z'), el tipo base es CHAR.
-    SubrangeType.BaseType := ResolveType('CHAR');
+                SubrangeType.BaseType := ResolveType('CHAR');
+    val1 := ord(TStringLiteral(SubrangeType.LowExpr).Value[1]);
+    val2 := ord(TStringLiteral(SubrangeType.HighExpr).Value[1]);
+    SubrangeType.NValues := val2 - val1 + 1;
   end else begin
     //Valida consistencia de tipos del rango
     LowType := GetTypeOf(SubrangeType.LowExpr);
@@ -1041,9 +1071,10 @@ begin
     end;
     //Se usa el mismo tipo de los límites para el tipo base
     SubrangeType.BaseType := LowType;
+//    SubrangeType.NValues :=
   end;
   //Valida el orden
-  if CompareExpressions(SubrangeType.LowExpr, SubrangeType.HighExpr) > 0 then begin
+  if val2 < val1 then begin
     Error('El límite inferior debe ser menor o igual al límite superior',
           SubrangeType.SrcPos);
   end
@@ -1058,170 +1089,28 @@ end;
 procedure TSemanticAnalyzer.VisitSetTypeDef(SetType: TSetTypeDef);
 begin
   //Visita para validar y resolver los tipos alias directos o anidados.
-  VisitNode(SetType.BaseType);
-end;
-{$endregion}
-{$region "Visitantes de sentencias"}
-procedure TSemanticAnalyzer.VisitAssignment(Assign: TAssignment);
-var
-  TargetType, ValueType: TTypeDef;
-begin
-  //Analiza destino
-  VisitNode(Assign.Target);
-  TargetType := Assign.Target.ExpTypeDef;
-
-  //Analiza valor
-  VisitNode(Assign.Value);
-  ValueType := Assign.Value.ExpTypeDef;
-
-  // Verificar compatibilidad
-  if TargetType = nil then
-    Error('No se puede determinar el tipo del destino', Assign.Target.SrcPos)
-  else if ValueType = nil then
-    Error('No se puede determinar el tipo del valor', Assign.Value.SrcPos)
-  else if not AreTypesCompatible(TargetType, ValueType) then
-    Error('Tipos incompatibles en la asignación', Assign.SrcPos);
-end;
-procedure TSemanticAnalyzer.VisitIfStatement(IfStmt: TIfStatement);
-var
-  CondType: TTypeDef;
-begin
-  // Analizar condición
-  VisitNode(IfStmt.Condition);
-  CondType := GetTypeOf(IfStmt.Condition);
-  if CondType = nil then
-    Error('No se puede determinar el tipo de la condición', IfStmt.Condition.SrcPos)
-  else if (CondType.TypeName <> 'BOOLEAN') and (not (CondType.NodeType = ntSimpleTypeDef)) then
-    Warning('La condición debería ser booleana', IfStmt.Condition.SrcPos);
-
-  // Analizar ramas
-  if IfStmt.ThenBranch <> nil then
-    VisitBlock(IfStmt.ThenBranch);
-  if IfStmt.ElseBranch <> nil then
-    VisitBlock(IfStmt.ElseBranch);
-end;
-procedure TSemanticAnalyzer.VisitWhileLoop(WhileLoop: TWhileLoop);
-begin
-  VisitNode(WhileLoop.Condition);
-  if WhileLoop.Body <> nil then
-    VisitBlock(WhileLoop.Body);
-end;
-procedure TSemanticAnalyzer.VisitRepeatUntil(RepeatUntil: TRepeatUntil);
-begin
-  if RepeatUntil.Body <> nil then
-    VisitBlock(RepeatUntil.Body);
-  VisitNode(RepeatUntil.Condition);
-end;
-procedure TSemanticAnalyzer.VisitForLoop(ForLoop: TForLoop);
-var
-  ControlType: TTypeDef;
-  Sym: TSymbol;
-begin
-  //Verificar la variable de control
-  if ForLoop.ControlVar <> nil then begin
-    Sym := FCurrentScope.LookupRecursive(ForLoop.ControlVar.Name);
-    if Sym = nil then begin
-      Error('Variable de control no declarada: ' + ForLoop.ControlVar.Name, ForLoop.ControlVar.SrcPos)
-    end else begin
-      ControlType := Sym.DataType;
-      if not IsOrdinalType(ControlType.GetFinalDef) then
-        Error('La variable de control debe ser de tipo ordinal', ForLoop.ControlVar.SrcPos);
+  VisitNode(SetType.ElementType);
+  //Verificar si el tipo es válido para un conjunto.
+  {Como nuestro compilador está diseñado para CPU de 8 bits, por eficiencia, limitaremos
+  la cantidad de elementos a 16 (usando 1 bytes a lo más). Eso excluye a SET OF CHAR o
+  SET OF BYTE, y solo podemos soportar conjuntos de enumerados o subrangos cortos: SET OF
+  enum_corto;}
+  if SetType.ElementType.NodeType = ntEnumTypeDef then begin
+    SetType.BaseType := SetType.ElementType;  //El tipo base es un enumerado
+    if TEnumTypeDef(SetType.ElementType).Values.Count>16 then begin
+      Error('Se excede el número de elementos permitido para un conjunto.', SetType.SrcPos)
     end;
-  end;
-
-  //Analiza expresiones
-  VisitNode(ForLoop.StartExpr);
-  VisitNode(ForLoop.EndExpr);
-
-  //Analiza cuerpo
-  if ForLoop.Body <> nil then
-    VisitBlock(ForLoop.Body);
-end;
-procedure TSemanticAnalyzer.VisitCaseStatement(CaseStmt: TCaseStatement);
-var
-  i: Integer;
-  SelectorType: TTypeDef;
-begin
-  // Analizar selector
-  VisitNode(CaseStmt.Selector);
-  SelectorType := GetTypeOf(CaseStmt.Selector);
-  if SelectorType = nil then
-    Error('No se puede determinar el tipo del selector', CaseStmt.Selector.SrcPos);
-
-  // Analizar ramas
-  for i := 0 to CaseStmt.Branches.Count - 1 do
-    VisitCaseBranch(CaseStmt.Branches[i]);
-
-  // Analizar ELSE
-  if CaseStmt.ElseBranch <> nil then
-    VisitBlock(CaseStmt.ElseBranch);
-end;
-procedure TSemanticAnalyzer.VisitCaseBranch(CaseBranch: TCaseBranch);
-var
-  i: Integer;
-begin
-  // Analizar constantes
-  for i := 0 to CaseBranch.Constants.Count - 1 do
-    VisitNode(CaseBranch.Constants[i]);
-
-  // Analizar instrucción
-  if CaseBranch.Statement <> nil then
-    VisitBlock(CaseBranch.Statement);
-end;
-procedure TSemanticAnalyzer.VisitWithStatement(WithStmt: TWithStatement);
-var
-  RecordType: TTypeDef;
-begin
-  // Analizar la expresión del WITH
-  VisitNode(WithStmt.RecordVar);
-  RecordType := GetTypeOf(WithStmt.RecordVar);
-
-  // Verificar que sea un registro
-  if RecordType = nil then
-    Error('WITH requiere una expresión de tipo RECORD', WithStmt.RecordVar.SrcPos)
-  else if not (RecordType.NodeType = ntRecordTypeDef) then
-    Error('WITH solo puede usarse con RECORDs', WithStmt.RecordVar.SrcPos);
-
-  // Entrar en el ámbito del WITH
-  EnterWithScope(WithStmt.RecordVar);
-  try
-    // Analizar el cuerpo
-    if WithStmt.Body <> nil then
-      VisitBlock(WithStmt.Body);
-  finally
-    ExitWithScope;
-  end;
-end;
-procedure TSemanticAnalyzer.VisitExitStatement(ExitStmt: TExitStatement);
-var
-  ReturnType: TTypeDef;
-  ValueType: TTypeDef;
-  Func: TProcFunctDecl;
-begin
-  if ExitStmt.HasReturnValue then begin
-    //Verificamos que estamos en una función
-    if not IsInFunction then begin
-      Error('EXIT con valor solo permitido en funciones', ExitStmt.SrcPos);
-      Exit;
+  end else if SetType.ElementType.NodeType = ntSubranTypeDef then begin
+    SetType.BaseType := TSubranTypeDef(SetType.ElementType).BaseType;  //El tipo base es el tipo base del subrango
+    if TSubranTypeDef(SetType.ElementType).NValues>16 then begin
+      Error('Se excede el número de elementos permitido para un conjunto.', SetType.SrcPos)
     end;
-    //Verificamos compatibilidad del valor de retorno
-    VisitNode(ExitStmt.ReturnValue);
-    ValueType := GetTypeOf(ExitStmt.ReturnValue);
-    Func := GetCurrentFunction;
-    if Func <> nil then begin
-      ReturnType := Func.ReturnTypeDef;
-      if ReturnType = nil then
-        Error('No se puede determinar el tipo de retorno de la función', ExitStmt.SrcPos)
-      else if not AreTypesCompatible(ReturnType, ValueType) then
-        Error('Tipo de retorno incompatible en EXIT', ExitStmt.SrcPos);
-    end;
-  end
-  else
-  begin
-    // EXIT sin valor: permitido en procedimientos y funciones
-    // En funciones, genera advertencia
-    if IsInFunction then
-      Warning('EXIT sin valor en función', ExitStmt.SrcPos);
+  end else if SetType.ElementType.NodeType = ntSimpleTypeDef then begin
+
+  end else if SetType.ElementType.NodeType = ntAliasTypeDef then begin
+
+  end else begin
+
   end;
 end;
 {$endregion}
@@ -1270,14 +1159,18 @@ end;
 procedure TSemanticAnalyzer.VisitSetLiteral(SetLit: TSetLiteral);
 var
   i: Integer;
+  ElemType: TTypeDef;
 begin
   //Visita y valida cada uno de los elementos
-  for i := 0 to SetLit.Values.Count - 1 do
+  for i := 0 to SetLit.Values.Count - 1 do begin
     VisitNode(SetLit.Values[i]);
-  //Se asume que el tipo del
-  //SetLit.ExpTypeDef := ???;
-  //Validar el tipo de cada elemento
-  //???
+    //Verificar que sea ordinal (los conjuntos solo aceptan ordinales)
+    ElemType := SetLit.Values[i].ExpTypeDef;
+    if (ElemType <> nil) and (not IsOrdinalType(ElemType.GetFinalDef)) then
+      Error('Los elementos de un conjunto deben ser ordinales', SetLit.Values[i].SrcPos);
+  end;
+  //Asigna el tipo SET genérico para el literal. BaseType se resolverá en el contexto.
+  SetLit.ExpTypeDef := ResolveType('SET');  //Tipo predefinido genérico
 end;
 procedure TSemanticAnalyzer.VisitVariableRef(VarRef: TVariableRef);
 var
@@ -1554,6 +1447,187 @@ begin
   end;
 end;
 {$endregion}
+{$region "Visitantes de sentencias"}
+procedure TSemanticAnalyzer.VisitAssignment(Assign: TAssignment);
+var
+  TargetType, ValueType: TTypeDef;
+begin
+  //Analiza destino
+  VisitNode(Assign.Target);
+  TargetType := Assign.Target.ExpTypeDef;
+//  if TargetType = nil then Exit;
+//  //Valida
+//  if (Assign.Value.NodeType = ntSetLiteral) and
+//     (TargetType.GetFinalDef.NodeType = ntSetTypeDef) then begin
+//    //Caso especial: asignación de conjunto literal
+//    //Verificar que el literal sea compatible con el tipo del destino
+//    CheckSetLiteralCompatibility(TSetLiteral(Assign.Value),
+//                                 TSetTypeDef(TargetType.GetFinalDef));
+//    //Asignar el tipo del destino al literal
+//    Assign.Value.ExpTypeDef := TargetType;
+//  end else begin
+//    VisitNode(Assign.Value);
+//    ValueType := Assign.Value.ExpTypeDef;
+//    // Verificación normal
+//    if not AreTypesCompatible(TargetType, ValueType) then
+//      Error('Tipos incompatibles en la asignación', Assign.SrcPos);
+//  end;
+
+  //Analiza valor
+  VisitNode(Assign.Value);
+  ValueType := Assign.Value.ExpTypeDef;
+
+  // Verificar compatibilidad
+  if TargetType = nil then
+    Error('No se puede determinar el tipo del destino', Assign.Target.SrcPos)
+  else if ValueType = nil then
+    Error('No se puede determinar el tipo del valor', Assign.Value.SrcPos)
+  else if not AreTypesCompatible(TargetType, ValueType) then
+    Error('Tipos incompatibles en la asignación', Assign.SrcPos);
+end;
+procedure TSemanticAnalyzer.VisitIfStatement(IfStmt: TIfStatement);
+var
+  CondType: TTypeDef;
+begin
+  // Analizar condición
+  VisitNode(IfStmt.Condition);
+  CondType := GetTypeOf(IfStmt.Condition);
+  if CondType = nil then
+    Error('No se puede determinar el tipo de la condición', IfStmt.Condition.SrcPos)
+  else if (CondType.TypeName <> 'BOOLEAN') and (not (CondType.NodeType = ntSimpleTypeDef)) then
+    Warning('La condición debería ser booleana', IfStmt.Condition.SrcPos);
+
+  // Analizar ramas
+  if IfStmt.ThenBranch <> nil then
+    VisitBlock(IfStmt.ThenBranch);
+  if IfStmt.ElseBranch <> nil then
+    VisitBlock(IfStmt.ElseBranch);
+end;
+procedure TSemanticAnalyzer.VisitWhileLoop(WhileLoop: TWhileLoop);
+begin
+  VisitNode(WhileLoop.Condition);
+  if WhileLoop.Body <> nil then
+    VisitBlock(WhileLoop.Body);
+end;
+procedure TSemanticAnalyzer.VisitRepeatUntil(RepeatUntil: TRepeatUntil);
+begin
+  if RepeatUntil.Body <> nil then
+    VisitBlock(RepeatUntil.Body);
+  VisitNode(RepeatUntil.Condition);
+end;
+procedure TSemanticAnalyzer.VisitForLoop(ForLoop: TForLoop);
+var
+  ControlType: TTypeDef;
+  Sym: TSymbol;
+begin
+  //Verificar la variable de control
+  if ForLoop.ControlVar <> nil then begin
+    Sym := FCurrentScope.LookupRecursive(ForLoop.ControlVar.Name);
+    if Sym = nil then begin
+      Error('Variable de control no declarada: ' + ForLoop.ControlVar.Name, ForLoop.ControlVar.SrcPos)
+    end else begin
+      ControlType := Sym.DataType;
+      if not IsOrdinalType(ControlType.GetFinalDef) then
+        Error('La variable de control debe ser de tipo ordinal', ForLoop.ControlVar.SrcPos);
+    end;
+  end;
+
+  //Analiza expresiones
+  VisitNode(ForLoop.StartExpr);
+  VisitNode(ForLoop.EndExpr);
+
+  //Analiza cuerpo
+  if ForLoop.Body <> nil then
+    VisitBlock(ForLoop.Body);
+end;
+procedure TSemanticAnalyzer.VisitCaseStatement(CaseStmt: TCaseStatement);
+var
+  i: Integer;
+  SelectorType: TTypeDef;
+begin
+  // Analizar selector
+  VisitNode(CaseStmt.Selector);
+  SelectorType := GetTypeOf(CaseStmt.Selector);
+  if SelectorType = nil then
+    Error('No se puede determinar el tipo del selector', CaseStmt.Selector.SrcPos);
+
+  // Analizar ramas
+  for i := 0 to CaseStmt.Branches.Count - 1 do
+    VisitCaseBranch(CaseStmt.Branches[i]);
+
+  // Analizar ELSE
+  if CaseStmt.ElseBranch <> nil then
+    VisitBlock(CaseStmt.ElseBranch);
+end;
+procedure TSemanticAnalyzer.VisitCaseBranch(CaseBranch: TCaseBranch);
+var
+  i: Integer;
+begin
+  // Analizar constantes
+  for i := 0 to CaseBranch.Constants.Count - 1 do
+    VisitNode(CaseBranch.Constants[i]);
+
+  // Analizar instrucción
+  if CaseBranch.Statement <> nil then
+    VisitBlock(CaseBranch.Statement);
+end;
+procedure TSemanticAnalyzer.VisitWithStatement(WithStmt: TWithStatement);
+var
+  RecordType: TTypeDef;
+begin
+  // Analizar la expresión del WITH
+  VisitNode(WithStmt.RecordVar);
+  RecordType := GetTypeOf(WithStmt.RecordVar);
+
+  // Verificar que sea un registro
+  if RecordType = nil then
+    Error('WITH requiere una expresión de tipo RECORD', WithStmt.RecordVar.SrcPos)
+  else if not (RecordType.NodeType = ntRecordTypeDef) then
+    Error('WITH solo puede usarse con RECORDs', WithStmt.RecordVar.SrcPos);
+
+  // Entrar en el ámbito del WITH
+  EnterWithScope(WithStmt.RecordVar);
+  try
+    // Analizar el cuerpo
+    if WithStmt.Body <> nil then
+      VisitBlock(WithStmt.Body);
+  finally
+    ExitWithScope;
+  end;
+end;
+procedure TSemanticAnalyzer.VisitExitStatement(ExitStmt: TExitStatement);
+var
+  ReturnType: TTypeDef;
+  ValueType: TTypeDef;
+  Func: TProcFunctDecl;
+begin
+  if ExitStmt.HasReturnValue then begin
+    //Verificamos que estamos en una función
+    if not IsInFunction then begin
+      Error('EXIT con valor solo permitido en funciones', ExitStmt.SrcPos);
+      Exit;
+    end;
+    //Verificamos compatibilidad del valor de retorno
+    VisitNode(ExitStmt.ReturnValue);
+    ValueType := GetTypeOf(ExitStmt.ReturnValue);
+    Func := GetCurrentFunction;
+    if Func <> nil then begin
+      ReturnType := Func.ReturnTypeDef;
+      if ReturnType = nil then
+        Error('No se puede determinar el tipo de retorno de la función', ExitStmt.SrcPos)
+      else if not AreTypesCompatible(ReturnType, ValueType) then
+        Error('Tipo de retorno incompatible en EXIT', ExitStmt.SrcPos);
+    end;
+  end
+  else
+  begin
+    // EXIT sin valor: permitido en procedimientos y funciones
+    // En funciones, genera advertencia
+    if IsInFunction then
+      Warning('EXIT sin valor en función', ExitStmt.SrcPos);
+  end;
+end;
+{$endregion}
 {$region "Visitantes de nodos principales}
 procedure TSemanticAnalyzer.VisitNode(Node: TASTNode);
 begin
@@ -1707,7 +1781,7 @@ begin
   SrcPos.row := 0;
   SrcPos.col := 0;
 
-  // Tipos predefinidos
+  //Tipos predefinidos
   Sym := TSymbol.Create('INTEGER', skType);
   Sym.DataType := TSimpleTypeDef.Create('INTEGER', SrcPos);
   Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
@@ -1741,6 +1815,13 @@ begin
   Sym := TSymbol.Create('REAL', skType);
   Sym.DataType := TSimpleTypeDef.Create('REAL', SrcPos);
   Sym.IsDataTypeOwner := True;  //Para que se libere aquí ya que el AST no lo hará.
+  FGlobalScope.Declare(Sym);
+
+  //Tipo especial para literales de conjunto, sin tipo base fijo
+  Sym := TSymbol.Create('SET', skType);
+  Sym.DataType := TSetTypeDef.Create(SrcPos);
+  Sym.DataType.TypeName := '#SET';   //Solo como referencia
+  Sym.IsDataTypeOwner := True;
   FGlobalScope.Declare(Sym);
 end;
 procedure TSemanticAnalyzer.RegisterIntrinsicProcedures;

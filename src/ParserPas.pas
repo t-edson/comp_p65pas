@@ -1088,7 +1088,7 @@ begin
     Exit(Nil);
   end;
   SetTypeDef := TSetTypeDef.Create(lex.GetSrcPos);
-  SetTypeDef.BaseType := TypeDef;
+  SetTypeDef.ElementType := TypeDef;
   Result := SetTypeDef;
 end;
 function TParserPas.ParseFileType: TFileTypeDef;

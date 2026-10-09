@@ -160,8 +160,8 @@ type  //Nodos de expresiones
   TNumberLiteral = class(TExpression)
   private
     FKind: TNumberKind;
-    FIntValue: Int64;           // Valor entero
-    FFloatValue: Double;        // Valor flotante
+    FIntValue: Int64;           //Valor entero
+    FFloatValue: Double;        //Valor flotante
   public
     // Constructores
     constructor Create(AValue: Int64; const ASrcPos: TSrcPos); overload;
@@ -804,15 +804,20 @@ type  //Nodos de definiciones de tipos
     function ToString: string; override;
   end;
   //Subrango (1..10, 'a'..'z')
+
+  { TSubranTypeDef }
+
   TSubranTypeDef = class(TTypeDef)
   private
-    FLowExpr: TExpression;    //Límite inferior del rango
-    FHighExpr: TExpression;   //Límite superior del rango
-    FBaseType: TTypeDef;      //Tipo base (integer, char, etc.)
+    FLowExpr: TExpression;   //Límite inferior del rango
+    FHighExpr: TExpression;  //Límite superior del rango
+    FBaseType: TTypeDef;     //Tipo base (integer, char, etc.). Se actualiza en el análisis semántico
+    FNValues: Integer;       //Número de valores. Se actualiza en el análisis semántico.
   public
     property LowExpr: TExpression read FLowExpr;
     property HighExpr: TExpression read FHighExpr;
     property BaseType: TTypeDef read FBaseType write FBaseType;
+    property NValues: Integer read FNValues write FNValues;
   public  //Inicialización y depuración
     constructor Create(ALowExpr, AHighExpr: TExpression; const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -821,7 +826,7 @@ type  //Nodos de definiciones de tipos
   //Enumerado (Rojo, Verde, Azul)
   TEnumTypeDef = class(TTypeDef)
   private
-    FValues: TStringList;  // Lista de nombres de valores
+    FValues: TStringList;  //Lista de nombres de valores
   public
     procedure AddValue(const Value: string);
     property Values: TStringList read FValues;
@@ -872,13 +877,15 @@ type  //Nodos de definiciones de tipos
   // Tipo conjunto (set of byte)
   TSetTypeDef = class(TTypeDef)
   private
-    FBaseType: TTypeDef;     //Tipo base del conjunto (byte, char, etc.)
+    FElementType: TTypeDef;  //Tipo del elemento del conjunto (byte, char, subrango, o enumerado.)
     FMinValue: Int64;        //Valor mínimo (para optimización)
     FMaxValue: Int64;        //Valor máximo (para optimización)
+    FBaseType: TTypeDef;     //Tipo base del conjunto (byte o char). Se llena en el análisis semántico.
   public
-    property BaseType: TTypeDef read FBaseType write FBaseType;
+    property ElementType: TTypeDef read FElementType write FElementType;
     property MinValue: Int64 read FMinValue write FMinValue;
     property MaxValue: Int64 read FMaxValue write FMaxValue;
+    property BaseType: TTypeDef read FBaseType write FBaseType;
     function IsValidElement(Value: Int64): Boolean;
   public  //Inicialización y depuración
     constructor Create(const ASrcPos: TSrcPos);
@@ -2012,12 +2019,12 @@ begin
 end;
 destructor TSetTypeDef.Destroy;
 begin
-  FBaseType.Free;    //Destruimos si se creó.
+  FElementType.Free;    //Destruimos si se creó.
   inherited;
 end;
 function TSetTypeDef.ToString: string;
 begin
-  Result := Format('SetTypeDef: set of %s', [FBaseType.TypeName]);
+  Result := Format('SetTypeDef: set of %s', [FElementType.TypeName]);
   Result := Result + Format(' [%d..%d]', [FMinValue, FMaxValue]);
 end;
 // TFileTypeDef
