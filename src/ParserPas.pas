@@ -1151,6 +1151,7 @@ begin
   case tokIdent of
     tiIDENTIF: begin         //integer, byte, TPersona, etc.
       Result := TAliasTypeDef.Create(lex.token, lex.GetSrcPos);
+      lex.GetCtxState;
       Next;
     end;
     tiLitNumbI: begin        //Subrango:  = 1..10

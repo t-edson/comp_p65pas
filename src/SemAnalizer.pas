@@ -1036,36 +1036,44 @@ begin
   VisitNode(expr1);
   VisitNode(expr2);
   //Detectar el tipo base del subrango
-  if (expr1.NodeType = ntNumberLiteral) and (expr2.NodeType = ntNumberLiteral) then begin
-    //Asigna el tipo base por defecto para los números enteros.
-    SubrangeType.BaseType := ResolveType('INTEGER');
-    //Valida el tipo de números de los límites
-    if TNumberLiteral(expr1).Kind <> nkInteger then begin
-      Error('Se esperaba una expresión entera.', expr1.SrcPos);
-      Exit;
+  if expr1.NodeType = ntNumberLiteral then begin
+    if expr2.NodeType = ntNumberLiteral then begin
+      //Asigna el tipo base por defecto para los números enteros.
+      SubrangeType.BaseType := ResolveType('INTEGER');
+      //Valida el tipo de números de los límites
+      if TNumberLiteral(expr1).Kind <> nkInteger then begin
+        Error('Se esperaba una expresión entera.', expr1.SrcPos);
+        Exit;
+      end;
+      if TNumberLiteral(expr2).Kind <> nkInteger then begin
+        Error('Se esperaba una expresión entera.', expr2.SrcPos);
+        Exit;
+      end;
+      val1 := TNumberLiteral(expr1).IntValue;
+      val2 := TNumberLiteral(expr2).IntValue;
+      SubrangeType.NValues := val2 - val1 + 1;
+    end else begin
+      Error('El límite superior debe ser numérico.', expr2.SrcPos);
     end;
-    if TNumberLiteral(expr2).Kind <> nkInteger then begin
-      Error('Se esperaba una expresión entera.', expr2.SrcPos);
-      Exit;
+  end else if expr1.NodeType = ntStringLiteral then begin
+    if expr2.NodeType = ntStringLiteral then begin
+      //Los límites son caracteres ('a'..'z'), el tipo base es CHAR.
+      SubrangeType.BaseType := ResolveType('CHAR');
+      //Valida que las cadenas de los límites tengan la longitud apropiada
+      if length(TStringLiteral(expr1).Value) <> 1 then begin
+        Error('Se esperaba un caracter.', expr1.SrcPos);
+        Exit;
+      end;
+      if length(TStringLiteral(expr2).Value) <> 1 then begin
+        Error('Se esperaba un caracter.', expr2.SrcPos);
+        Exit;
+      end;
+      val1 := ord(TStringLiteral(expr1).Value[1]);
+      val2 := ord(TStringLiteral(expr2).Value[1]);
+      SubrangeType.NValues := val2 - val1 + 1;
+    end else begin
+      Error('El límite superior debe ser un caracter.', expr2.SrcPos);
     end;
-    val1 := TNumberLiteral(expr1).IntValue;
-    val2 := TNumberLiteral(expr2).IntValue;
-    SubrangeType.NValues := val2 - val1 + 1;
-  end else if (expr1.NodeType = ntStringLiteral) and (expr2.NodeType = ntStringLiteral) then begin
-    //Los límites son caracteres ('a'..'z'), el tipo base es CHAR.
-    SubrangeType.BaseType := ResolveType('CHAR');
-    //Valida que las cadenas de los límites tengan la longitud apropiada
-    if length(TStringLiteral(expr1).Value) <> 1 then begin
-      Error('Se esperaba un caracter.', expr1.SrcPos);
-      Exit;
-    end;
-    if length(TStringLiteral(expr2).Value) <> 1 then begin
-      Error('Se esperaba un caracter.', expr2.SrcPos);
-      Exit;
-    end;
-    val1 := ord(TStringLiteral(expr1).Value[1]);
-    val2 := ord(TStringLiteral(expr2).Value[1]);
-    SubrangeType.NValues := val2 - val1 + 1;
   end else begin
     //Valida consistencia de tipos del rango
     LowType := GetTypeOf(expr1);

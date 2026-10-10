@@ -1,7 +1,8 @@
 program muestra; 
 type
-  TConjunto = set of byte;
-  TSubrango = 1.3..4;
+  //TConjunto = set of byte;
+  TColores = (rojo, azul, amarillo, verde, morado);
+  TSubrango = azul..verde;
 var 
   con : TConjunto;
 begin
