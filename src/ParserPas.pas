@@ -873,16 +873,12 @@ begin
     IdentName := lex.token;
     SrcPos := lex.GetSrcPos;
     Next;
-    if tokIdent = tiSEMIC then begin
-      //Es un alias: TTipo = alias;
-      Result := TAliasTypeDef.Create(IdentName, SrcPos);
-      Exit;
-    end else if tokIdent = tiDOTDOT then begin
+    if tokIdent = tiDOTDOT then begin
       //Es un sunrango;
       LowExpr := TVariableRef.Create(IdentName, SrcPos);
     end else begin
-      //Debe ser un error
-      GenError('Se esperaba ";" o ".."', lex.GetSrcPos);
+      //Debe ser un alias
+      Result := TAliasTypeDef.Create(IdentName, SrcPos);
       Exit;
     end;
   end;
@@ -1025,6 +1021,10 @@ Si se encuentra algún error, se devuelve NIL.}
       //Analizamos el selector:
       ParseConstantList(branch.SelectorValues);
       if HayError then begin
+        branch.Destroy;
+        Exit;
+      end;
+      if not ConsumeTok(tiCOLON, 'Se esperaba ":".') then begin
         branch.Destroy;
         Exit;
       end;
