@@ -4,7 +4,8 @@ type
   TColores = (rojo, azul, amarillo, verde, morado);
   TSubrango = azul..verde;
 var 
-  con : TConjunto;
+  a: byte;
+//  con : TConjunto;
 begin
 //  con := [1, 2, 3];
 //  col := Rojo;

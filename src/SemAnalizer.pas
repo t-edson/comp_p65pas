@@ -27,11 +27,12 @@ type
     FKind: TSymbolKind;          //Tipo de símbolo.
     FDataType: TTypeDef;         //Definición del tipo del símbolo.
     FDeclaration: TASTNode;      //Referencia al nodo donde se declara el símbolo.
-    FScope: TScope;
+    FScope: TScope;              //Ámbito del símbolo
     FIsForward: Boolean;
     FIsIntrinsic: Boolean;
     FParameters: TASTNodeList;   //Lista de parámetros
-    FReturnType: TTypeDef;
+    FReturnType: TTypeDef;       //Tipo de retorno, cuando es función.
+    FOrdinalValue: Integer;      //Valor ordinal del enumerdo. Solo aplica a skEnumValue.
     FIsDataTypeOwner: Boolean;   //Indica si es propietario del objeto FDataType
     FIsReturnTypeOwner: Boolean; //Indica si es propietario del objeto FReturnType
     FIsSelf: Boolean;            //Indica que es la referencia a "Self".
@@ -47,6 +48,8 @@ type
     //Tipo de retorno. Usado solo para procedimientos y funciones.
     {Se mantiene separado de "DataType" porque son semánticamente diferentes.}
     property ReturnType: TTypeDef read FReturnType write FReturnType;
+    //Valor ordinal de un tipo enumerado
+    property OrdinalValue: Integer read FOrdinalValue write FOrdinalValue;
     //Banderas
     property IsDataTypeOwner: Boolean read FIsDataTypeOwner write FIsDataTypeOwner;
     property IsReturnTypeOwner: Boolean read FIsReturnTypeOwner write FIsReturnTypeOwner;
@@ -1015,20 +1018,24 @@ begin
     if FCurrentScope.Lookup(ValueName) <> nil then begin
       Error('Valor de enumerado duplicado: ' + ValueName, EnumType.SrcPos)
     end else begin
-      // Crear símbolo para el valor del enumerado
+      //Crea símbolo para el valor del enumerado
       Sym := TSymbol.Create(ValueName, skEnumValue);
-      Sym.DataType := EnumType;  // El tipo del valor es el enumerado mismo
+      Sym.DataType := EnumType;     //El tipo del valor es el enumerado mismo
       Sym.Declaration := EnumType;
-      Sym.IsDataTypeOwner := False;  // No es propietario del tipo
+      Sym.IsDataTypeOwner := False; //No es propietario del tipo
+      Sym.OrdinalValue := i;        //Valor ordinal del enumerado
       FCurrentScope.Declare(Sym);
     end;
   end;
 end;
 procedure TSemanticAnalyzer.VisitSubrangeTypeDef(SubrangeType: TSubranTypeDef);
+{Visita los límites del rango y actualiza los campos "BaseType" y "NValues" de
+"SubrangeType".}
 var
-  LowType, HighType: TTypeDef;
-  val1, val2: Int64;
+  val1, val2: Integer;
   expr1, expr2: TExpression;
+  enumVal1, enumVal2: String;
+  EnumTypeDef: TEnumTypeDef;
 begin
   expr1 := SubrangeType.LowExpr;
   expr2 := SubrangeType.HighExpr;
@@ -1037,9 +1044,10 @@ begin
   VisitNode(expr2);
   //Detectar el tipo base del subrango
   if expr1.NodeType = ntNumberLiteral then begin
+    //Los límites deben ser numéricos (10..12).
+    //Asigna el tipo base por defecto para los números enteros.
+    SubrangeType.BaseType := ResolveType('INTEGER');
     if expr2.NodeType = ntNumberLiteral then begin
-      //Asigna el tipo base por defecto para los números enteros.
-      SubrangeType.BaseType := ResolveType('INTEGER');
       //Valida el tipo de números de los límites
       if TNumberLiteral(expr1).Kind <> nkInteger then begin
         Error('Se esperaba una expresión entera.', expr1.SrcPos);
@@ -1056,9 +1064,9 @@ begin
       Error('El límite superior debe ser numérico.', expr2.SrcPos);
     end;
   end else if expr1.NodeType = ntStringLiteral then begin
+    //Los límites deben ser caracteres ('a'..'z'), el tipo base es CHAR.
+    SubrangeType.BaseType := ResolveType('CHAR');
     if expr2.NodeType = ntStringLiteral then begin
-      //Los límites son caracteres ('a'..'z'), el tipo base es CHAR.
-      SubrangeType.BaseType := ResolveType('CHAR');
       //Valida que las cadenas de los límites tengan la longitud apropiada
       if length(TStringLiteral(expr1).Value) <> 1 then begin
         Error('Se esperaba un caracter.', expr1.SrcPos);
@@ -1074,31 +1082,35 @@ begin
     end else begin
       Error('El límite superior debe ser un caracter.', expr2.SrcPos);
     end;
-  end else begin
-    //Valida consistencia de tipos del rango
-    LowType := GetTypeOf(expr1);
-    if LowType = nil then begin
-      Error('No se puede determinar el tipo de límite inferior', SubrangeType.SrcPos);
-      Exit;
-    end;
-    HighType := GetTypeOf(expr2);
-    if HighType = nil then begin
-      Error('No se puede determinar el tipo del límite superior', SubrangeType.SrcPos);
-      Exit;
-    end;
-    if LowType <> HighType then begin
-      Error('Los límites del subrango deben ser del mismo tipo', SubrangeType.SrcPos);
-      Exit;
-    end;
-    //Verifica que el tipo sea ordinal (integer, char, enum, etc.)
-    if not IsOrdinalType(LowType) then begin
-      Error('El tipo del subrango debe ser ordinal',
-            SubrangeType.SrcPos);
-      Exit;
-    end;
+  end else if expr1.NodeType = ntVariableRef then begin
+    //Los límites debe ser enumerados (rojo..verde).
     //Se usa el mismo tipo de los límites para el tipo base
-    SubrangeType.BaseType := LowType;
-//    SubrangeType.NValues :=
+    SubrangeType.BaseType := expr1.ExpTypeDef;
+    //Valida que el límite inferiro sea enumerado.
+    if expr1.ExpTypeDef.NodeType <> ntEnumTypeDef then begin
+      Error('Se esperaba un valor enumerado.', expr1.SrcPos);
+      Exit;
+    end;
+    //Valida que los límites sean del mismo tipo enumerado
+    if expr1.ExpTypeDef <> expr2.ExpTypeDef then begin
+      Error('Tipos enumerados incompatibles', expr2.SrcPos);
+      Exit;
+    end;
+    if expr2.NodeType = ntVariableRef then begin
+      enumVal1 := TVariableRef(expr1).Name;
+      enumVal2 := TVariableRef(expr2).Name;
+      EnumTypeDef := TEnumTypeDef(expr1.ExpTypeDef);
+//      if not EnumTypeDef.Values.Find(enumVal1, val1) then begin  //**** Debería evitarse buscar aquí el ordinal
+//        //No debería pasar si se ha identificado que "expr1" es enumerado.
+//        Error('Valor enumerado no encontrado', expr1.SrcPos);
+//      end;
+//      if not EnumTypeDef.Values.Find(enumVal2, val2) then begin
+//        //No debería pasar si se ha identificado que "expr2" es enumerado.
+//        Error('Valor enumerado no encontrado', expr2.SrcPos);
+//      end;
+    end else begin
+      Error('El límite superior debe ser un enumerado.', expr2.SrcPos);
+    end;
   end;
   //Valida el orden
   if val2 < val1 then begin

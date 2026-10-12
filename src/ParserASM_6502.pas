@@ -149,7 +149,6 @@ function TParserAsm6502.DecodeNext: boolean;
 }
 var
   ctx: TContext;
-  iden: String;
 begin
   ctx := lex.curCtx;
   if ctx._Eof then begin
@@ -383,7 +382,7 @@ If not operand has found, error is generated and returns FALSE.}
     valueInt: Longint;
   begin
     lex.SkipWhitesNoEOL;
-    if (lex.tokType = tkEol) or (tokIdent = txCOMMENT) then begin
+    if lex.atEol or (tokIdent = txCOMMENT) then begin
       //End of line
       exit(false);
     end;
@@ -435,7 +434,7 @@ If not operand has found, error is generated and returns FALSE.}
       //Get operand
       lex.Next;
       lex.SkipWhitesNoEOL;
-      if (lex.tokType = tkEol) or (tokIdent = txCOMMENT) then begin
+      if lex.atEol or (tokIdent = txCOMMENT) then begin
         //End of line
         GenError('Operand expected');
         exit(false);
@@ -509,13 +508,13 @@ begin
     if HayError then exit(false);
     operand.used := true;
     exit(true);
-  end else if lex.tokType = tkLitNumber then begin
+  end else if tokIdent = txLITNUMBER then begin
     //Es una dirección numérica
     operand.Val := StrToInt(lex.token);  //Simple number
     lex.Next;
     operand.used := true;
     exit(true);
-  end else if lex.tokType = tkIdentifier then begin
+  end else if tokIdent = txIDENTIF then begin
     //Es un identificador o una etiqueta. Puede definirse luego.
     operand.Val := -1;        //Indicates to use "operRef"
     operand.Ref := nil;       //Will be later linked.
@@ -607,7 +606,7 @@ begin
   //Capture operand
   lex.Next;
   lex.SkipWhitesNoEOL;
-  if (lex.tokType = tkEol) or (tokIdent = txEND) then begin
+  if lex.atEol or (tokIdent = txEND) then begin
     //Sin parámetros. Puede ser Implícito o Acumulador
     if aImplicit in addressModes then begin
       //Tiene modo implícito
@@ -634,7 +633,7 @@ begin
     //Direccionamiento Indirecto: (indirect), (indirect,X), (indirect),Y o (aAbsInIdX, X)
     AddInstruction(idInst, aIndirect, 0, srcInst);  //Add the instruction with "aImplicit" temporally. Later will be updated.
     lex.Next;
-    if lex.tokType in [tkLitNumber, tkIdentifier] then begin
+    if tokIdent in [txLITNUMBER, txIDENTIF] then begin
       if not CaptureOperand(curInst.operand) then begin
         GenError(Format(ER_SYNTAX_ERR_, [lex.token]));
         exit;
@@ -676,7 +675,7 @@ begin
           end;
           lex.Next;  //Takes Y
           lex.SkipWhitesNoEOL;
-        end else if lex.tokType = tkEol then begin
+        end else if lex.atEol then begin
           //Can only be (indirect)
           //No need to change anything.
         end else begin
@@ -774,12 +773,12 @@ var
   undefLabel: boolean;
   n: Integer;
 begin
-  if lex.tokType = tkEol then begin  //Empty instruction
+  if lex.atEol then begin  //Empty instruction
     lex.Next;   //Go to next line
     exit; //Empty line
   end;
   //Proccess the ASM line
-  if lex.tokType = tkIdentifier then begin
+  if tokIdent = txIDENTIF then begin
     //Could be a mnemonic, directive "ORG" or a label.
     tok := Upcase(lex.token);
     if FindOpcode(tok, idInst) then begin
@@ -806,7 +805,7 @@ begin
         if not CaptureOperand(curInst.operand) then exit;
         lex.SkipWhitesNoEOL;
       until tokIdent<>tXCOMMA; //","
-      if lex.tokType = tkEol then begin
+      if lex.atEol then begin
         //Must follow Eol
         lex.Next;
       end else begin
@@ -823,7 +822,7 @@ begin
         if not CaptureOperand(curInst.operand) then exit;
         lex.SkipWhitesNoEOL;
       until tokIdent<>tXCOMMA; //","
-      if lex.tokType = tkEol then begin
+      if lex.atEol then begin
         //Must follow Eol
         lex.Next;
       end else begin
@@ -861,7 +860,7 @@ begin
     Exit;
   end;
   //Test if we're at the line end.
-  if lex.tokType = tkEol then begin
+  if lex.atEol then begin
     lex.Next;      //Pass to the start of the next line.
   end;
 end;

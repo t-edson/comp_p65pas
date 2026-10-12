@@ -805,7 +805,7 @@ begin
   //We use the general lexer to find the directive delimiter.
   while not lex.atEof do begin
 //    debugln(tok);
-    if lex.tokType = tkDirective then begin
+    if lex.curCtx.tokType = tkDirective then begin
       //Podría ser el delimitador buscado
       direc := UpCase(lex.token);
       if copy(direc,1,7) = '{$ENDIF' then begin

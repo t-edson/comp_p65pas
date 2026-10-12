@@ -75,7 +75,7 @@ private   //Expresiones
   function ParseExpression(AllowFormat: Boolean = False): TExpression;
 private   //Métodos auxiliares para las declaraciones
   procedure ParseParameters(var Params: TASTNodeList);
-  function ParseSubrangeType: TSubranTypeDef;
+  function ParseAliasOrSubrangeType: TTypeDef;
   function ParseEnumType: TEnumTypeDef;
   function ParseArrayTypeDef: TArrayTypeDef;
   function ParseRecordTypeDef: TRecordTypeDef;
@@ -855,15 +855,39 @@ begin
     end;
   end;
 end;
-function TParserPas.ParseSubrangeType: TSubranTypeDef;
+function TParserPas.ParseAliasOrSubrangeType: TTypeDef;
+{Analiza una declaración de tipo Subrango o de tipo alias}
 var
   LowExpr, HighExpr: TExpression;
+  IdentName: String;
+  SrcPos: TSrcPos;
 begin
-  LowExpr := ParseFactor;
-  if HayError then begin
-    Result := nil;
-    Exit;
+  case tokIdent of
+  tiLitNumbI: begin    //Subrango de números:  = 1..10
+    LowExpr := ParseNumberLiteral;
   end;
+  tiLitString: begin   //Subrango de caracteres:  = 'a'..'z'
+    LowExpr := ParseStringLiteral;
+  end;
+  tiIDENTIF: begin     //Alias o Subrango de enumerados: lunes .. viernes
+    IdentName := lex.token;
+    SrcPos := lex.GetSrcPos;
+    Next;
+    if tokIdent = tiSEMIC then begin
+      //Es un alias: TTipo = alias;
+      Result := TAliasTypeDef.Create(IdentName, SrcPos);
+      Exit;
+    end else if tokIdent = tiDOTDOT then begin
+      //Es un sunrango;
+      LowExpr := TVariableRef.Create(IdentName, SrcPos);
+    end else begin
+      //Debe ser un error
+      GenError('Se esperaba ";" o ".."', lex.GetSrcPos);
+      Exit;
+    end;
+  end;
+  end;
+  //Continuamos con el análisis del subrango.
   if tokIdent <> tiDOTDOT then begin
     GenError('Se esperaba ".." en el subrango');
     LowExpr.Free;
@@ -1149,16 +1173,14 @@ la estructura del tipo analizado.
 Si se produce algún error, devuelve NIL.}
 begin
   case tokIdent of
-    tiIDENTIF: begin         //integer, byte, TPersona, etc.
-      Result := TAliasTypeDef.Create(lex.token, lex.GetSrcPos);
-      lex.GetCtxState;
-      Next;
+    tiIDENTIF: begin         //Subrango de enumerados o alias: integer, byte, TPersona, etc.
+      Result := ParseAliasOrSubrangeType;
     end;
     tiLitNumbI: begin        //Subrango:  = 1..10
-      Result := ParseSubrangeType;
+      Result := ParseAliasOrSubrangeType;
     end;
     tiLitString: begin       //Subrango:  = 'a'..'z'
-      Result := ParseSubrangeType;
+      Result := ParseAliasOrSubrangeType;
     end;
     tiPAREN_OP: begin        //Enumerado: = (Rojo, Verde, Azul)
       Result := ParseEnumType;
