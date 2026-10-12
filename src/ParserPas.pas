@@ -469,7 +469,7 @@ begin
   end else begin
     //No sigue "(", entonces debe ser una variable simple, aunque podría ser la llamada
     //a un procedimiento/función. Asumiremos, por ahora, que es una variable.
-    BaseExpr := TVariableRef.Create(token, SrcPos);
+    BaseExpr := TIdentifierRef.Create(token, SrcPos);
   end;
   //Busca si hay modificadores del operando ".", "[" o "^".
   Result := ParseModifiers(BaseExpr);
@@ -629,7 +629,7 @@ begin
       Exit(ArrayLit);   //Devuelve el arreglo
     end else if (Result.NodeType = ntVariableRef) and  //Es una forma de detectar que la expresión es solo un identificador
                 (tokIdent = tiCOLON) then begin  // Sigue ":". Debe ser literal RECORD.
-      firstIdent := TVariableRef(Result).Name;  //Debe ser un identificador.
+      firstIdent := TIdentifierRef(Result).Name;  //Debe ser un identificador.
       Result.Destroy;  //Ya no nos sirve esta expresión.
       Exit(ParseRecordLiteral(firstIdent));  //Puede devolver NIL, si hay error.
     end;
@@ -875,7 +875,7 @@ begin
     Next;
     if tokIdent = tiDOTDOT then begin
       //Es un sunrango;
-      LowExpr := TVariableRef.Create(IdentName, SrcPos);
+      LowExpr := TIdentifierRef.Create(IdentName, SrcPos);
     end else begin
       //Debe ser un alias
       Result := TAliasTypeDef.Create(IdentName, SrcPos);
@@ -1518,7 +1518,7 @@ begin
       Operand1.Destroy;
       if Value<>nil then Value.Destroy;
     end else begin
-      //Target := TVariableRef.Create(token, SrcPos);
+      //Target := TIdentifierRef.Create(token, SrcPos);
       Block.AddStatement(TAssignment.Create(Operand1, Value, posAssig));
     end;
   end else if tokIdent in [tiSEMIC, tiELSE, tiEND] then begin
@@ -1576,7 +1576,7 @@ begin
 end;
 procedure TParserPas.ParseForLoop(var Block: TBlock);
 var
-  ControlVar: TVariableRef;
+  ControlVar: TIdentifierRef;
   Direction: TForDirection;
   StartExpr, EndExpr: TExpression;
   Body: TBlock;
@@ -1607,7 +1607,7 @@ begin
     Exit;
   end;
   if not ConsumeTok(tiDO, 'Se esperaba "do"') then Exit;
-  ControlVar := TVariableRef.Create(ControlVarName, SrcPos);
+  ControlVar := TIdentifierRef.Create(ControlVarName, SrcPos);
   Body := TBlock.Create(lex.GetSrcPos);
   ParseStatement(Body);
   if HayError then begin

@@ -69,7 +69,7 @@ type  //Declaraciones y clases base para el AST
   // Declaración forward de clases
   TASTNode = class;
   TVarDecl = class;
-  TVariableRef = class;
+  TIdentifierRef = class;
   TBlock = class;
   TExpression = class;
   TNumberLiteral = class;
@@ -272,14 +272,14 @@ type  //Nodos de expresiones
     destructor Destroy; override;
     function ToString: string; override;
   end;
-  // Referencia a variable
-  TVariableRef = class(TExpression)
+  // Referencia a un identificador que puede ser una variable, proc/función, constante o enumerado.
+  TIdentifierRef = class(TExpression)
   private
     FName: string;
-    FDeclaration: TVarDecl;
+    FDeclaration: TASTNode;
   public
     property Name: string read FName;
-    property Declaration: TVarDecl read FDeclaration write FDeclaration;
+    property Declaration: TASTNode read FDeclaration write FDeclaration;
   public  //Inicialización y depuración
     constructor Create(const AName: string; const ASrcPos: TSrcPos);
     function ToString: string; override;
@@ -337,11 +337,11 @@ type  //Nodos de expresiones
   // Acceso a campo: persona.edad
   TFieldAccess = class(TExpression)
   private
+    FRecordVar: TExpression;   //Variable o expresión registro (antes del punto)
     FFieldName: string;        //Nombre del campo (después del punto)
-    FRecordVar: TExpression;   //Variable registro (antes del punto)
   public
-    property FieldName: string read FFieldName;
     property RecordVar: TExpression read FRecordVar;
+    property FieldName: string read FFieldName;
   public  //Inicialización y depuración
     constructor Create(ARecordVar: TExpression; const AFieldName: string;
                        const ASrcPos: TSrcPos);
@@ -351,9 +351,9 @@ type  //Nodos de expresiones
   // Dereferencia de puntero: p^
   TPointerDeref = class(TExpression)
   private
-    FPointer: TExpression;  // La expresión que es un puntero
+    FPointerVar: TExpression;  //La variable o expresión puntero
   public
-    property Pointer: TExpression read FPointer;
+    property PointerVar: TExpression read FPointerVar;
     constructor Create(APointer: TExpression; const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
@@ -361,7 +361,7 @@ type  //Nodos de expresiones
   // Acceso a arreglo: variable[index]
   TArrayRef = class(TExpression)
   private
-    FArrayVar: TExpression;     //La variable arreglo o expresión
+    FArrayVar: TExpression;     //La variable o expresión arreglo
     FIndices: TExpressionList;  //Lista de índices (multidimensional)
   public
     procedure AddIndex(Index: TExpression);
@@ -440,19 +440,19 @@ type  //Nodos de sentencias
   // Sentencia FOR
   TForLoop = class(TASTNode)
   private
-    FControlVar: TVariableRef;
+    FControlVar: TIdentifierRef;
     FDirection: TForDirection;
     FStartExpr: TExpression;
     FEndExpr: TExpression;
     FBody: TBlock;
   public
-    property ControlVar: TVariableRef read FControlVar;
+    property ControlVar: TIdentifierRef read FControlVar;
     property Direction: TForDirection read FDirection;
     property StartExpr: TExpression read FStartExpr;
     property EndExpr: TExpression read FEndExpr;
     property Body: TBlock read FBody;
   public  //Inicialización y depuración
-    constructor Create(AControlVar: TVariableRef; ADirection: TForDirection;
+    constructor Create(AControlVar: TIdentifierRef; ADirection: TForDirection;
                        AStartExpr, AEndExpr: TExpression; ABody: TBlock;
                        const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -1079,18 +1079,18 @@ begin
 end;
 {$endregion}
 {$region "Nodos de expresiones"}
-// TVariableRef
-constructor TVariableRef.Create(const AName: string; const ASrcPos: TSrcPos);
+// TIdentifierRef
+constructor TIdentifierRef.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntVariableRef, ASrcPos);
   FName := AName;
   FDeclaration := nil;
 end;
-function TVariableRef.ToString: string;
+function TIdentifierRef.ToString: string;
 begin
-  Result := Format('TVariableRef: %s', [FName]);
+  Result := Format('TIdentifierRef: %s', [FName]);
   if FDeclaration <> nil then
-    Result += LineEnding + 'TypeDef:' + LineEnding + FDeclaration.TypeDef.ToString;
+    Result += LineEnding + 'TypeDef:' + LineEnding + FDeclaration.ToString;
 end;
 // TNumberLiteral
 function TNumberLiteral.IsInteger: Boolean;
@@ -1370,16 +1370,16 @@ end;
 constructor TPointerDeref.Create(APointer: TExpression; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntPointerDeref, ASrcPos);
-  FPointer := APointer;
+  FPointerVar := APointer;
 end;
 destructor TPointerDeref.Destroy;
 begin
-  FPointer.Free;
+  FPointerVar.Free;
   inherited;
 end;
 function TPointerDeref.ToString: string;
 begin
-  Result := Format('PointerDeref: %s^', [FPointer.ToString]);
+  Result := Format('PointerDeref: %s^', [FPointerVar.ToString]);
 end;
 // TArrayRef
 procedure TArrayRef.AddIndex(Index: TExpression);
@@ -1428,7 +1428,7 @@ var
 begin
   case FTarget.NodeType of
     ntVariableRef:
-      TargetStr := TVariableRef(FTarget).Name;
+      TargetStr := TIdentifierRef(FTarget).Name;
     ntArrayRef:
       TargetStr := TArrayRef(FTarget).ArrayVar.ToString + '[...]';
     ntFieldAccess:
@@ -1496,7 +1496,7 @@ begin
   Result := 'RepeatUntil';
 end;
 // TForLoop
-constructor TForLoop.Create(AControlVar: TVariableRef; ADirection: TForDirection;
+constructor TForLoop.Create(AControlVar: TIdentifierRef; ADirection: TForDirection;
                            AStartExpr, AEndExpr: TExpression; ABody: TBlock;
                            const ASrcPos: TSrcPos);
 begin

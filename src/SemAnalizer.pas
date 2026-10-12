@@ -149,7 +149,7 @@ type
     procedure VisitRecordLiteral(RecordLit: TRecordLiteral);
     procedure VisitPointerLiteral(PointerLit: TPointerLiteral);
     procedure VisitSetLiteral(SetLit: TSetLiteral);
-    procedure VisitVariableRef(VarRef: TVariableRef);
+    procedure VisitVariableRef(VarRef: TIdentifierRef);
     procedure VisitBinaryOp(BinOp: TBinaryOp);
     procedure VisitUnaryOp(UnaryOp: TUnaryOp);
     procedure VisitFunctionCall(ProcFuncCall: TProcFunctCall);
@@ -1097,8 +1097,8 @@ begin
       Exit;
     end;
     if expr2.NodeType = ntVariableRef then begin
-      enumVal1 := TVariableRef(expr1).Name;
-      enumVal2 := TVariableRef(expr2).Name;
+      enumVal1 := TIdentifierRef(expr1).Name;
+      enumVal2 := TIdentifierRef(expr2).Name;
       EnumTypeDef := TEnumTypeDef(expr1.ExpTypeDef);
 //      if not EnumTypeDef.Values.Find(enumVal1, val1) then begin  //**** Debería evitarse buscar aquí el ordinal
 //        //No debería pasar si se ha identificado que "expr1" es enumerado.
@@ -1211,7 +1211,7 @@ begin
   //Asigna el tipo SET genérico para el literal. BaseType se resolverá en el contexto.
   SetLit.ExpTypeDef := ResolveType('SET');  //Tipo predefinido genérico
 end;
-procedure TSemanticAnalyzer.VisitVariableRef(VarRef: TVariableRef);
+procedure TSemanticAnalyzer.VisitVariableRef(VarRef: TIdentifierRef);
 var
   Sym: TSymbol;
 begin
@@ -1430,8 +1430,8 @@ var
   PtrType: TTypeDef;
   PointerTypeDef: TPointerTypeDef;
 begin
-  VisitNode(PointerDeref.Pointer);
-  PtrType := PointerDeref.Pointer.ExpTypeDef;
+  VisitNode(PointerDeref.PointerVar);
+  PtrType := PointerDeref.PointerVar.ExpTypeDef;
   if PtrType <> nil then begin
     PtrType := PtrType.GetFinalDef;   //Por si es un alias a puntero
     if not (PtrType.NodeType = ntPointerTypeDef) then begin
@@ -1710,7 +1710,7 @@ begin
     ntRecordLiteral : VisitRecordLiteral(TRecordLiteral(Node));
     ntPointerLiteral: VisitPointerLiteral(TPointerLiteral(Node));
     ntSetLiteral    : VisitSetLiteral(TSetLiteral(Node))  ;
-    ntVariableRef   : VisitVariableRef(TVariableRef(Node));
+    ntVariableRef   : VisitVariableRef(TIdentifierRef(Node));
     ntBinaryOp      : VisitBinaryOp(TBinaryOp(Node));
     ntUnaryOp       : VisitUnaryOp(TUnaryOp(Node));
     ntProcFunctCall : VisitFunctionCall(TProcFunctCall(Node));
