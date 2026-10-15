@@ -6,7 +6,7 @@ uses
 type  //Tipos de nodos
   TASTNodeType = (
     //Nodos de expresiones
-    ntVariableRef,   //Referencia a variable: x, valor, ...
+    ntIdentifierRef,   //Referencia a variable: x, valor, ...
     ntNumberLiteral, //Literal numérico: 123, 456.
     ntBooleanLiteral,//Literal booleano: true, false.
     ntStringLiteral, //Literal de cadena: 'Hola'.
@@ -276,7 +276,7 @@ type  //Nodos de expresiones
   TIdentifierRef = class(TExpression)
   private
     FName: string;
-    FDeclaration: TASTNode;
+    FDeclaration: TASTNode;  //Declaración de la variable, proc/función, constante o enumerado.
   public
     property Name: string read FName;
     property Declaration: TASTNode read FDeclaration write FDeclaration;
@@ -315,22 +315,25 @@ type  //Nodos de expresiones
     destructor Destroy; override;
   end;
   // Llamada a función
+
+  { TProcFunctCall }
+
   TProcFunctCall = class(TExpression)
   private
-    FName: string;
-    FArguments: TExpressionList;
-    FDeclaration: TProcFunctDecl;    //Enlace a la declaración
-    FIsProcedure: Boolean;      //"True" si es llamada a procedimiento
-    FIsIntrinsic: Boolean;      //Indica si es una llamada a proc/función.
+    FProcFunRef: TExpression;     //Referencia al identificador (puede ser una expresión) de la función.
+    FArguments: TExpressionList;  //Lista de argumentos.
+    FDeclaration: TProcFunctDecl; //Enlace a la declaración.
+    FIsProcedure: Boolean;        //"True" si es llamada a procedimiento.
+    FIsIntrinsic: Boolean;        //Indica si es una llamada a proc/función.
   public
     procedure AddArgument(Arg: TExpression);
-    property Name: string read FName;
+    property ProcFunRef: TExpression read FProcFunRef;
     property Arguments: TExpressionList read FArguments;
     property Declaration: TProcFunctDecl read FDeclaration write FDeclaration;
     property IsProcedure: Boolean read FIsProcedure write FIsProcedure;
     property IsIntrinsic: Boolean read FIsIntrinsic write FIsIntrinsic;
   public  //Inicialización y depuración
-    constructor Create(const AName: string; const ASrcPos: TSrcPos);
+    constructor Create(const AProcFunRef: TExpression; const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
   end;
@@ -354,7 +357,7 @@ type  //Nodos de expresiones
     FPointerVar: TExpression;  //La variable o expresión puntero
   public
     property PointerVar: TExpression read FPointerVar;
-    constructor Create(APointer: TExpression; const ASrcPos: TSrcPos);
+    constructor Create(APointerVar: TExpression; const ASrcPos: TSrcPos);
     destructor Destroy; override;
     function ToString: string; override;
   end;
@@ -1082,7 +1085,7 @@ end;
 // TIdentifierRef
 constructor TIdentifierRef.Create(const AName: string; const ASrcPos: TSrcPos);
 begin
-  inherited Create(ntVariableRef, ASrcPos);
+  inherited Create(ntIdentifierRef, ASrcPos);
   FName := AName;
   FDeclaration := nil;
 end;
@@ -1327,17 +1330,19 @@ begin
   Result := Format('UnaryOp: %s', [FOp]);
 end;
 // TProcFunctCall
-constructor TProcFunctCall.Create(const AName: string; const ASrcPos: TSrcPos);
+constructor TProcFunctCall.Create(const AProcFunRef: TExpression;
+  const ASrcPos: TSrcPos);
 begin
   inherited Create(ntProcFunctCall, ASrcPos);
-  FName := AName;
+  FProcFunRef := AProcFunRef;
   FArguments := TExpressionList.Create(True);
   FDeclaration := nil;
   FIsProcedure := False;
 end;
 destructor TProcFunctCall.Destroy;
 begin
-  FArguments.Free;
+  FArguments.Destroy;
+  FProcFunRef.Free;
   inherited;
 end;
 procedure TProcFunctCall.AddArgument(Arg: TExpression);
@@ -1347,7 +1352,7 @@ begin
 end;
 function TProcFunctCall.ToString: string;
 begin
-  Result := Format('FunctionCall: %s (%d args)', [FName, FArguments.Count]);
+  Result := Format('FunctionCall: %s (%d args)', [FProcFunRef.toString, FArguments.Count]);
 end;
 // TFieldAccess
 constructor TFieldAccess.Create(ARecordVar: TExpression; const AFieldName: string;
@@ -1367,10 +1372,10 @@ begin
   Result := Format('FieldAccess: %s.%s', [FRecordVar.ToString, FFieldName]);
 end;
 // TPointerDeref
-constructor TPointerDeref.Create(APointer: TExpression; const ASrcPos: TSrcPos);
+constructor TPointerDeref.Create(APointerVar: TExpression; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntPointerDeref, ASrcPos);
-  FPointerVar := APointer;
+  FPointerVar := APointerVar;
 end;
 destructor TPointerDeref.Destroy;
 begin
@@ -1427,7 +1432,7 @@ var
   TargetStr: string;
 begin
   case FTarget.NodeType of
-    ntVariableRef:
+    ntIdentifierRef:
       TargetStr := TIdentifierRef(FTarget).Name;
     ntArrayRef:
       TargetStr := TArrayRef(FTarget).ArrayVar.ToString + '[...]';

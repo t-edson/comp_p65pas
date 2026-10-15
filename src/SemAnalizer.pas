@@ -149,10 +149,10 @@ type
     procedure VisitRecordLiteral(RecordLit: TRecordLiteral);
     procedure VisitPointerLiteral(PointerLit: TPointerLiteral);
     procedure VisitSetLiteral(SetLit: TSetLiteral);
-    procedure VisitVariableRef(VarRef: TIdentifierRef);
+    procedure VisitIdentifierRef(IdentRef: TIdentifierRef);
     procedure VisitBinaryOp(BinOp: TBinaryOp);
     procedure VisitUnaryOp(UnaryOp: TUnaryOp);
-    procedure VisitFunctionCall(ProcFuncCall: TProcFunctCall);
+    procedure VisitProcFunctCall(ProcFuncCall: TProcFunctCall);
     procedure VisitFieldAccess(FieldAccess: TFieldAccess);
     procedure VisitPointerDeref(PointerDeref: TPointerDeref);
     procedure VisitArrayRef(ArrayRef: TArrayRef);
@@ -543,7 +543,7 @@ begin
       Result := Expr.ExpTypeDef;  //La expresión ya debe haber sido visitada
     ntStringLiteral:
       Result := Expr.ExpTypeDef;  //La expresión ya debe haber sido visitada
-    ntVariableRef: begin
+    ntIdentifierRef: begin
       Result := Expr.ExpTypeDef;  //La expresión ya debe haber sido visitada
     end;
     ntBinaryOp: begin
@@ -1060,8 +1060,12 @@ begin
       val1 := TNumberLiteral(expr1).IntValue;
       val2 := TNumberLiteral(expr2).IntValue;
       SubrangeType.NValues := val2 - val1 + 1;
+    end else if expr2.NodeType = ntIdentifierRef then begin
+      //Debe ser una constante con nombre
+      //if
     end else begin
       Error('El límite superior debe ser numérico.', expr2.SrcPos);
+      Exit;
     end;
   end else if expr1.NodeType = ntStringLiteral then begin
     //Los límites deben ser caracteres ('a'..'z'), el tipo base es CHAR.
@@ -1081,11 +1085,15 @@ begin
       SubrangeType.NValues := val2 - val1 + 1;
     end else begin
       Error('El límite superior debe ser un caracter.', expr2.SrcPos);
+      Exit;
     end;
-  end else if expr1.NodeType = ntVariableRef then begin
-    //Los límites debe ser enumerados (rojo..verde).
+  end else if expr1.NodeType = ntIdentifierRef then begin
+    //Los límites debe ser enumerados (rojo..verde) o constantes numéricas.
     //Se usa el mismo tipo de los límites para el tipo base
     SubrangeType.BaseType := expr1.ExpTypeDef;
+    //Valida si se identificaron a los límites
+    if expr1.ExpTypeDef = Nil then Exit;   //Ya se debe haber generado el mensaje de error.
+    if expr2.ExpTypeDef = Nil then Exit;   //Ya se debe haber generado el mensaje de error.
     //Valida que el límite inferiro sea enumerado.
     if expr1.ExpTypeDef.NodeType <> ntEnumTypeDef then begin
       Error('Se esperaba un valor enumerado.', expr1.SrcPos);
@@ -1096,7 +1104,7 @@ begin
       Error('Tipos enumerados incompatibles', expr2.SrcPos);
       Exit;
     end;
-    if expr2.NodeType = ntVariableRef then begin
+    if expr2.NodeType = ntIdentifierRef then begin
       enumVal1 := TIdentifierRef(expr1).Name;
       enumVal2 := TIdentifierRef(expr2).Name;
       EnumTypeDef := TEnumTypeDef(expr1.ExpTypeDef);
@@ -1110,6 +1118,7 @@ begin
 //      end;
     end else begin
       Error('El límite superior debe ser un enumerado.', expr2.SrcPos);
+      Exit;
     end;
   end;
   //Valida el orden
@@ -1211,25 +1220,48 @@ begin
   //Asigna el tipo SET genérico para el literal. BaseType se resolverá en el contexto.
   SetLit.ExpTypeDef := ResolveType('SET');  //Tipo predefinido genérico
 end;
-procedure TSemanticAnalyzer.VisitVariableRef(VarRef: TIdentifierRef);
+procedure TSemanticAnalyzer.VisitIdentifierRef(IdentRef: TIdentifierRef);
 var
   Sym: TSymbol;
 begin
-  //Busca el nombre de la variable.
-  Sym := FCurrentScope.LookupRecursive(VarRef.Name);
+  //Busca el nombre del identificador.
+  Sym := FCurrentScope.LookupRecursive(IdentRef.Name);
   if Sym = nil then begin
-    Error('Variable no declarada: ' + VarRef.Name, VarRef.SrcPos);
+    Error('Identificador no declarado: ' + IdentRef.Name, IdentRef.SrcPos);
     Exit;
   end;
   //Enlaza a la declaración.
-  VarRef.Declaration := TVarDecl(Sym.Declaration);
+  IdentRef.Declaration := Sym.Declaration;
+
   //Actualiza el tipo de la expresión
   if Sym.FKind = skFunction then begin
     //Era una función
-    VarRef.ExpTypeDef := Sym.ReturnType;
+    IdentRef.ExpTypeDef := Sym.ReturnType;
   end else begin
     //Debería ser una variable
-    VarRef.ExpTypeDef := Sym.DataType;
+    IdentRef.ExpTypeDef := Sym.DataType;
+  end;
+
+  //Actualiza el tipo de la expresión según el tipo de símbolo
+  case Sym.Kind of
+    skVariable, skParameter, skField:
+      IdentRef.ExpTypeDef := Sym.DataType;
+    skConstant:
+      IdentRef.ExpTypeDef := Sym.DataType;
+    skEnumValue:
+      IdentRef.ExpTypeDef := Sym.DataType;
+    skFunction:
+      begin
+        //Función sin paréntesis.
+        IdentRef.ExpTypeDef := Sym.ReturnType;
+      end;
+    skProcedure:
+      begin
+        // Procedimiento sin paréntesis: verificaciones adicionales
+        IdentRef.ExpTypeDef := nil;  // Los procedimientos no devuelven valor
+      end;
+    skType:
+      Error('Un tipo no puede usarse como expresión', IdentRef.SrcPos);
   end;
 end;
 procedure TSemanticAnalyzer.VisitBinaryOp(BinOp: TBinaryOp);
@@ -1299,7 +1331,7 @@ begin
     end;
   end;
 end;
-procedure TSemanticAnalyzer.VisitFunctionCall(ProcFuncCall: TProcFunctCall);
+procedure TSemanticAnalyzer.VisitProcFunctCall(ProcFuncCall: TProcFunctCall);
 {Visita la llamada a un procedimiento o función, que se ha identificado como tal en el
 análisis sintáctico.}
 var
@@ -1308,79 +1340,94 @@ var
   ArgType: TTypeDef;
   Param: TVarDecl;
   Parent: TASTNode;
+  FuncRef: TIdentifierRef;
 begin
-  //Buscar el procedimiento/función.
-  Sym := FCurrentScope.LookupRecursive(ProcFuncCall.Name);
-  if Sym = nil then begin
-    Error('Identificador no declarado: ' + ProcFuncCall.Name, ProcFuncCall.SrcPos);
-    Exit;
-  end;
-  if (Sym.Kind <> skFunction) and (Sym.Kind <> skProcedure) then begin
-    Error(ProcFuncCall.Name + ' no es una función o procedimiento', ProcFuncCall.SrcPos);
-    Exit;
-  end;
-  //Enlaza referencia a la declaración, si existe
-  if not Sym.IsIntrinsic then begin
-    //Debe haber declaración
-    if Sym.Declaration.NodeType = ntProcFunctDecl then begin
-      //Su declaración figura como procedimiento o función
-      ProcFuncCall.Declaration := TProcFunctDecl(Sym.Declaration); //Enlaza a declaración
-    end else begin  //Figura como otra cosa
-      Error('Declaración inválida para: ' + ProcFuncCall.Name, ProcFuncCall.SrcPos);
+  //Visitar primero la expresión base.
+  VisitNode(ProcFuncCall.ProcFunRef);
+  if ProcFuncCall.ProcFunRef.NodeType = ntIdentifierRef then begin
+    FuncRef := TIdentifierRef(ProcFuncCall.ProcFunRef);
+    //Buscar el procedimiento/función.
+    Sym := FCurrentScope.LookupRecursive(FuncRef.Name);
+    if Sym = nil then begin
+      Error('Identificador no declarado: ' + FuncRef.Name, ProcFuncCall.SrcPos);
       Exit;
     end;
-  end;
-  //Completa atributos
-  ProcFuncCall.IsProcedure := (Sym.Kind = skProcedure);   //Aquí se puede saber si es proc. o función.
-  ProcFuncCall.IsIntrinsic := Sym.IsIntrinsic;            //Y si es del sistema.
-  //Verifica argumentos
-  if Sym.IsIntrinsic then begin
-    //Verificación flexible: aceptan cualquier número de argumentos
-    //y cualquier tipo (dentro de lo razonable)
-    for i := 0 to ProcFuncCall.Arguments.Count - 1 do begin
-      VisitNode(ProcFuncCall.Arguments[i]);
-      // No verificamos tipos estrictos
+    if (Sym.Kind <> skFunction) and (Sym.Kind <> skProcedure) then begin
+      Error(FuncRef.Name + ' no es una función o procedimiento', ProcFuncCall.SrcPos);
+      Exit;
     end;
-  end else begin
-    //Proc./Funciones normales
-    if Sym.Parameters <> nil then begin
-      if ProcFuncCall.Arguments.Count <> Sym.Parameters.Count then
-        Error('Número incorrecto de argumentos para ' + ProcFuncCall.Name + ' (esperaba ' +
-              IntToStr(Sym.Parameters.Count) + ', tiene ' +
-              IntToStr(ProcFuncCall.Arguments.Count) + ')', ProcFuncCall.SrcPos);
-
-      //Verifica tipos de argumentos
-      for i := 0 to Min(ProcFuncCall.Arguments.Count, Sym.Parameters.Count) - 1 do begin
+    //Enlaza referencia a la declaración, si existe
+    if not Sym.IsIntrinsic then begin
+      //Debe haber declaración
+      if Sym.Declaration.NodeType = ntProcFunctDecl then begin
+        //Su declaración figura como procedimiento o función
+        ProcFuncCall.Declaration := TProcFunctDecl(Sym.Declaration); //Enlaza a declaración
+      end else begin  //Figura como otra cosa
+        Error('Declaración inválida para: ' + FuncRef.Name, ProcFuncCall.SrcPos);
+        Exit;
+      end;
+    end;
+    //Completa atributos
+    ProcFuncCall.IsProcedure := (Sym.Kind = skProcedure);   //Aquí se puede saber si es proc. o función.
+    ProcFuncCall.IsIntrinsic := Sym.IsIntrinsic;            //Y si es del sistema.
+    //Verifica argumentos
+    if Sym.IsIntrinsic then begin
+      //Verificación flexible: aceptan cualquier número de argumentos
+      //y cualquier tipo (dentro de lo razonable)
+      for i := 0 to ProcFuncCall.Arguments.Count - 1 do begin
         VisitNode(ProcFuncCall.Arguments[i]);
-        ArgType := GetTypeOf(ProcFuncCall.Arguments[i]);
-        Param := TVarDecl(Sym.Parameters[i]);
-        ResolveTypeDef(Param.TypeDef);   //*** ¿Es necesario? ¿No sería VisitNode()?
-        if not AreTypesCompatible(Param.TypeDef, ArgType) then begin
-          Error('Tipo de argumento incompatible para parámetro ' + IntToStr(i+1) + ' de ' +
-                ProcFuncCall.Name, ProcFuncCall.Arguments[i].SrcPos);
-        end;
+        // No verificamos tipos estrictos
       end;
     end else begin
-      //Sin parámetros declarados, verifica que no haya argumentos
-      if ProcFuncCall.Arguments.Count > 0 then
-        Error(ProcFuncCall.Name + ' no acepta argumentos', ProcFuncCall.SrcPos);
+      //Proc./Funciones normales
+      if Sym.Parameters <> nil then begin
+        if ProcFuncCall.Arguments.Count <> Sym.Parameters.Count then
+          Error('Número incorrecto de argumentos para ' + FuncRef.Name + ' (esperaba ' +
+                IntToStr(Sym.Parameters.Count) + ', tiene ' +
+                IntToStr(ProcFuncCall.Arguments.Count) + ')', ProcFuncCall.SrcPos);
+
+        //Verifica tipos de argumentos
+        for i := 0 to Min(ProcFuncCall.Arguments.Count, Sym.Parameters.Count) - 1 do begin
+          VisitNode(ProcFuncCall.Arguments[i]);
+          ArgType := GetTypeOf(ProcFuncCall.Arguments[i]);
+          Param := TVarDecl(Sym.Parameters[i]);
+          ResolveTypeDef(Param.TypeDef);   //*** ¿Es necesario? ¿No sería VisitNode()?
+          if not AreTypesCompatible(Param.TypeDef, ArgType) then begin
+            Error('Tipo de argumento incompatible para parámetro ' + IntToStr(i+1) + ' de ' +
+                  FuncRef.Name, ProcFuncCall.Arguments[i].SrcPos);
+          end;
+        end;
+      end else begin
+        //Sin parámetros declarados, verifica que no haya argumentos
+        if ProcFuncCall.Arguments.Count > 0 then
+          Error(FuncRef.Name + ' no acepta argumentos', ProcFuncCall.SrcPos);
+      end;
     end;
-  end;
-  //Si es procedimiento, verificar que se use como sentencia
-  if ProcFuncCall.IsProcedure then begin
-    //Verificar contexto: ¿está en una sentencia o en una expresión?
-    Parent := ProcFuncCall.Parent;
-    if Parent = Nil then
-      //No se identifica al padre
-    else if Parent.NodeType = ntBlock then
-      // OK: está en una sentencia
-    else begin
-      Error('El procedimiento ' + ProcFuncCall.Name + ' no puede usarse como expresión',
-            ProcFuncCall.SrcPos);
+    //Si es procedimiento, verificar que se use como sentencia
+    if ProcFuncCall.IsProcedure then begin
+      //Verificar contexto: ¿está en una sentencia o en una expresión?
+      Parent := ProcFuncCall.Parent;
+      if Parent = Nil then
+        //No se identifica al padre
+      else if Parent.NodeType = ntBlock then
+        // OK: está en una sentencia
+      else begin
+        Error('El procedimiento ' + FuncRef.Name + ' no puede usarse como expresión',
+              ProcFuncCall.SrcPos);
+      end;
+    end else begin
+      //Es función. Debe devolver un tipo.
+      ProcFuncCall.ExpTypeDef := Sym.ReturnType;
     end;
   end else begin
-    //Es función. Debe devolver un tipo.
-    ProcFuncCall.ExpTypeDef := Sym.ReturnType;
+    //Es una expresión compleja: obj.metodo(arg), arr[i](arg), etc.
+    //Verificar que el tipo de ProcFunRef sea procedural
+    if (ProcFuncCall.ProcFunRef.ExpTypeDef = nil) or
+       (ProcFuncCall.ProcFunRef.ExpTypeDef.GetFinalDef.NodeType <> ntProcedTypeDef) then begin
+         Error('La expresión no es de tipo procedural', ProcFuncCall.SrcPos);
+    end;
+    //Quedan pendientes las validaciones adicionales.
+    //...
   end;
 end;
 procedure TSemanticAnalyzer.VisitFieldAccess(FieldAccess: TFieldAccess);
@@ -1710,10 +1757,10 @@ begin
     ntRecordLiteral : VisitRecordLiteral(TRecordLiteral(Node));
     ntPointerLiteral: VisitPointerLiteral(TPointerLiteral(Node));
     ntSetLiteral    : VisitSetLiteral(TSetLiteral(Node))  ;
-    ntVariableRef   : VisitVariableRef(TIdentifierRef(Node));
+    ntIdentifierRef : VisitIdentifierRef(TIdentifierRef(Node));
     ntBinaryOp      : VisitBinaryOp(TBinaryOp(Node));
     ntUnaryOp       : VisitUnaryOp(TUnaryOp(Node));
-    ntProcFunctCall : VisitFunctionCall(TProcFunctCall(Node));
+    ntProcFunctCall : VisitProcFunctCall(TProcFunctCall(Node));
     ntFieldAccess   : VisitFieldAccess(TFieldAccess(Node));
     ntPointerDeref  : VisitPointerDeref(TPointerDeref(Node));
     ntArrayRef      : VisitArrayRef(TArrayRef(Node));

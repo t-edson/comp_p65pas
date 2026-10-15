@@ -386,8 +386,35 @@ Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve
     FieldAccess: TFieldAccess;
     ArrayAccess: TArrayRef;
     PointerDeref: TPointerDeref;
+    ProcFunCall: TProcFunctCall;
   begin
-    if tokIdent = tiDOT then begin               //"." -> Campo
+    if tokIdent = tiPAREN_OP then begin  // "("
+      //Sigue "(", debe ser una llamada a función o procedimiento.
+      ProcFunCall := TProcFunctCall.Create(BaseExpr, lex.GetSrcPos);
+      // Parsear argumentos
+      Next;  //Pasamos el "("
+      if tokIdent = tiPAREN_CL then begin  // ")", No hay parámetros
+        Next;
+      end else begin  //Hay al menos un parámetro
+        while true do begin
+          //Debe seguir una expresión
+          ProcFunCall.AddArgument(ParseExpression(True));  //Permitimos formato
+          if HayError then break;
+          //Debe seguir "," o ")"
+          if tokIdent = tiCOMMA then Next else Break;
+        end;
+        if HayError then begin
+          ProcFunCall.Destroy;  //Elimina el objeto no usado
+          Exit(nil);
+        end;
+        if not ConsumeTok(tiPAREN_CL, 'Se esperaba ")"') then begin
+          ProcFunCall.Destroy;  //Elimina el objeto no usado
+          Exit(nil);
+        end;
+      end;
+      //Busca más modificadores del operando
+      Result := ParseModifiers(ProcFunCall);
+    end else if tokIdent = tiDOT then begin               //"." -> Campo
       Next;  // Consumir '.'
       if not ConsumeIdent(FieldName, 'Se esperaba un nombre de campo') then begin
         BaseExpr.Destroy;
@@ -433,45 +460,15 @@ Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve
     end;
   end;
 var
-  SrcPos: TSrcPos;
-  token: String;
-  functCall: TProcFunctCall;
   BaseExpr: TExpression;
 begin
-  token := lex.token;       //Guarda nombre del identificador.
-  SrcPos := lex.GetSrcPos;  //Guarda posición del identificador.
-  Next;  //Pasamos al siguiente token para validar otros casos
-  if tokIdent = tiPAREN_OP then begin  // "("
-    //Sigue "(", debe ser una llamada a función o procedimiento.
-    functCall := TProcFunctCall.Create(token, SrcPos);
-    // Parsear argumentos
-    Next;  //Pasamos el "("
-    if tokIdent = tiPAREN_CL then begin  // ")", No hay parámetros
-      Next;
-    end else begin  //Hay al menos un parámetro
-      while true do begin
-        //Debe seguir una expresión
-        functCall.AddArgument(ParseExpression(True));  //Permitimos formato
-        if HayError then break;
-        //Debe seguir "," o ")"
-        if tokIdent = tiCOMMA then Next else Break;
-      end;
-      if HayError then begin
-        functCall.Destroy;  //Elimina el objeto no usado
-        Exit(nil);
-      end;
-      if not ConsumeTok(tiPAREN_CL, 'Se esperaba ")"') then begin
-        functCall.Destroy;  //Elimina el objeto no usado
-        Exit(nil);
-      end;
-    end;
-    BaseExpr := functCall;
-  end else begin
-    //No sigue "(", entonces debe ser una variable simple, aunque podría ser la llamada
-    //a un procedimiento/función. Asumiremos, por ahora, que es una variable.
-    BaseExpr := TIdentifierRef.Create(token, SrcPos);
-  end;
-  //Busca si hay modificadores del operando ".", "[" o "^".
+  {Creamos el nodo del indentificador base sin mayor información. Seguidamente, pueden
+  haber modificadores que precisen el tipo de identificador, pero la identificación final
+  se hará en el análisis semántico.}
+  BaseExpr := TIdentifierRef.Create(lex.token, lex.GetSrcPos);
+  //Pasamos al siguiente token para validar modficadores
+  Next;
+  //Busca si hay modificadores del operando: "()", ".", "[" o "^".
   Result := ParseModifiers(BaseExpr);
 end;
 function TParserPas.ParseStringLiteral: TStringLiteral;
@@ -627,7 +624,7 @@ begin
       end;
       Next;  // Consumir ')'
       Exit(ArrayLit);   //Devuelve el arreglo
-    end else if (Result.NodeType = ntVariableRef) and  //Es una forma de detectar que la expresión es solo un identificador
+    end else if (Result.NodeType = ntIdentifierRef) and  //Es una forma de detectar que la expresión es solo un identificador
                 (tokIdent = tiCOLON) then begin  // Sigue ":". Debe ser literal RECORD.
       firstIdent := TIdentifierRef(Result).Name;  //Debe ser un identificador.
       Result.Destroy;  //Ya no nos sirve esta expresión.

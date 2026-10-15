@@ -1,8 +1,11 @@
 program muestra; 
+const
+  MAX_ELEMENTOS = 100;
 type
   //TConjunto = set of byte;
-  TColores = (rojo, azul, amarillo, verde, morado);
-  TSubrango = azul..verde;
+  //TColores = (rojo, azul, amarillo, verde, morado);
+  //TSubrango = azul..verde;
+  TIndice = 1..MAX_ELEMENTOS;
 var 
   a: byte;
 //  con : TConjunto;
