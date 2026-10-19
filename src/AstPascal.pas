@@ -315,9 +315,6 @@ type  //Nodos de expresiones
     destructor Destroy; override;
   end;
   // Llamada a función
-
-  { TProcFunctCall }
-
   TProcFunctCall = class(TExpression)
   private
     FProcFunRef: TExpression;     //Referencia al identificador (puede ser una expresión) de la función.
@@ -690,7 +687,6 @@ type  //Nodos de declaraciones
     function ToString: string; override;
   end;
 type  //Definiciones previas para declaraciones de tipos
-
   //Clase base para todas las definiciones de tipo (alias o INLINE).
   {Una definición de tipo se encuentra en:
     - Las declaraciones de tipo:  "= array[1..12] of char"
@@ -715,14 +711,25 @@ type  //Definiciones previas para declaraciones de tipos
       este campo (cuando hay un nombre). Así se simplifica la implementación. En cualquier
       caso, se puede acceder al nombre del tipo, a traves del nodo padre.}
       FTypeName: string;
-    public
+      {Indica si el tipo es numérico (byte, word, integer, float) o subrango de intervalo
+      numérico( 1.. 10).
+      Se resuelve en el análisis semántico}
+      FIsNumeric: Boolean;
+      {Indica si el tipo es ordinal (byte, word, integer, char, boolean, subrango o
+      enumerado.
+      Se resuelve en el análisis semántico}
+      FIsOrdinal: Boolean;
+  public
       property TypeName: string read FTypeName write FTypeName;
+      property IsNumeric: Boolean read FIsNumeric write FIsNumeric;
+      property IsOrdinal: Boolean read FIsOrdinal write FIsOrdinal;
       function IsNamed: Boolean; inline;
       function IsInline: Boolean; inline;
       function GetFinalDef: TTypeDef; inline;
     public  //Inicialización y depuración
       constructor Create(ANodeType: TASTNodeType; const ATypeName: string;
           const ASrcPos: TSrcPos);
+      constructor Create(ANodeType: TASTNodeType; const ATypeName: string);
       function ToString: string; override;
     end;
 
@@ -770,11 +777,11 @@ type  //Definiciones previas para declaraciones de tipos
   TVariantBranchList = specialize TFPGObjectList<TVariantBranch>;
 type  //Nodos de definiciones de tipos
   //Definición de tipos pedefinidos (integer, byte, boolean, etc.)
+  {Este nodo representa a la definición de los tipos básicos, que se hace por código
+  desde el mismo compilador. No se pueden crear desde un programa fuente en Pascal.}
   TSimpleTypeDef = class(TTypeDef)
-    {Este nodo representa a una supuesta definición de los tipos básicos, que se supone ya
-    están definidos. No se pueden crear desde Pascal.}
   public  //Inicialización y depuración
-    constructor Create(const ATypeName: string; const ASrcPos: TSrcPos);
+    constructor Create(const ATypeName: string; AIsNumeric, AIsOrdinal: Boolean);
     function ToString: string; override;
   end;
   //Alias (type TEdad = integer)
@@ -783,10 +790,10 @@ type  //Nodos de definiciones de tipos
     {Referencia al tipo base.
     Este es el nombre del tipo referenciado directamente: <tipo_alias> = <tipo_base>.
     Solo es necesario una cadena, porque esta definición es de tipo alias}
-    FBaseType: String;   //Nombre del tipo base (ej: 'integer', 'TPersona').
+    FTargetType: String;   //Nombre del tipo base (ej: 'integer', 'TPersona').
     {Referencia a la declaración del tipo.
     Se asigna en el análisis semántico.
-    Tosos los tipos indicados en FBaseType (mitipo, TCadena, ..), salvo los del sistema
+    Todos los tipos indicados en FBaseType (mitipo, TCadena, ..), salvo los del sistema
     (byte, integer, string, ...) deben tener una declaración.
     Debe ser solo una referencia. No se es propietario de este nodo.}
     FDeclaration: TTypeDecl;
@@ -798,7 +805,7 @@ type  //Nodos de definiciones de tipos
     Debe ser solo una referencia. No se es propietario de este nodo.}
     FFinalDef: TTypeDef;
   public
-    property BaseType: String read FBaseType write FBaseType;
+    property TargetType: String read FTargetType write FTargetType;
     property Declaration: TTypeDecl read FDeclaration write FDeclaration;
     property FinalDef: TTypeDef read FFinalDef write FFinalDef;
   public  //Inicialización y depuración
@@ -807,9 +814,6 @@ type  //Nodos de definiciones de tipos
     function ToString: string; override;
   end;
   //Subrango (1..10, 'a'..'z')
-
-  { TSubranTypeDef }
-
   TSubranTypeDef = class(TTypeDef)
   private
     FLowExpr: TExpression;   //Límite inferior del rango
@@ -1808,8 +1812,15 @@ begin
 end;
 constructor TTypeDef.Create(ANodeType: TASTNodeType; const ATypeName: string;
                             const ASrcPos: TSrcPos);
+{Constructor principal}
 begin
   inherited Create(ANodeType, ASrcPos);
+  FTypeName := ATypeName;
+end;
+constructor TTypeDef.Create(ANodeType: TASTNodeType; const ATypeName: string);
+{Constructor para cuando no se requiera indicar la posición}
+begin
+  FNodeType := ANodeType;
   FTypeName := ATypeName;
 end;
 function TTypeDef.ToString: string;
@@ -1880,9 +1891,12 @@ end;
 {$endregion}
 {$region "Nodos de declaraciones de tipos"}
 // TSimpleTypeDef
-constructor TSimpleTypeDef.Create(const ATypeName: string; const ASrcPos: TSrcPos);
+constructor TSimpleTypeDef.Create(const ATypeName: string; AIsNumeric,
+  AIsOrdinal: Boolean);
 begin
-  inherited Create(ntSimpleTypeDef, ATypeName, ASrcPos);
+  inherited Create(ntSimpleTypeDef, ATypeName);
+  FIsNumeric := AIsNumeric;
+  FIsOrdinal := AIsOrdinal;
 end;
 function TSimpleTypeDef.ToString: string;
 begin
@@ -1892,7 +1906,7 @@ end;
 constructor TAliasTypeDef.Create(ABaseType: String; const ASrcPos: TSrcPos);
 begin
   inherited Create(ntAliasTypeDef, '', ASrcPos);
-  FBaseType := ABaseType;
+  FTargetType := ABaseType;
 end;
 destructor TAliasTypeDef.Destroy;
 begin
@@ -1901,7 +1915,7 @@ end;
 function TAliasTypeDef.ToString: string;
 begin
   Result := 'TAliasTypeDef:' + LineEnding +
-  Format('%s = %s', [FTypeName, FBaseType]) + LineEnding;
+  Format('%s = %s', [FTypeName, FTargetType]) + LineEnding;
   if Declaration=Nil then
     Result += 'Declaration: <Nil>'+ LineEnding
   else

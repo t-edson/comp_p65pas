@@ -420,10 +420,7 @@ Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve
         BaseExpr.Destroy;
         Exit(nil);
       end;
-      //Aquí faltaría procesara los parámetros por si el método los incluye.
-      // if tokIdent = tiPAREN_OP ... como se hace más abajo
-      //
-      // Crear el acceso a campo actual
+      //Crea el acceso a campo actual
       FieldAccess := TFieldAccess.Create(BaseExpr, FieldName, lex.GetSrcPos);
       //Busca más modificadores del operando
       Result := ParseModifiers(FieldAccess);
@@ -1057,7 +1054,7 @@ begin
         Exit(nil);
       end;
       Break;  //Ya no debe seguir nada después de la parte variante.
-    end else if tokIdent = tiPROCED then begin   //Es un procedimiento (método).
+    end else if tokIdent in [tiPROCED, tiFUNCT] then begin   //Es un método.
       ParseProcFunctDeclaration(RecordType.Fields, locRecord);
     end else begin
       //Explora y lee un bloque de campos, como: a,b,c: integer;
@@ -1297,7 +1294,7 @@ begin
       if HayError then Exit;
     end;
     if not ConsumeSemicolon then Exit;   //Debe terminar con ";".
-  until tokIdent<>tiIDENTIF;     //Sige otra declaración o BEGIN
+  until tokIdent<>tiIDENTIF;   //Sigue otra variable o termina el bloque VAR.
 end;
 procedure TParserPas.ParseConstDeclaration(declars: TASTNodeList);
 var

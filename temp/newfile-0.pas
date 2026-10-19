@@ -5,9 +5,11 @@ type
   //TConjunto = set of byte;
   //TColores = (rojo, azul, amarillo, verde, morado);
   //TSubrango = azul..verde;
-  TIndice = 1..MAX_ELEMENTOS;
+//  TIndice = 1..MAX_ELEMENTOS;
+  TDia = (Lunes, Martes, Miercoles, Jueves, Viernes, Sabado, Domingo);
+  TMapaDia = array[TDia] of string;
 var 
-  a: byte;
+  a: char;
 //  con : TConjunto;
 begin
 //  con := [1, 2, 3];
