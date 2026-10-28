@@ -749,7 +749,7 @@ type  //Definiciones previas para declaraciones de tipos
     destructor Destroy; override;
     function ToString: string; override;
   end;
-  TValueRangeList = specialize TFPGObjectList<TValueRange>;
+  TArrayIndexes = specialize TFPGObjectList<TTypeDef>;
   //Definición de campo de RECORD. No se usa. Se está usando TVarDecl para los campos.
   //TFieldDef = class(TASTNode)
   //end;
@@ -845,12 +845,16 @@ type  //Nodos de definiciones de tipos
   //Arreglo (array[1..10] of TPersona)
   TArrayTypeDef = class(TTypeDef)
   private
-    FIndexRanges: TValueRangeList;  //Dimensiones del arreglo
+    FArrayIndexes: TArrayIndexes;  //Dimensiones del arreglo
     FElemTypeDef: TTypeDef;  //Referencia al tipo de elemento del arreglo.
+    FIsDynamic: Boolean;     //Bandera para indicar si es arreglo dinámico.
+    FNElements: Int64;       //Número total de elementos, considerando todas las dimensiones. Se actualiza en el análisis semántico.
   public
-    procedure AddRange(Range: TValueRange);
-    property IndexRanges: TValueRangeList read FIndexRanges;
+    procedure AddIndex(AIndex: TTypeDef);
+    property ArrayIndexes: TArrayIndexes read FArrayIndexes;
     property ElemTypeDef: TTypeDef read FElemTypeDef write FElemTypeDef;
+    property IsDynamic: Boolean read FIsDynamic write FIsDynamic;
+    property NElements: Int64 read FNElements write FNElements;
   public  //Inicialización y depuración
     constructor Create(const ASrcPos: TSrcPos);
     destructor Destroy; override;
@@ -1966,21 +1970,21 @@ begin
   inherited;
 end;
 // TArrayTypeDef
-procedure TArrayTypeDef.AddRange(Range: TValueRange);
+procedure TArrayTypeDef.AddIndex(AIndex: TTypeDef);
 begin
-  FIndexRanges.Add(Range);
+  FArrayIndexes.Add(AIndex);
 end;
 constructor TArrayTypeDef.Create(const ASrcPos: TSrcPos);
 begin
   inherited Create(ntArrayTypeDef, '', ASrcPos);
-  FIndexRanges := TValueRangeList.Create(True);
+  FArrayIndexes := TArrayIndexes.Create(True);
   {El campo FElemTypeDef se creará e inicializará en el Parser, cuando se determine que
   este nodo es una función}
   //FElemTypeDef := nil;
 end;
 destructor TArrayTypeDef.Destroy;
 begin
-  FIndexRanges.Free;
+  FArrayIndexes.Free;
   FElemTypeDef.Free;   //Lo destruye, si se ha creado.
   inherited;
 end;
@@ -1989,7 +1993,7 @@ var
   typName: String;
 begin
   Result := Format('ArrayType: [%d dims] of %s',
-                   [FIndexRanges.Count, FElemTypeDef.ToString]);
+                   [FArrayIndexes.Count, FElemTypeDef.ToString]);
 end;
 // TRecordTypeDef
 constructor TRecordTypeDef.Create(const ASrcPos: TSrcPos);

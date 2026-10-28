@@ -387,6 +387,7 @@ Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve
     ArrayAccess: TArrayRef;
     PointerDeref: TPointerDeref;
     ProcFunCall: TProcFunctCall;
+    SrcPos: TSrcPos;
   begin
     if tokIdent = tiPAREN_OP then begin  // "("
       //Sigue "(", debe ser una llamada a función o procedimiento.
@@ -416,12 +417,13 @@ Devuelve la referencia a un objeto TExpression. Si se produce un error, devuelve
       Result := ParseModifiers(ProcFunCall);
     end else if tokIdent = tiDOT then begin               //"." -> Campo
       Next;  // Consumir '.'
+      SrcPos := lex.GetSrcPos;
       if not ConsumeIdent(FieldName, 'Se esperaba un nombre de campo') then begin
         BaseExpr.Destroy;
         Exit(nil);
       end;
       //Crea el acceso a campo actual
-      FieldAccess := TFieldAccess.Create(BaseExpr, FieldName, lex.GetSrcPos);
+      FieldAccess := TFieldAccess.Create(BaseExpr, FieldName, SrcPos);
       //Busca más modificadores del operando
       Result := ParseModifiers(FieldAccess);
     end else if tokIdent = tiBRACK_OP then begin //"[" -> Arreglo
@@ -928,42 +930,56 @@ Opcionalmente, y aunque no es estándar en Pascal, se acepta también la forma:
 }
 var
   ArrayTypeDef: TArrayTypeDef;
-  LowExpr, HighExpr: TExpression;
-  TypeDef: TTypeDef;
+  TypeDef, index: TTypeDef;
 begin
   ArrayTypeDef := TArrayTypeDef.Create(lex.GetSrcPos);
   if tokIdent = tiARRAY then Next;     //Consume ARRAY, pero se acepta también que vaya "["
   if tokIdent = tiBRACK_OP then begin    //Es un arreglo estático: ARRAY[1..3] OF ...
     Next;     //Consume "[".
     while not HayError do begin
-      LowExpr := ParseFactor;
-      if HayError then Break;
-      if tokIdent = tiDOTDOT then begin
-        Next;
-        HighExpr := ParseFactor;
-        if HayError then begin
-          LowExpr.Free;
-          ArrayTypeDef.Free;
-          Exit(nil);
-        end;
-        ArrayTypeDef.AddRange(TValueRange.Create(LowExpr, HighExpr, lex.GetSrcPos));
-      end else if tokIdent = tiBRACK_CL then begin
-        //Es una definición corta: ARRAY[5] OF ...
-        HighExpr := Nil;   //Indica de esta forma que es la forma simplificada
-        //LowExpr := TNumberLiteral.Create(0, lex.GetSrcPos);   //Índice menor = 0
-        ArrayTypeDef.AddRange(TValueRange.Create(LowExpr, HighExpr, lex.GetSrcPos));
-      end else begin   //Sigue otra cosa
-        GenError('Se esperaba ".." o "]" en el rango del arreglo');
-        LowExpr.Free;
+      //LowExpr := ParseFactor;
+      //if HayError then Break;
+      //if tokIdent = tiDOTDOT then begin
+      //  Next;
+      //  HighExpr := ParseFactor;
+      //  if HayError then begin
+      //    LowExpr.Free;
+      //    ArrayTypeDef.Free;
+      //    Exit(nil);
+      //  end;
+      //  ArrayTypeDef.AddIndex(TValueRange.Create(LowExpr, HighExpr, lex.GetSrcPos));
+      //end else if tokIdent = tiBRACK_CL then begin
+      //  //Es una definición corta: ARRAY[5] OF ...
+      //  HighExpr := Nil;   //Indica de esta forma que es la forma simplificada
+      //  //LowExpr := TNumberLiteral.Create(0, lex.GetSrcPos);   //Índice menor = 0
+      //  ArrayTypeDef.AddIndex(TValueRange.Create(LowExpr, HighExpr, lex.GetSrcPos));
+      //end else begin   //Sigue otra cosa
+      //  GenError('Se esperaba ".." o "]" en el rango del arreglo');
+      //  LowExpr.Free;
+      //  ArrayTypeDef.Free;
+      //  Exit(nil);
+      //end;
+
+      index := ParseTypeDefinition;  //Dejamos la validación del tipo al análisis semántico
+      if HayError then begin
         ArrayTypeDef.Free;
         Exit(nil);
       end;
+      ArrayTypeDef.AddIndex(index);
+
       if tokIdent = tiCOMMA then Next else Break;   //Valida si sigue otra dimensión
     end;
     if not ConsumeTok(tiBRACK_CL, 'Se esperaba "]"') then begin
       ArrayTypeDef.Free;
       Exit(nil);
     end;
+  end else begin
+    //Debe ser declaración de arreglo dinámico.
+    ArrayTypeDef.IsDynamic := True;
+    //Creamos un índice numérico
+    index := TAliasTypeDef.Create('BYTE', lex.GetSrcPos);
+    //Agrega el índice
+    ArrayTypeDef.AddIndex(index);
   end;
   //if not ConsumeTok(tiOF, 'Se esperaba "of"') then begin
   //  ArrayTypeDef.Free;

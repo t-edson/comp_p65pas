@@ -1,17 +1,27 @@
 program muestra; 
 const
-  MAX_ELEMENTOS = 100;
+  MAXIMO = 100;
 type
   //TConjunto = set of byte;
   //TColores = (rojo, azul, amarillo, verde, morado);
   //TSubrango = azul..verde;
-//  TIndice = 1..MAX_ELEMENTOS;
-  TDia = (Lunes, Martes, Miercoles, Jueves, Viernes, Sabado, Domingo);
-  TMapaDia = array[TDia] of string;
-var 
-  a: char;
-//  con : TConjunto;
+//  TIndice = 1..MAXIMO;
+//  TDia = (Lunes, Martes, Miercoles, Jueves, Viernes, Sabado, Domingo);
+//  TTabla = array['a'..'z'] of integer;
+  TTipoValor =  (vtEntero, vtReal, vtString, vtBooleano);
+
+  TValor = record
+    case tipo: TTipoValor of
+      vtEntero: (valor_entero: integer);
+      vtReal: (valor_real: real);
+  end;
+
+var
+  Valores: TValor;
+  Valor: TTipoValor;
 begin
+    Valores.tipo := vtEntero;
+//  i := MAXIMO;
 //  con := [1, 2, 3];
 //  col := Rojo;
 //arr3[0]:=3;
@@ -26,8 +36,6 @@ begin
 //  x[i][2] := 1;
 //  x := fun(1);
 //  a[i] := b[j];
-//  a := 'abc';
-//   aaa('aaa');
 end. 
 
 

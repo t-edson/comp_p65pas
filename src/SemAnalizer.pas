@@ -25,7 +25,7 @@ type
   private
     FName: string;
     FKind: TSymbolKind;          //Tipo de símbolo.
-    FTypeDef: TTypeDef;         //Definición del tipo del símbolo.
+    FTypeDef: TTypeDef;          //Definición del tipo del símbolo.
     FDeclaration: TASTNode;      //Referencia al nodo donde se declara el símbolo.
     FScope: TScope;              //Ámbito del símbolo
     FIsForward: Boolean;
@@ -102,6 +102,18 @@ type
     TYPE_STRING,
     TYPE_POINTR: TSimpleTypeDef;
     TYPE_SET: TSetTypeDef;
+  private  //Referencias a funciones del sistema
+    SYS_LENGTH,
+    SYS_INTTOSTR,
+    SYS_FLOATTOSTR,
+    SYS_BOOLTOSTR,
+    SYS_STRTOINT,
+    SYS_STRTOFLOAT,
+    SYS_STRTOBOOL,
+    SYS_CHR,
+    SYS_SQRT,
+    SYS_ABS,
+    SYS_SETLENGTH: TSymbol;
   public   //Atributos publicos
     property Errors: Integer read FErrors;
     property Warnings: Integer read FWarnings;
@@ -131,6 +143,7 @@ type
     function GetTypeOf(Expr: TExpression): TTypeDef;
     private
     function AreTypesCompatible(TypeDef1, TypeDef2: TTypeDef): Boolean;
+    function GetLengthType(Argument: TExpression): TTypeDef;
   private  //Registro de símbolos
     procedure RegisterDeclarations(Decls: TASTNodeList);
     procedure RegisterProcDecl(ProcFunctDecl: TProcFunctDecl);
@@ -142,7 +155,7 @@ type
     procedure VisitConstDecl(ConstDecl: TConstDecl);
     procedure VisitProcFunctDecl(ProcFunctDecl: TProcFunctDecl);
     //Definiciones de tipos
-    procedure VisitAliasTypeDef(TypeDef: TTypeDef);
+    procedure VisitAliasTypeDef(AliasTypeDef: TAliasTypeDef);
     procedure VisitArrayTypeDef(ArrayType: TArrayTypeDef);
     procedure VisitRecordTypeDef(RecordType: TRecordTypeDef);
     procedure VisitEnumTypeDef(EnumType: TEnumTypeDef);
@@ -583,6 +596,7 @@ function TSemanticAnalyzer.AreTypesCompatible(TypeDef1, TypeDef2: TTypeDef): Boo
 var
   Base1, Base2: TTypeDef;
   SimpleType1, SimpleType2: TSimpleTypeDef;
+  Ptr1, Ptr2: TPointerTypeDef;
 begin
   if (TypeDef1 = nil) or (TypeDef2 = nil) then Exit(False);
   if TypeDef1 = TypeDef2 then Exit(True);
@@ -641,12 +655,31 @@ begin
     Exit(Base1 = Base2);
 
   //=== Punteros ===
-  //if (Base1.NodeType = ntPointerTypeDef) and (Base2.NodeType = ntPointerTypeDef) then begin
-  //  Ptr1 := TPointerTypeDef(Base1);
-  //  Ptr2 := TPointerTypeDef(Base2);
-  //  Exit(AreTypesCompatible(GetTargetType(Ptr1), GetTargetType(Ptr2)));
-  //end;
-
+  if Base1.NodeType = ntPointerTypeDef then begin
+    if (Base2.NodeType = ntPointerTypeDef) then begin
+      //Ambas expresiones son punteros
+      Ptr1 := TPointerTypeDef(Base1);
+      Ptr2 := TPointerTypeDef(Base2);
+      Exit(AreTypesCompatible(Ptr1.TargetTypeDef, Ptr2.TargetTypeDef));
+    end else if Base2 = TYPE_POINTR then begin
+      //Puntero contra literal (Por ahora solo NIL)
+      Exit(True);
+    end else begin
+      //Puntero contra otra cosa.
+      Exit(False);
+    end;
+  end else if Base1 = TYPE_POINTR then begin
+    if (Base2.NodeType = ntPointerTypeDef) then begin
+      //Literal contra puntero  (Por ahora solo NIL)
+      Exit(True);
+    end else if (Base2 = TYPE_POINTR) then begin
+      //Literal contra literal (Por ahora solo NIL)
+      Exit(True);
+    end else begin
+      //Literal contra otra cosa.
+      Exit(False);
+    end;;
+  end;
   //=== Subrangos ===
   if (Base1.NodeType = ntSubranTypeDef) and (Base2.NodeType = ntSubranTypeDef) then
     Exit(True);  // Todos los subrangos son compatibles entre sí
@@ -679,6 +712,40 @@ begin
   //No se encuentra compatibilidad
   Result := False;
 end;
+function TSemanticAnalyzer.GetLengthType(Argument: TExpression): TTypeDef;
+{Analiza el argumento y devuelve el tipo de dato que debe devolver la función del sistema
+Length(). Este tipo puede ser BYTE o INTEGER. }
+var
+  FinalType, ArgType: TTypeDef;
+  ArrayType: TArrayTypeDef;
+begin
+  ArgType := Argument.ExpTypeDef;
+  if ArgType = nil then begin
+    GenError('No se puede determinar el tipo del argumento.', Argument.SrcPos);
+    Exit(TYPE_INTEG);
+  end;
+  FinalType := ArgType.GetFinalDef;
+  if FinalType = nil then begin
+    GenError('No se puede determinar el tipo del argumento.', ArgType.SrcPos);
+    Exit(TYPE_INTEG);
+  end;
+  if FinalType = TYPE_STRING then begin
+    //Caso 1: STRING → máximo 255, siempre BYTE
+    Exit(TYPE_BYTE);
+  end else if FinalType.NodeType = ntArrayTypeDef then begin
+    //Caso 2: arreglo → usar NElements (ya calculado en VisitArrayTypeDef)
+    ArrayType := TArrayTypeDef(FinalType);
+    if ArrayType.IsDynamic then
+      Exit(TYPE_INTEG);
+    if ArrayType.NElements <= 255 then
+      Exit(TYPE_BYTE)
+    else
+      Exit(TYPE_INTEG);
+  end else begin
+    GenError('LENGTH solo acepta cadenas o arreglos.', ArgType.SrcPos);
+    Exit(TYPE_INTEG);
+  end;
+end;
 {$endregion}
 {$region "Registro de símbolos"}
 procedure TSemanticAnalyzer.RegisterVarDecl(VarDecl: TVarDecl);
@@ -703,28 +770,14 @@ var
   Sym: TSymbol;
   TypeDef: TTypeDef;
 begin
-  // Verificar duplicado
+  //Verifica si es duplicado.
   if FCurrentScope.Lookup(ConstDecl.Name) <> nil then begin
     GenError('Constante duplicada: ' + ConstDecl.Name, ConstDecl.SrcPos);
     Exit;
   end;
-  // Resolver tipo
-  if ConstDecl.HasType then begin
-    TypeDef := ConstDecl.TypeDef;
-    //Resuelve tipo. si es un alias.
-    ResolveTypeDef(ConstDecl.TypeDef);
-  end else begin
-    // Inferir tipo del valor
-    if ConstDecl.Value <> nil then begin
-      VisitNode(ConstDecl.Value);   //Valida y resuelve tipo.
-      TypeDef := ConstDecl.Value.ExpTypeDef;
-    end else begin
-      TypeDef := nil;
-    end;
-  end;
-  // Crear símbolo
+  //Solo crea el símbolo por ahora.
   Sym := TSymbol.Create(ConstDecl.Name, skConstant);
-  Sym.TypeDef := TypeDef;
+  Sym.TypeDef := ConstDecl.TypeDef;
   Sym.Declaration := ConstDecl;
   FCurrentScope.Declare(Sym);
 end;
@@ -826,27 +879,48 @@ procedure TSemanticAnalyzer.VisitVarDecl(VarDecl: TVarDecl);
 var
   InitType, VarType: TTypeDef;
 begin
-  // Ya fue registrada en RegisterVarDecl
-  // Verificar inicialización
+  //Visita el tipo de la variable (para resolver alias, validar rangos, etc.)
+  if VarDecl.TypeDef <> nil then
+    VisitNode(VarDecl.TypeDef);
+  //Verifica inicialización
   if VarDecl.initVal <> nil then begin
-    InitType := GetTypeOf(VarDecl.initVal);
+    VisitNode(VarDecl.initVal);
+    InitType := VarDecl.initVal.ExpTypeDef;
     VarType := VarDecl.TypeDef;
     if not AreTypesCompatible(VarType, InitType) then
       GenError('Tipo de inicialización incompatible para: ' + VarDecl.Name, VarDecl.SrcPos);
   end;
-  // Verificar ABSOLUTE
+  //Verifica ABSOLUTE
   if VarDecl.hasAdic = DEC_ABSOL then begin
-    if VarDecl.absAddr = nil then
+    if VarDecl.absAddr = nil then begin
       GenError('Dirección ABSOLUTE no especificada', VarDecl.SrcPos);
+    end else begin
+      VisitNode(VarDecl.absAddr);
+    end;
   end;
 end;
 procedure TSemanticAnalyzer.VisitConstDecl(ConstDecl: TConstDecl);
+var
+  Sym: TSymbol;
 begin
-  // Ya fue registrada en RegisterConstDecl
-  // Verificar que el valor sea constante
+  //Visita el tipo declarado, si existe
+  if ConstDecl.HasType then begin
+    VisitNode(ConstDecl.TypeDef);  //Resuelve tipo
+  end;
+  //Verifica que el valor sea constante
   if ConstDecl.Value <> nil then begin
-    // Verificar que no haya referencias a variables
-    // (implementación simplificada)
+    VisitNode(ConstDecl.Value);
+  end;
+  //Verifica que sea constante
+  //if not IsConstExpr(ConstDecl.Value) then begin
+  //  GenError('El valor de la constante debe ser constante', ConstDecl.SrcPos);
+  //end;
+  //Actualiza el tipo del símbolo si no tenía tipo declarado. Aquí se tiene que buscar
+  //el símbolo porque no se tiene una referencia directa.
+  if not ConstDecl.HasType and (ConstDecl.Value <> nil) then begin
+    Sym := FCurrentScope.Lookup(ConstDecl.Name);
+    if Sym <> nil then
+      Sym.TypeDef := ConstDecl.Value.ExpTypeDef;
   end;
 end;
 procedure TSemanticAnalyzer.VisitProcFunctDecl(ProcFunctDecl: TProcFunctDecl);
@@ -855,7 +929,8 @@ var
   Param: TVarDecl;
   Sym, SelfSym, FieldSym: TSymbol;
   OldProcedure: TProcFunctDecl;
-  Field: TASTNode;
+  Field, Node: TASTNode;
+  Decls: TASTNodeList;
 begin
   if ProcFunctDecl.IsForward then Exit;
   OldProcedure := FCurrentProcedure;
@@ -893,12 +968,26 @@ begin
       end;
     end;
 //    //Analiza el tipo de retorno
-//    if ProcFunctDecl.ReturnTypeDef <> Nil then begin
-//      VisitNode(ProcFunctDecl.ReturnTypeDef);
-//    end;
+    if ProcFunctDecl.ReturnTypeDef <> Nil then begin
+      VisitNode(ProcFunctDecl.ReturnTypeDef);
+    end;
     //Analiza las declaraciones locales.
-    if ProcFunctDecl.Declarations <> nil then begin
-      RegisterDeclarations(ProcFunctDecl.Declarations);
+    Decls := ProcFunctDecl.Declarations;
+    if Decls <> nil then begin
+      RegisterDeclarations(Decls);
+      //Visita declaraciones de tipos, variables y constantes (segunda pasada)
+       for Node in Decls do begin
+         if Node.NodeType in [ntTypeDecl, ntVarDecl, ntConstDecl] then begin
+           VisitNode(Node);
+         end;
+       end;
+       //Visita los cuerpos de procedimientos/funciones anidados
+       for Node in Decls do begin
+         if Node.NodeType = ntProcFunctDecl then begin
+           if not TProcFunctDecl(Node).IsForward then
+             VisitProcFunctDecl(TProcFunctDecl(Node));
+         end;
+       end;
     end;
     //Analiza el cuerpo
     if ProcFunctDecl.Body <> nil then begin
@@ -918,32 +1007,64 @@ begin
   VisitNode(TypeDecl.Definition);
 end;
 //Definiciones de tipos
-procedure TSemanticAnalyzer.VisitAliasTypeDef(TypeDef: TTypeDef);
+procedure TSemanticAnalyzer.VisitAliasTypeDef(AliasTypeDef: TAliasTypeDef);
 {Visita declaraciones de tipos sismples.}
 begin
   //El tipo ya fue registrado en la tabla de símbolos. Solo falta resolver la definición
   //para los casos alias.
-  ResolveTypeDef(TypeDef);
+  ResolveTypeDef(AliasTypeDef);
+  if AliasTypeDef.FinalDef = Nil then Exit;  //Se produjo un error
+  //Hereda los atributos del tipo al que apunta
+  AliasTypeDef.IsNumeric := AliasTypeDef.FinalDef.IsNumeric;
+  AliasTypeDef.IsOrdinal := AliasTypeDef.FinalDef.IsOrdinal;
 end;
 procedure TSemanticAnalyzer.VisitArrayTypeDef(ArrayType: TArrayTypeDef);
 var
-  ElemTypeDef: TTypeDef;
+  Index: TTypeDef;
   i: Integer;
-  Range: TValueRange;
+  TotalElements: Int64;
 begin
-  //Verifica tipo de elementos
-  ElemTypeDef := ArrayType.ElemTypeDef;
-  //Visita para validar y resolver los tipos alias directos o anidados.
-  VisitNode(ElemTypeDef);
+  //Visita el tipo de elementos para validar y resolver los tipos.
+  VisitNode(ArrayType.ElemTypeDef);
 
-  //Verifica rangos de índices
-  for i := 0 to ArrayType.IndexRanges.Count - 1 do begin
-    Range := ArrayType.IndexRanges[i];
-    if Range.LowExpr <> nil then
-      VisitNode(Range.LowExpr);
-    if Range.HighExpr <> nil then
-      VisitNode(Range.HighExpr);
+  //Visita y valida cada índice, y calcula el número total de elementos.
+  TotalElements := 1;
+  for i := 0 to ArrayType.ArrayIndexes.Count - 1 do begin
+    Index := ArrayType.ArrayIndexes[i];
+    VisitNode(Index);
+    Index := Index.GetFinalDef;
+    //Verificar que sea ordinal
+    if not Index.IsOrdinal then begin
+      GenError('Se esperaba un índice ordinal.', Index.SrcPos)
+    end;
+
+    //Calcular el número de valores de esta dimensión
+    if Index.NodeType = ntSubranTypeDef then begin
+      //Es un subrango: usar NValues (ya calculado)
+      TotalElements := TotalElements * TSubranTypeDef(Index).NValues;
+    end else if Index.NodeType = ntEnumTypeDef then begin
+      //Es un enumerado: usar el número de valores
+      TotalElements := TotalElements * TEnumTypeDef(Index).Values.Count;
+    end else if Index.NodeType = ntSimpleTypeDef then begin
+      //Es un tipo simple (por ejemplo, byte, char). No se puede saber el número
+      //de elementos sin conocer el rango, así que usamos el rango completo del tipo.
+      if Index = TYPE_BYTE then
+        TotalElements := TotalElements * 256
+      else if Index = TYPE_CHAR then
+        TotalElements := TotalElements * 256
+      else if Index = TYPE_BOOL then
+        TotalElements := TotalElements * 2
+      else begin
+        GenError('No se puede determinar el número de elementos del índice', Index.SrcPos);
+        Continue;
+      end;
+    end else begin
+      GenError('Tipo de índice no soportado', Index.SrcPos);
+      Continue;
+    end;
   end;
+  //Guardar el número de elementos
+  ArrayType.NElements := TotalElements;
 end;
 procedure TSemanticAnalyzer.VisitRecordTypeDef(RecordType: TRecordTypeDef);
 var
@@ -960,15 +1081,17 @@ begin
       VisitNode(Field.TypeDef);
     end;
   end;
+  //Visita campo selector, si existe
+  VisitNode(RecordType.VarSelector);
   //Analiza variantes
   if RecordType.Branches <> nil then begin
     for i := 0 to RecordType.Branches.Count - 1 do begin
       Branch := RecordType.Branches[i];
-      // Analizar selectores
+      //Analiza selectores
       for j := 0 to Branch.SelectorValues.Count - 1 do begin
         VisitNode(Branch.SelectorValues[j]);
       end;
-      // Analizar campos
+      //Analiza campos
       for astNode in Branch.Fields do begin
         if astNode.NodeType = ntVarDecl then begin
           Field := TVarDecl(astNode);
@@ -1083,7 +1206,7 @@ begin
     //Valida si se identificaron a los límites
     if expr1.ExpTypeDef = Nil then Exit;   //Ya se debe haber generado el mensaje de error.
     if expr2.ExpTypeDef = Nil then Exit;   //Ya se debe haber generado el mensaje de error.
-    //Valida que el límite inferiro sea enumerado.
+    //Valida que el límite inferior sea enumerado.
     if expr1.ExpTypeDef.NodeType <> ntEnumTypeDef then begin
       GenError('Se esperaba un valor enumerado.', expr1.SrcPos);
       Exit;
@@ -1122,8 +1245,6 @@ begin
   end
 end;
 procedure TSemanticAnalyzer.VisitPointerTypeDef(PointerType: TPointerTypeDef);
-var
-  TargetType: TTypeDef;
 begin
   //Visita para validar y resolver los tipos alias directos o anidados.
   VisitNode(PointerType.TargetTypeDef);
@@ -1161,10 +1282,15 @@ procedure TSemanticAnalyzer.VisitNumberLiteral(NumLit: TNumberLiteral);
 begin
   //Nada que verificar, los literales son siempre correctos.
   //Solo resolvemos el tipo
-  if NumLit.IsInteger then
-    NumLit.ExpTypeDef := TYPE_INTEG
-  else
+  if NumLit.IsInteger then begin
+    if (NumLit.IntValue >=0) and (NumLit.IntValue <=255) then begin
+      NumLit.ExpTypeDef := TYPE_BYTE;
+    end else begin
+      NumLit.ExpTypeDef := TYPE_INTEG
+    end;
+  end else begin
     NumLit.ExpTypeDef := TYPE_REAL;
+  end;
 end;
 procedure TSemanticAnalyzer.VisitBooleanLiteral(BoolLit: TBooleanLiteral);
 begin
@@ -1174,7 +1300,11 @@ end;
 procedure TSemanticAnalyzer.VisitStringLiteral(StrLit: TStringLiteral);
 begin
   //Nada que verificar
-  StrLit.ExpTypeDef := TYPE_STRING;
+  if length(StrLit.Value) = 1 then begin
+    StrLit.ExpTypeDef := TYPE_CHAR;
+  end else begin
+    StrLit.ExpTypeDef := TYPE_STRING;
+  end;
 end;
 procedure TSemanticAnalyzer.VisitArrayLiteral(ArrayLit: TArrayLiteral);
 var
@@ -1195,8 +1325,8 @@ begin
 end;
 procedure TSemanticAnalyzer.VisitPointerLiteral(PointerLit: TPointerLiteral);
 begin
-  // nil es válido para cualquier puntero
-  // Las direcciones literales se verifican en el contexto
+  //"Nil" es válido para cualquier puntero
+  PointerLit.ExpTypeDef := TYPE_POINTR;
 end;
 procedure TSemanticAnalyzer.VisitSetLiteral(SetLit: TSetLiteral);
 var
@@ -1228,16 +1358,7 @@ begin
     Exit(nil);
   end;
   //Enlaza a la declaración.
-  IdentRef.Declaration := Sym.Declaration;   //*** No es duplicar datos guardar lo mismo en dos partes.
-
-  //Actualiza el tipo de la expresión
-  if Sym.FKind = skFunction then begin
-    //Era una función
-    IdentRef.ExpTypeDef := Sym.ReturnType;
-  end else begin
-    //Debería ser una variable
-    IdentRef.ExpTypeDef := Sym.TypeDef;
-  end;
+  IdentRef.Declaration := Sym.Declaration;
 
   //Actualiza el tipo de la expresión según el tipo de símbolo
   case Sym.Kind of
@@ -1284,8 +1405,19 @@ begin
   LeftType := LeftType.GetFinalDef;
   RightType := RightType.GetFinalDef;
   //Verifica las operaciones
+  if ((LeftType = TYPE_STRING) or (LeftType = TYPE_CHAR)) and (BinOp.Op = '+') then begin
+    //Caso especial.
+    if (RightType = TYPE_STRING) or (RightType = TYPE_CHAR) then begin
+       //Concatenación de cadenas
+      BinOp.ExpTypeDef := TYPE_STRING;
+    end else begin
+      GenError('Se esperaba una cadena', BinOp.Right.SrcPos);
+      BinOp.ExpTypeDef := TYPE_STRING;
+    end;
+    Exit;
+  end;
   case BinOp.Op of
-    '+', '-', '*', '/', 'div', 'mod': begin
+    '+', '-': begin
       if not LeftType.IsNumeric then
         Warning('Operador aritmético con tipo no numérico', BinOp.Left.SrcPos);
       if not RightType.IsNumeric then
@@ -1294,7 +1426,29 @@ begin
       {*** Por ahora asumimos el Tipo INTEGER pero el análisis debe ser más complicado.
       Se ha planeado asignar métodos (con operadores) a los tipos básicos, de modo que una
       oepración como "a + b", se traduzca a "a._add(b)". }
+      if (LeftType = TYPE_REAL) or (RightType=TYPE_REAL) then begin
+        //Alguno de los sumandos es en coma flotante
+        BinOp.ExpTypeDef := TYPE_REAL;
+      end else if (LeftType = TYPE_BYTE) and (RightType=TYPE_BYTE) then begin
+        //Los dos son bytes, Optimizamos el tipo.
+        BinOp.ExpTypeDef := TYPE_BYTE;
+      end else begin
+        BinOp.ExpTypeDef := TYPE_INTEG;
+      end;
+    end;
+    '*', 'div', 'mod': begin
+      if not LeftType.IsNumeric then
+        Warning('Operador aritmético con tipo no numérico', BinOp.Left.SrcPos);
+      if not RightType.IsNumeric then
+        Warning('Operador aritmético con tipo no numérico', BinOp.Right.SrcPos);
       BinOp.ExpTypeDef := TYPE_INTEG;
+    end;
+    '/': begin
+      if not LeftType.IsNumeric then
+        Warning('Operador aritmético con tipo no numérico', BinOp.Left.SrcPos);
+      if not RightType.IsNumeric then
+        Warning('Operador aritmético con tipo no numérico', BinOp.Right.SrcPos);
+      BinOp.ExpTypeDef := TYPE_REAL;
     end;
     'and', 'or', 'not': begin
       // Verificar tipos booleanos
@@ -1315,7 +1469,11 @@ var
   OpType: TTypeDef;
 begin
   VisitNode(UnaryOp.Operand);
-  OpType := GetTypeOf(UnaryOp.Operand);
+  OpType := UnaryOp.Operand.ExpTypeDef;
+  if OpType = Nil then begin
+    GenError('No se puede determinar el tipo de la operación.', UnaryOp.SrcPos);
+    Exit;
+  end;
   case UnaryOp.Op of
     '+', '-': begin
       if not OpType.IsNumeric then
@@ -1335,14 +1493,16 @@ análisis sintáctico.}
 var
   Sym: TSymbol;
   i: Integer;
-  ArgType: TTypeDef;
   Param: TVarDecl;
   Parent: TASTNode;
   FuncRef: TIdentifierRef;
+  Argument: TExpression;
+  ArgType: TTypeDef;
 begin
   //Visitar primero la expresión base.
   VisitNode(ProcFuncCall.ProcFunRef);
   if ProcFuncCall.ProcFunRef.NodeType = ntIdentifierRef then begin
+    //Caso normal: hay un identificador.
     FuncRef := TIdentifierRef(ProcFuncCall.ProcFunRef);
     //Buscar el procedimiento/función.
     Sym := FCurrentScope.LookupRecursive(FuncRef.Name);
@@ -1415,7 +1575,19 @@ begin
       end;
     end else begin
       //Es función. Debe devolver un tipo.
-      ProcFuncCall.ExpTypeDef := Sym.ReturnType;
+      if Sym = SYS_LENGTH then begin
+        //Caso especial. Se puede optimizar.
+        if ProcFuncCall.Arguments.Count <> 1 then begin
+          GenError('LENGTH espera exactamente un argumento', ProcFuncCall.SrcPos);
+          Exit;
+        end;
+        Argument := ProcFuncCall.Arguments[0];
+        //Length() puede devolver un BYTE o INTEGER dependiendo del argumento.
+        ProcFuncCall.ExpTypeDef := GetLengthType(Argument);  //Puede generar error.
+      end else begin
+        //Para las otras funciones, tomamos el valor directamente
+        ProcFuncCall.ExpTypeDef := Sym.ReturnType;
+      end;
     end;
   end else begin
     //Es una expresión compleja: obj.metodo(arg), arr[i](arg), etc.
@@ -1429,13 +1601,49 @@ begin
   end;
 end;
 procedure TSemanticAnalyzer.VisitFieldAccess(FieldAccess: TFieldAccess);
+  function FindFieldInRecord(RecordType: TRecordTypeDef; const FieldName: string): TVarDecl;
+  {Busca un campo por su nombre en un TRecordTypeDef, considerando:
+    - Los campos no variantes (RecordType.Fields).
+    - El campo selector (RecordType.VarSelector).
+    - Los campos de cada rama variante (RecordType.Branches[i].Fields).
+    Devuelve el TVarDecl del campo, o NIL si no se encuentra.}
+  var
+    i, j: Integer;
+    Field: TASTNode;
+    Branch: TVariantBranch;
+    FieldDecl: TVarDecl;
+  begin
+    Result := nil;
+    //Busca en los campos no variantes
+    for Field in RecordType.Fields do begin
+      if Field.NodeType = ntVarDecl then begin
+        FieldDecl := TVarDecl(Field);
+        if CompareText(FieldDecl.Name, FieldName) = 0 then
+          Exit(FieldDecl);
+      end;
+    end;
+    //Busca en el campo selector
+    if (RecordType.VarSelector <> nil) and
+       (CompareText(RecordType.VarSelector.Name, FieldName) = 0) then
+      Exit(RecordType.VarSelector);
+    //Busca en los campos de cada rama variante
+    if RecordType.Branches <> nil then begin
+      for i := 0 to RecordType.Branches.Count - 1 do begin
+        Branch := RecordType.Branches[i];
+        for Field in Branch.Fields do begin
+          if Field.NodeType = ntVarDecl then begin
+            FieldDecl := TVarDecl(Field);
+            if CompareText(FieldDecl.Name, FieldName) = 0 then
+              Exit(FieldDecl);
+          end;
+        end;
+      end;
+    end;
+  end;
 var
   RecordVarType: TTypeDef;
-  FoundField: Boolean;
-  i: Integer;
   FieldDecl: TVarDecl;
   RecordTypeDef: TRecordTypeDef;
-  Field: TASTNode;
 begin
   //Analiza la variable registro y resuelve tipos
   VisitNode(FieldAccess.RecordVar);
@@ -1451,22 +1659,17 @@ begin
     //Error('No se tiene información del registro.', FieldAccess.SrcPos);  *** Para no saturar de mensajes
     Exit;
   end;
-  //Busca el campo en el registro
-  FoundField := False;
-  if RecordVarType.NodeType = ntRecordTypeDef then begin
-    RecordTypeDef := TRecordTypeDef(RecordVarType);
-    for Field in RecordTypeDef.Fields do begin
-      if Field.NodeType = ntVarDecl then begin
-        FieldDecl := TVarDecl(Field);
-        if CompareText(FieldDecl.Name, FieldAccess.FieldName)=0 then begin
-          FieldAccess.ExpTypeDef := FieldDecl.TypeDef;  //Actualiza el tipo
-          FoundField := True;
-          Break;
-        end;
-      end;
-    end;
+  //Verifica que sea un RECORD
+  if RecordVarType.NodeType <> ntRecordTypeDef then begin
+    GenError('El acceso a campo solo es válido para RECORDs', FieldAccess.SrcPos);
+    Exit;
   end;
-  if not FoundField then begin
+  RecordTypeDef := TRecordTypeDef(RecordVarType);
+  //Busca el campo en el registro
+  FieldDecl := FindFieldInRecord(RecordTypeDef, FieldAccess.FieldName);
+  if FieldDecl <> nil then begin
+    FieldAccess.ExpTypeDef := FieldDecl.TypeDef;
+  end else begin
     GenError('Campo no encontrado en el RECORD: ' + FieldAccess.FieldName, FieldAccess.SrcPos);
   end;
 end;
@@ -1489,13 +1692,12 @@ end;
 procedure TSemanticAnalyzer.VisitArrayRef(ArrayRef: TArrayRef);
 var
   ArrayVarType, IdxType: TTypeDef;
-  i: Integer;
   index: TExpression;
 begin
   //Analiza el nodo de la variable arreglo.
   VisitNode(ArrayRef.ArrayVar);
   //Determina el tipo del arreglo base
-  ArrayVarType := GetTypeOf(ArrayRef.ArrayVar);
+  ArrayVarType := ArrayRef.ArrayVar.ExpTypeDef;
   if ArrayVarType = Nil then begin
     GenError('No se puede determinar el tipo del arreglo', ArrayRef.ArrayVar.SrcPos);
     Exit;
@@ -1506,28 +1708,54 @@ begin
     Exit;
   end;
   //Verificar que sea un arreglo
-  if ArrayVarType.NodeType <> ntArrayTypeDef then begin
-    GenError('[] solo puede aplicarse a arreglos', ArrayRef.SrcPos);
-    Exit;
-  end;
-  //Actualiza el tipo de la expresión, para que no tenga que buscarse de nuevo.
-  ArrayRef.ExpTypeDef := TArrayTypeDef(ArrayVarType).ElemTypeDef;
-  //Verifica número de índices
-  if ArrayRef.Indices.Count <> TArrayTypeDef(ArrayVarType).IndexRanges.Count then
-    GenError('Número incorrecto de índices para el arreglo (esperaba ' +
-          IntToStr(TArrayTypeDef(ArrayVarType).IndexRanges.Count) + ', tiene ' +
-          IntToStr(ArrayRef.Indices.Count) + ')', ArrayRef.SrcPos);
-  //Analiza índices
-  for index in ArrayRef.Indices do begin
+  if ArrayVarType.NodeType = ntArrayTypeDef then begin
+    //Actualiza el tipo de la expresión, para que no tenga que buscarse de nuevo.
+    ArrayRef.ExpTypeDef := TArrayTypeDef(ArrayVarType).ElemTypeDef;
+    //Verifica número de índices
+    if ArrayRef.Indices.Count <> TArrayTypeDef(ArrayVarType).ArrayIndexes.Count then begin
+      GenError('Número incorrecto de índices para el arreglo (esperaba ' +
+            IntToStr(TArrayTypeDef(ArrayVarType).ArrayIndexes.Count) + ', tiene ' +
+            IntToStr(ArrayRef.Indices.Count) + ')', ArrayRef.SrcPos);
+      Exit;
+    end;
+    //Analiza índices
+    for index in ArrayRef.Indices do begin
+      VisitNode(index);
+      IdxType := index.ExpTypeDef;
+      if IdxType = Nil then begin
+        GenError('No se puede determinar el tipo del índice.', ArrayRef.SrcPos);
+        Continue;
+      end;
+      if not IdxType.IsOrdinal then begin
+        Warning('El índice debe ser de tipo ordinal', index.SrcPos);
+      end;
+    end;
+  end else if ArrayVarType = TYPE_STRING then begin
+    //Una cadena es un arreglo de char
+    ArrayRef.ExpTypeDef := TYPE_CHAR;
+    //Verifica número de índices
+    if ArrayRef.Indices.Count <> 1 then begin
+      GenError('Se esperaba un índice.', ArrayRef.SrcPos);
+      Exit;
+    end;
+    //Analiza índice
+    index := ArrayRef.Indices[0];
     VisitNode(index);
     IdxType := index.ExpTypeDef;
     if IdxType = Nil then begin
       GenError('No se puede determinar el tipo del índice.', ArrayRef.SrcPos);
-      Continue;
+      Exit;
     end;
-    if not IdxType.IsOrdinal then begin
-      Warning('El índice debe ser de tipo ordinal', index.SrcPos);
+    if not IdxType.GetFinalDef.IsOrdinal then begin
+      GenError('El índice debe ser de tipo ordinal.', index.SrcPos);
+      Exit;
     end;
+    if IdxType.GetFinalDef <> TYPE_BYTE then begin
+      Warning('El índice de una cadena se truncará a Byte', index.SrcPos);
+    end;
+  end else begin
+    GenError('[] solo puede aplicarse a arreglos', ArrayRef.SrcPos);
+    Exit;
   end;
 end;
 {$endregion}
@@ -1539,23 +1767,6 @@ begin
   //Analiza destino
   VisitNode(Assign.Target);
   TargetType := Assign.Target.ExpTypeDef;
-//  if TargetType = nil then Exit;
-//  //Valida
-//  if (Assign.Value.NodeType = ntSetLiteral) and
-//     (TargetType.GetFinalDef.NodeType = ntSetTypeDef) then begin
-//    //Caso especial: asignación de conjunto literal
-//    //Verificar que el literal sea compatible con el tipo del destino
-//    CheckSetLiteralCompatibility(TSetLiteral(Assign.Value),
-//                                 TSetTypeDef(TargetType.GetFinalDef));
-//    //Asignar el tipo del destino al literal
-//    Assign.Value.ExpTypeDef := TargetType;
-//  end else begin
-//    VisitNode(Assign.Value);
-//    ValueType := Assign.Value.ExpTypeDef;
-//    // Verificación normal
-//    if not AreTypesCompatible(TargetType, ValueType) then
-//      Error('Tipos incompatibles en la asignación', Assign.SrcPos);
-//  end;
 
   //Analiza valor
   VisitNode(Assign.Value);
@@ -1575,10 +1786,10 @@ var
 begin
   // Analizar condición
   VisitNode(IfStmt.Condition);
-  CondType := GetTypeOf(IfStmt.Condition);
+  CondType := IfStmt.Condition.ExpTypeDef;
   if CondType = nil then
     GenError('No se puede determinar el tipo de la condición', IfStmt.Condition.SrcPos)
-  else if (CondType.TypeName <> 'BOOLEAN') and (not (CondType.NodeType = ntSimpleTypeDef)) then
+  else if (CondType.GetFinalDef<>TYPE_BOOL) then
     Warning('La condición debería ser booleana', IfStmt.Condition.SrcPos);
 
   // Analizar ramas
@@ -1733,7 +1944,7 @@ begin
     ntRecordTypeDef : VisitRecordTypeDef(TRecordTypeDef(Node));
     ntPointerTypeDef: VisitPointerTypeDef(TPointerTypeDef(Node));
     ntSetTypeDef    : VisitSetTypeDef(TSetTypeDef(Node));
-    ntAliasTypeDef  : VisitAliasTypeDef(TTypeDef(Node));
+    ntAliasTypeDef  : VisitAliasTypeDef(TAliasTypeDef(Node));
     ntProcedTypeDef : ;  //*** Falta implementar
     //Sentencias
     ntAssignment    : VisitAssignment(TAssignment(Node));
@@ -1786,8 +1997,8 @@ begin
   {Analizar primero las declaraciones de tipos y variables para registrar sus símbolos
   (como los valores de los enumerados).}
   for Node in Prog.Declarations do begin
-    if Node.NodeType in [ntTypeDecl, ntVarDecl] then begin
-        VisitNode(TTypeDecl(Node).Definition);
+    if Node.NodeType in [ntTypeDecl, ntVarDecl, ntConstDecl] then begin
+        VisitNode(Node);
     end;
   end;
 
@@ -1853,6 +2064,16 @@ begin
   FCurrentUnit := nil;
   FInWith := False;
   FWithScope := nil;
+  SYS_LENGTH := nil;
+  SYS_INTTOSTR := nil;
+  SYS_FLOATTOSTR := nil;
+  SYS_BOOLTOSTR := nil;
+  SYS_STRTOINT := nil;
+  SYS_STRTOFLOAT := nil;
+  SYS_STRTOBOOL := nil;
+  SYS_CHR := nil;
+  SYS_SQRT := nil;
+  SYS_ABS := nil;
 end;
 procedure TSemanticAnalyzer.RegisterBuiltinTypes;
 var
@@ -1976,6 +2197,190 @@ begin
   Param.TypeDef := TAliasTypeDef.Create('ARRAY_OF_CONST', DummyPos);
   Param.TypeOwner := True;
   Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+  //---------- NEW
+  Sym := TSymbol.Create('NEW', skProcedure);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  //Parámetros: argumentos variables (array of const)
+  Param := TVarDecl.Create('Args', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('ARRAY_OF_CONST', DummyPos);
+  Param.TypeOwner := True;
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+  //---------- DISPOSE
+  Sym := TSymbol.Create('DISPOSE', skProcedure);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  //Parámetros: argumentos variables (array of const)
+  Param := TVarDecl.Create('Args', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('ARRAY_OF_CONST', DummyPos);
+  Param.TypeOwner := True;
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+  //---------- LENGTH
+  Sym := TSymbol.Create('LENGTH', skFunction);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  Sym.ReturnType := TYPE_INTEG;    //Puede cambiar a BYTE dependiendo del argumento.
+  SYS_LENGTH := Sym;  //Guarda referencia directa.
+  //Parámetros: argumentos variables (array of const)
+  Param := TVarDecl.Create('Args', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('ARRAY_OF_CONST', DummyPos);
+  Param.TypeOwner := True;
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+  //---------- INTTOSTR (INTEGER → STRING)
+  Sym := TSymbol.Create('INTTOSTR', skFunction);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  Sym.ReturnType := TYPE_STRING;
+  SYS_INTTOSTR := Sym;
+  Param := TVarDecl.Create('Value', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('INTEGER', DummyPos);
+  Param.TypeOwner := True;
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+
+  //---------- FLOATTOSTR (REAL → STRING)
+  Sym := TSymbol.Create('FLOATTOSTR', skFunction);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  Sym.ReturnType := TYPE_STRING;
+  SYS_FLOATTOSTR := Sym;
+  Param := TVarDecl.Create('Value', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('REAL', DummyPos);
+  Param.TypeOwner := True;
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+
+  //---------- BOOLTOSTR (BOOLEAN → STRING)
+  Sym := TSymbol.Create('BOOLTOSTR', skFunction);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  Sym.ReturnType := TYPE_STRING;
+  SYS_BOOLTOSTR := Sym;
+  Param := TVarDecl.Create('Value', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('BOOLEAN', DummyPos);
+  Param.TypeOwner := True;
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+
+  //---------- STRTOINT (STRING → INTEGER)
+  Sym := TSymbol.Create('STRTOINT', skFunction);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  Sym.ReturnType := TYPE_INTEG;
+  SYS_STRTOINT := Sym;
+  Param := TVarDecl.Create('S', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('STRING', DummyPos);
+  Param.TypeOwner := True;
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+
+  //---------- STRTOFLOAT (STRING → REAL)
+  Sym := TSymbol.Create('STRTOFLOAT', skFunction);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  Sym.ReturnType := TYPE_REAL;
+  SYS_STRTOFLOAT := Sym;
+  Param := TVarDecl.Create('S', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('STRING', DummyPos);
+  Param.TypeOwner := True;
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+
+  //---------- STRTOBOOL (STRING → BOOLEAN)
+  Sym := TSymbol.Create('STRTOBOOL', skFunction);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  Sym.ReturnType := TYPE_BOOL;
+  SYS_STRTOBOOL := Sym;
+  Param := TVarDecl.Create('S', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('STRING', DummyPos);
+  Param.TypeOwner := True;
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+  //---------- CHR (ordinal → CHAR)
+  Sym := TSymbol.Create('CHR', skFunction);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  Sym.ReturnType := TYPE_CHAR;
+  SYS_CHR := Sym;
+  Param := TVarDecl.Create('Value', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('INTEGER', DummyPos);
+  Param.TypeOwner := True;
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+
+  //---------- SQRT (numérico → REAL)
+  Sym := TSymbol.Create('SQRT', skFunction);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  Sym.ReturnType := TYPE_REAL;
+  SYS_SQRT := Sym;
+  Param := TVarDecl.Create('Value', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('REAL', DummyPos);
+  Param.TypeOwner := True;
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+
+  //---------- ABS (numérico → mismo tipo)
+  Sym := TSymbol.Create('ABS', skFunction);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  Sym.ReturnType := TYPE_INTEG;   // Tipo por defecto; se ajusta en VisitProcFunctCall
+  SYS_ABS := Sym;
+  Param := TVarDecl.Create('Value', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('REAL', DummyPos);
+  Param.TypeOwner := True;
+  Param.IsParameter := True;
+  Sym.Parameters.Add(Param);
+  FGlobalScope.Declare(Sym);
+
+  //---------- SETLENGTH (var arr: dynamic array; NewLength: integer)
+  Sym := TSymbol.Create('SETLENGTH', skProcedure);
+  Sym.Declaration := nil;
+  Sym.IsIntrinsic := True;
+  Sym.Parameters := TASTNodeList.Create(True);
+  SYS_SETLENGTH := Sym;
+  // Parámetro 1: el arreglo (por referencia)
+  Param := TVarDecl.Create('Arr', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('ARRAY_OF_CONST', DummyPos);  // Tipo genérico
+  Param.TypeOwner := True;
+  Param.IsParameter := True;
+  Param.ParamType := ptyVar;   // ← IMPORTANTE: por referencia
+  Sym.Parameters.Add(Param);
+  // Parámetro 2: el nuevo tamaño
+  Param := TVarDecl.Create('NewLength', DummyPos);
+  Param.TypeDef := TAliasTypeDef.Create('INTEGER', DummyPos);
+  Param.TypeOwner := True;
+  Param.IsParameter := True;
+  Param.ParamType := ptyNone;   // por valor
   Sym.Parameters.Add(Param);
   FGlobalScope.Declare(Sym);
 end;
