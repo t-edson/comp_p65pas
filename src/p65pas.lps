@@ -9,7 +9,7 @@
         <Filename Value="p65pas.lpr"/>
         <IsPartOfProject Value="True"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="102"/>
+        <TopLine Value="89"/>
         <CursorPos X="7" Y="150"/>
         <FoldState Value=" T8J23 T5O041 TMP2]63iL03011 PWe0 T6iR030"/>
         <UsageCount Value="94"/>
@@ -62,8 +62,8 @@
         <Filename Value="Analyzer.pas"/>
         <IsPartOfProject Value="True"/>
         <EditorIndex Value="2"/>
-        <TopLine Value="236"/>
-        <CursorPos Y="235"/>
+        <TopLine Value="134"/>
+        <CursorPos Y="133"/>
         <UsageCount Value="53"/>
         <Loaded Value="True"/>
       </Unit>
